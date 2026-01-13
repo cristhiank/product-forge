@@ -1,0 +1,10 @@
+coverage/
+dist/
+node_modules/
+real_outputs/
+__pycache__/
+.DS_Store
+.vscode/
+.env
+*.log
+.dev_partner/

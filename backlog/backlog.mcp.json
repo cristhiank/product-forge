@@ -1,0 +1,15 @@
+[
+  {
+    "name": "backlog",
+    "command": "node",
+    "args": [
+      "/opt/mcp-servers/backlog/dist/cli.js",
+      "serve",
+      "--root",
+      "app/.backlog"
+    ],
+    "env": {},
+    "enabled": true,
+    "lifecycle": "per_session"
+  }
+]
