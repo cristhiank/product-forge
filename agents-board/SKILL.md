@@ -1,10 +1,13 @@
 ---
 name: agents-board
 description: >-
-  Shared blackboard for multi-agent coordination. Provides persistent shared state
-  (facts, decisions, plans, alerts, snippets, trails) with full-text search, 
-  role-based write permissions, and audit trails. Use when multiple agents need to
-  collaborate on a task without passing all context through a single coordinator.
+  Use when any agent needs to read or write shared state — facts, decisions,
+  plans, alerts, snippets, trails, or constraints. Covers creating tasks,
+  checking task status, posting facts or decisions, setting or advancing plans,
+  raising alerts, searching the board, caching file snippets, and viewing
+  progress. Required for multi-agent coordination in DevPartner workflows.
+  Provides persistent shared state with full-text search, role-based write
+  permissions, and audit trails.
 ---
 
 # Agents Board
@@ -13,9 +16,14 @@ A shared filesystem blackboard that lets stateless agents build on each other's 
 
 ## When to Use
 
-- Multiple agents collaborate on a task and need shared persistent state
-- You want progressive context loading instead of stuffing everything into prompts
-- You need searchable, auditable, append-only records of what was found, decided, and done
+Use this skill whenever an agent or the user needs to interact with the shared board. This includes:
+
+- Creating or resuming a task (shared coordination scope)
+- Reading or posting facts, decisions, alerts, snippets, trails, or constraints
+- Setting, advancing, or completing plan steps
+- Searching the board for context or prior findings
+- Checking task status, progress, or active alerts
+- Caching file content as snippets for other agents to reference
 
 ## Quick Start
 
