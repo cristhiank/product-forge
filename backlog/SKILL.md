@@ -1,9 +1,13 @@
 ---
 name: backlog
 description: >-
-  Backlog management CLI for work item tracking. Use when creating, listing,
-  searching, or managing work items; planning sprints; reviewing backlog health.
-  Auto-discovers .backlog/ folders in the workspace.
+  Use when the user mentions "backlog" or asks about work items, tasks, or
+  priorities — including "what's next", "what should I work on", "show tasks",
+  "backlog status", or any question about upcoming, in-progress, or completed
+  work. Covers creating, listing, searching, moving, completing, or reviewing
+  work items; planning sprints; checking backlog health; and tracking
+  dependencies across projects. Auto-discovers .backlog/ folders in the
+  workspace.
 ---
 
 # Backlog Skill
@@ -12,8 +16,9 @@ Patterns and conventions for using the backlog CLI to manage work items, track p
 
 ## When to Use
 
-Use this skill when you need to:
+Use this skill whenever the user asks about their backlog, tasks, or work items — including casual queries like "what's next?", "what am I working on?", "show my tasks", or "backlog status". Specifically:
 
+- Answer questions about upcoming, in-progress, or completed work
 - Create, list, search, or manage work items
 - Plan sprints or review backlog health  
 - Cross-reference items across projects
