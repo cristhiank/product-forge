@@ -1073,6 +1073,7 @@ export class Board {
    */
   search(query: SearchQuery): SearchResponse {
     const startTime = Date.now();
+    const limit = query.options?.limit || 10;
 
     // Build filters for direct index
     const filters: DirectIndexFilters = {
@@ -1083,30 +1084,43 @@ export class Board {
       files: query.filters?.files,
       createdAfter: query.filters?.timeRange?.after,
       createdBefore: query.filters?.timeRange?.before,
-      limit: query.options?.limit || 10,
+      limit: limit,
       offset: query.options?.offset,
     };
 
-    // If text query provided, we need to filter results
-    // Simple substring matching fallback.
-    // Hybrid search integrates CK when available.
     let results: SearchResult[];
 
     if (query.text) {
-      const allEntities = this.index.query(filters);
-      const textLower = query.text.toLowerCase();
+      // Use FTS5 for text queries — much better than substring matching
+      const ftsResults = this.index.ftsSearch(query.text, {
+        types: query.filters?.types,
+        limit: limit * 2, // over-fetch to allow post-filtering
+      });
 
-      results = allEntities
-        .filter((entity) => {
-          const content = this.getSearchableContent(entity);
-          return content.toLowerCase().includes(textLower);
-        })
-        .map((entity) => ({
-          entity,
-          entityType: this.getEntityTypeFromEntity(entity),
-          score: 1.0, // Simple match score
-          highlights: [],
+      if (ftsResults.length > 0) {
+        // Apply additional filters if needed
+        results = ftsResults.map(r => ({
+          entity: r.entity,
+          entityType: r.entityType,
+          score: r.score,
         }));
+      } else {
+        // FTS returned nothing — fall back to substring matching
+        const allEntities = this.index.query(filters);
+        const textLower = query.text.toLowerCase();
+
+        results = allEntities
+          .filter((entity) => {
+            const content = this.getSearchableContent(entity);
+            return content.toLowerCase().includes(textLower);
+          })
+          .map((entity) => ({
+            entity,
+            entityType: this.getEntityTypeFromEntity(entity),
+            score: 1.0,
+            highlights: [],
+          }));
+      }
     } else {
       results = this.index.query(filters).map((entity) => ({
         entity,
@@ -1116,10 +1130,10 @@ export class Board {
     }
 
     return {
-      results: results.slice(0, query.options?.limit || 10),
+      results: results.slice(0, limit),
       total: results.length,
       query_time_ms: Date.now() - startTime,
-      search_mode: "direct",
+      search_mode: query.text ? "fts" : "direct",
     };
   }
 

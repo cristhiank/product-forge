@@ -3,9 +3,9 @@
  * Agent Collaboration Board - CLI Entry Point
  */
 
-import { main } from "./mcp/server.js";
+import { main } from "./skill-cli.js";
 
 main().catch((err) => {
-  console.error("Failed to start MCP server:", err);
+  console.error("Board CLI error:", err);
   process.exit(1);
 });

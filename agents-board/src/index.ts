@@ -39,5 +39,5 @@ export {
     resetBoardManager, type TaskCreateOptions, type TaskSummary
 } from "./manager/index.js";
 
-// MCP Server
-export { createServer, main as startServer } from "./mcp/index.js";
+// CLI entry
+export { main } from "./skill-cli.js";

@@ -411,7 +411,7 @@ export interface SearchResponse {
   results: SearchResult[];
   total: number;
   query_time_ms: number;
-  search_mode: "lexical" | "semantic" | "hybrid" | "direct";
+  search_mode: "lexical" | "semantic" | "hybrid" | "direct" | "fts";
 }
 
 // ============================================================

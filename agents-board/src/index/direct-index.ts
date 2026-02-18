@@ -126,6 +126,15 @@ export class DirectIndex {
       );
 
       CREATE INDEX IF NOT EXISTS idx_entity_steps_step ON entity_steps(step_number);
+
+      -- FTS5 full-text search index
+      CREATE VIRTUAL TABLE IF NOT EXISTS entity_fts USING fts5(
+        id UNINDEXED,
+        type UNINDEXED,
+        content,
+        tags,
+        tokenize='porter unicode61'
+      );
     `);
   }
 
@@ -188,6 +197,16 @@ export class DirectIndex {
         ON CONFLICT(entity_id) DO UPDATE SET confidence = excluded.confidence
       `).run(id, entity.confidence);
     }
+
+    // Index in FTS5
+    const textContent = this.extractTextContent(entity);
+    if (textContent) {
+      // Delete existing FTS entry then insert (FTS5 doesn't support upsert)
+      this.db.prepare("DELETE FROM entity_fts WHERE id = ?").run(id);
+      this.db.prepare(
+        "INSERT INTO entity_fts (id, type, content, tags) VALUES (?, ?, ?, ?)"
+      ).run(id, entityType, textContent, tags.join(" "));
+    }
   }
 
   /**
@@ -220,6 +239,7 @@ export class DirectIndex {
       DELETE FROM entity_agents;
       DELETE FROM entity_tags;
       DELETE FROM entity_files;
+      DELETE FROM entity_fts;
       DELETE FROM entities;
     `);
   }
@@ -565,6 +585,96 @@ export class DirectIndex {
     if ("raised_by" in entity) return entity.raised_by as AgentRole;
     if ("added_by" in entity) return entity.added_by as AgentRole;
     return null;
+  }
+
+  /**
+   * Extract searchable text content from an entity
+   */
+  private extractTextContent(entity: Entity): string {
+    const parts: string[] = [];
+
+    if ("content" in entity && typeof entity.content === "string") {
+      parts.push(entity.content);
+    }
+    if ("title" in entity && typeof entity.title === "string") {
+      parts.push(entity.title);
+    }
+    if ("description" in entity && typeof entity.description === "string") {
+      parts.push(entity.description);
+    }
+    if ("action" in entity && typeof entity.action === "string") {
+      parts.push(entity.action);
+    }
+    if ("rationale" in entity && typeof entity.rationale === "string") {
+      parts.push(entity.rationale);
+    }
+    if ("purpose" in entity && typeof entity.purpose === "string") {
+      parts.push(entity.purpose);
+    }
+    if ("summary" in entity && typeof entity.summary === "string") {
+      parts.push(entity.summary);
+    }
+
+    return parts.join(" ");
+  }
+
+  // ============================================================
+  // FULL-TEXT SEARCH
+  // ============================================================
+
+  /**
+   * Search entities using FTS5 full-text search (BM25 ranking)
+   */
+  ftsSearch(
+    query: string,
+    options?: { types?: EntityType[]; limit?: number }
+  ): Array<{ entity: Entity; entityType: EntityType; score: number }> {
+    const limit = options?.limit ?? 20;
+
+    // Sanitize query for FTS5 (escape special characters, add prefix matching)
+    const sanitized = query
+      .replace(/['"]/g, "")
+      .split(/\s+/)
+      .filter(Boolean)
+      .map(term => `"${term}"*`)
+      .join(" OR ");
+
+    if (!sanitized) return [];
+
+    let sql = `
+      SELECT f.id, f.type, e.data, -f.rank as score
+      FROM entity_fts f
+      JOIN entities e ON e.id = f.id
+      WHERE entity_fts MATCH ?
+    `;
+    const params: (string | number)[] = [sanitized];
+
+    if (options?.types && options.types.length > 0) {
+      const placeholders = options.types.map(() => "?").join(",");
+      sql += ` AND f.type IN (${placeholders})`;
+      params.push(...options.types);
+    }
+
+    sql += ` ORDER BY score DESC LIMIT ?`;
+    params.push(limit);
+
+    try {
+      const rows = this.db.prepare(sql).all(...params) as Array<{
+        id: string;
+        type: EntityType;
+        data: string;
+        score: number;
+      }>;
+
+      return rows.map(r => ({
+        entity: JSON.parse(r.data) as Entity,
+        entityType: r.type,
+        score: r.score,
+      }));
+    } catch {
+      // FTS query syntax error — fall back to empty results
+      return [];
+    }
   }
 
   /**
