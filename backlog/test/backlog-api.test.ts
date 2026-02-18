@@ -4,7 +4,7 @@ import * as path from "node:path";
 import { describe, expect, test } from "vitest";
 
 import { createBacklogAPI } from "../src/backlog-api.js";
-import { executeCode } from "../src/sandbox/index.js";
+// import { executeCode } from "../src/sandbox/index.js"; // Sandbox not needed for CLI version
 import { singleProjectStore } from "../src/storage/multi-root-store.js";
 import { makeTempBacklogRootFromFixture } from "./test-helpers.js";
 
@@ -138,21 +138,22 @@ describe("backlog API", () => {
     }
   });
 
-  test("sandbox executes code against injected backlog API", async () => {
-    const { root, cleanup } = await makeTempBacklogRootFromFixture();
-    try {
-      const store = singleProjectStore(root);
-      const backlog = createBacklogAPI(store);
-
-      const resp = await executeCode(backlog, {
-        code: "const s = await backlog.stats(); return s;",
-        timeout: 5000,
-      });
-
-      expect(resp.success).toBe(true);
-      expect((resp.result as any).default.next).toBe(2);
-    } finally {
-      await cleanup();
-    }
-  });
+  // Sandbox test commented out - not needed for CLI version
+  // test("sandbox executes code against injected backlog API", async () => {
+  //   const { root, cleanup } = await makeTempBacklogRootFromFixture();
+  //   try {
+  //     const store = singleProjectStore(root);
+  //     const backlog = createBacklogAPI(store);
+  //
+  //     const resp = await executeCode(backlog, {
+  //       code: "const s = await backlog.stats(); return s;",
+  //       timeout: 5000,
+  //     });
+  //
+  //     expect(resp.success).toBe(true);
+  //     expect((resp.result as any).default.next).toBe(2);
+  //   } finally {
+  //     await cleanup();
+  //   }
+  // });
 });

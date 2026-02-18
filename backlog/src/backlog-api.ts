@@ -18,10 +18,6 @@ function slugify(input: string): string {
     .slice(0, 80);
 }
 
-function ensureSerializable(value: unknown): unknown {
-  return value;
-}
-
 export function createBacklogAPI(store: MultiRootBacklogStore) {
   const singleProject = store.isSingleProject();
   const defaultProject = store.getDefaultProject();
@@ -269,11 +265,11 @@ export function createBacklogAPI(store: MultiRootBacklogStore) {
         related: req.related,
       });
       const created = await store.createFile(project, "next", filename, body);
-      return ensureSerializable({
+      return {
         id: qualifyId(project, newId),
         path: created.path,
         project,
-      }) as { id: string; path: string; project: string };
+      };
     },
 
     move: async (req: { id: string; to: Folder }) => {

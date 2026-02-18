@@ -16,28 +16,48 @@ export interface ProjectEntry {
 
 /**
  * Scan a directory for subdirectories containing a `.backlog/` folder.
+ * Searches up to `maxDepth` levels deep (default: 2) to find nested projects
+ * like `pet_boarding_services/app/.backlog/`.
  * Returns one ProjectEntry per discovered project, sorted by name.
  */
-export async function discoverProjects(scanDir: string): Promise<ProjectEntry[]> {
+export async function discoverProjects(scanDir: string, maxDepth = 2): Promise<ProjectEntry[]> {
   const absDir = path.resolve(scanDir);
-  const entries = await fs.readdir(absDir, { withFileTypes: true });
   const projects: ProjectEntry[] = [];
 
-  for (const entry of entries) {
-    if (!entry.isDirectory()) continue;
-    if (entry.name.startsWith(".")) continue;
-
-    const backlogDir = path.join(absDir, entry.name, ".backlog");
+  async function scan(dir: string, depth: number, namePath: string[]): Promise<void> {
+    if (depth > maxDepth) return;
+    let entries: Array<{ name: string; isDirectory(): boolean }>;
     try {
-      const stat = await fs.stat(backlogDir);
-      if (stat.isDirectory()) {
-        projects.push({ name: entry.name, root: backlogDir });
-      }
+      entries = await fs.readdir(dir, { withFileTypes: true });
     } catch {
-      // No .backlog dir — skip
+      return;
+    }
+
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      if (entry.name.startsWith(".")) continue;
+
+      const childDir = path.join(dir, entry.name);
+      const backlogDir = path.join(childDir, ".backlog");
+      try {
+        const stat = await fs.stat(backlogDir);
+        if (stat.isDirectory()) {
+          // Use the deepest directory name as project name, or join path segments
+          const projectName = namePath.length > 0
+            ? [...namePath, entry.name].join("-")
+            : entry.name;
+          projects.push({ name: projectName, root: backlogDir });
+          continue; // Don't recurse into projects that already have a .backlog
+        }
+      } catch {
+        // No .backlog here — recurse deeper
+      }
+
+      await scan(childDir, depth + 1, [...namePath, entry.name]);
     }
   }
 
+  await scan(absDir, 1, []);
   projects.sort((a, b) => a.name.localeCompare(b.name));
   return projects;
 }

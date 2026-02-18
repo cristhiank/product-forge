@@ -1,37 +1,40 @@
 {
-  "name": "@agent-collab/backlog",
-  "version": "0.1.0",
-  "description": "Backlog MCP server - Kanban-lite backlog maintenance for app/.backlog",
+  "name": "@copilot-skills/backlog",
+  "version": "1.0.0",
+  "description": "Backlog Agent Skill - CLI for Kanban-lite backlog maintenance",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {
-    "agent-collab-backlog": "./dist/cli.js"
+    "backlog": "./scripts/backlog.js"
   },
   "scripts": {
     "build": "tsc",
-    "dev": "tsc --watch",
+    "bundle": "esbuild dist/skill-cli.js --bundle --platform=node --target=node18 --format=esm --outfile=scripts/backlog.js",
+    "prebundle": "npm run build",
+    "prepublish": "npm run bundle",
     "test": "vitest run",
     "test:watch": "vitest",
-    "clean": "rm -rf dist"
+    "clean": "rm -rf dist",
+    "publish:skill": "bash publish-skill.sh"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.0.0",
     "zod": "^3.24.1"
   },
   "devDependencies": {
     "@types/node": "^22.10.5",
+    "esbuild": "^0.24.0",
     "typescript": "^5.7.2",
-    "vitest": "^2.1.8",
-    "eslint": "^9.17.0",
-    "@typescript-eslint/eslint-plugin": "^8.19.1",
-    "@typescript-eslint/parser": "^8.19.1"
+    "vitest": "^2.1.8"
   },
   "engines": {
-    "node": ">=20.0.0"
+    "node": ">=18.0.0"
   },
   "files": [
     "dist",
+    "scripts",
+    "references",
+    "SKILL.md",
     "README.md"
   ],
   "license": "MIT"
