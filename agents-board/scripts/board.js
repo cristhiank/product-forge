@@ -1936,30 +1936,8 @@ function now() {
 }
 
 // dist/types/operations.js
-var PERMISSIONS = {
-  set_mission: ["orchestrator"],
-  add_constraint: ["orchestrator", "scout"],
-  add_fact: ["scout", "verifier", "executor"],
-  update_fact: ["scout", "verifier", "executor"],
-  verify_fact: ["verifier"],
-  propose_decision: ["creative"],
-  approve_decision: ["orchestrator"],
-  reject_decision: ["orchestrator"],
-  set_plan: ["orchestrator"],
-  advance_step: ["executor"],
-  complete_step: ["executor"],
-  fail_step: ["executor"],
-  decompose_step: ["executor"],
-  update_status: ["orchestrator", "verifier", "executor"],
-  raise_alert: ["orchestrator", "scout", "creative", "verifier", "executor"],
-  resolve_alert: ["orchestrator", "verifier", "executor"],
-  append_trail: ["orchestrator", "scout", "creative", "verifier", "executor"],
-  add_snippet: ["orchestrator", "scout", "creative", "verifier", "executor"],
-  update_snippet: ["orchestrator", "scout", "creative", "verifier", "executor"],
-  verify_snippet: ["orchestrator", "scout", "creative", "verifier", "executor"]
-};
-function canPerform(agent, operation) {
-  return PERMISSIONS[operation]?.includes(agent) ?? false;
+function canPerform(_agent, _operation) {
+  return true;
 }
 
 // dist/storage/board-storage.js
@@ -2712,7 +2690,7 @@ var Board = class {
    */
   assertPermission(agent, operation) {
     if (!this.canPerform(agent, operation)) {
-      throw new Error(`Agent '${agent}' is not permitted to perform '${operation}'. Allowed agents: ${PERMISSIONS[operation].join(", ")}`);
+      throw new Error(`Agent '${agent}' is not permitted to perform '${operation}'.`);
     }
   }
   /**
@@ -3997,29 +3975,29 @@ The board object provides access to all board operations.
 ### Facts
 - board.addFact({ content, confidence, evidence, tags? }) - Add new fact
   - evidence: [{ type: "file"|"symbol"|"test"|"docs"|"web"|"user", reference: string, excerpt?: string }]
-- board.verifyFact({ id, confidence? }) - Verify a fact (verifier only)
+- board.verifyFact({ id, confidence? }) - Verify a fact
 
 ### Decisions
-- board.proposeDecision({ title, description, rationale, alternatives?, based_on?, tags? }) - Propose decision (creative only)
-- board.approveDecision({ id, affects? }) - Approve decision (orchestrator only)
-- board.rejectDecision({ id, reason }) - Reject decision (orchestrator only)
+- board.proposeDecision({ title, description, rationale, alternatives?, based_on?, tags? }) - Propose decision
+- board.approveDecision({ id, affects? }) - Approve decision
+- board.rejectDecision({ id, reason }) - Reject decision
 
 ### Plan & Steps
-- board.setPlan({ goal, approach, steps }) - Set execution plan (orchestrator only)
+- board.setPlan({ goal, approach, steps }) - Set execution plan
   - steps: [{ action, files, depends_on?, verification }]
-- board.advanceStep() - Move to next step (executor only)
-- board.completeStep({ files_changed, files_created, verification_passed, notes? }) - Complete step (executor only)
-- board.failStep({ reason }) - Mark step failed (executor only)
-- board.decomposeStep(stepId, subtasks) - Break step into subtasks (executor only)
-- board.completeSubtask(stepId, subtaskIndex) - Complete a subtask (executor only)
+- board.advanceStep() - Move to next step
+- board.completeStep({ files_changed, files_created, verification_passed, notes? }) - Complete step
+- board.failStep({ reason }) - Mark step failed
+- board.decomposeStep(stepId, subtasks) - Break step into subtasks
+- board.completeSubtask(stepId, subtaskIndex) - Complete a subtask
 
 ### Alerts
-- board.raiseAlert({ severity, title, description, blocking_step?, tags? }) - Raise alert (any agent)
-- board.resolveAlert({ id, resolution }) - Resolve alert (orchestrator/verifier/executor)
+- board.raiseAlert({ severity, title, description, blocking_step?, tags? }) - Raise alert
+- board.resolveAlert({ id, resolution }) - Resolve alert
 
 ### Config
-- board.addConstraint({ description, source? }) - Add constraint (orchestrator/scout)
-- board.updateStatus({ phase?, classification? }) - Update board status (orchestrator/verifier/executor)
+- board.addConstraint({ description, source? }) - Add constraint
+- board.updateStatus({ phase?, classification? }) - Update board status
 
 ### Trails
 - board.appendTrail({ marker, summary, details, evidence? }) - Log memory candidate

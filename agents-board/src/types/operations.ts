@@ -55,32 +55,10 @@ export type WriteOperation =
   | "update_snippet"
   | "verify_snippet";
 
-// Permission matrix: which agents can perform which operations
-export const PERMISSIONS: Record<WriteOperation, AgentRole[]> = {
-  set_mission: ["orchestrator"],
-  add_constraint: ["orchestrator", "scout"],
-  add_fact: ["scout", "verifier", "executor"],
-  update_fact: ["scout", "verifier", "executor"],
-  verify_fact: ["verifier"],
-  propose_decision: ["creative"],
-  approve_decision: ["orchestrator"],
-  reject_decision: ["orchestrator"],
-  set_plan: ["orchestrator"],
-  advance_step: ["executor"],
-  complete_step: ["executor"],
-  fail_step: ["executor"],
-  decompose_step: ["executor"],
-  update_status: ["orchestrator", "verifier", "executor"],
-  raise_alert: ["orchestrator", "scout", "creative", "verifier", "executor"],
-  resolve_alert: ["orchestrator", "verifier", "executor"],
-  append_trail: ["orchestrator", "scout", "creative", "verifier", "executor"],
-  add_snippet: ["orchestrator", "scout", "creative", "verifier", "executor"],
-  update_snippet: ["orchestrator", "scout", "creative", "verifier", "executor"],
-  verify_snippet: ["orchestrator", "scout", "creative", "verifier", "executor"],
-};
-
-export function canPerform(agent: AgentRole, operation: WriteOperation): boolean {
-  return PERMISSIONS[operation]?.includes(agent) ?? false;
+// Permission check: agent-agnostic — any role name is accepted for any operation.
+// Consumers can layer their own permission logic on top if needed.
+export function canPerform(_agent: AgentRole, _operation: WriteOperation): boolean {
+  return true;
 }
 
 // ============================================================

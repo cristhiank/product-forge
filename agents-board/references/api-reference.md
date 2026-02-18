@@ -5,12 +5,14 @@ Complete CLI and exec mode documentation for the agents-board skill.
 ## CLI Entry Point
 
 ```bash
-node /path/to/dist/skill-cli.js <command> [options]
+node scripts/board.js <command> [options]
 ```
 
 All commands return JSON to stdout:
 - Success: `{ "result": <data> }`
 - Error: `{ "error": "<message>" }`
+
+**Note:** The board is agent-flow-agnostic. The `--agent` flag accepts any role name you define to match your multi-agent architecture.
 
 ---
 
@@ -29,7 +31,7 @@ All commands require:
 Create a new task and initialize the board.
 
 ```bash
-node dist/skill-cli.js create-task \
+node scripts/board.js create-task \
   --goal "Implement magic link authentication" \
   --context "User wants passwordless login" \
   --constraints '["Must use existing email service", "No external auth providers"]' \
@@ -59,7 +61,7 @@ node dist/skill-cli.js create-task \
 List all tasks in the workspace.
 
 ```bash
-node dist/skill-cli.js list-tasks --path /workspace
+node scripts/board.js list-tasks --path /workspace
 ```
 
 **Returns:**
@@ -83,7 +85,7 @@ node dist/skill-cli.js list-tasks --path /workspace
 Archive a completed or cancelled task.
 
 ```bash
-node dist/skill-cli.js archive-task \
+node scripts/board.js archive-task \
   --task-id T-1 \
   --path /workspace
 ```
@@ -109,7 +111,7 @@ node dist/skill-cli.js archive-task \
 Get quick board status overview (~100 tokens).
 
 ```bash
-node dist/skill-cli.js view \
+node scripts/board.js view \
   --task-id T-1 \
   --path /workspace
 ```
@@ -140,9 +142,9 @@ node dist/skill-cli.js view \
 Add a new fact discovered during exploration or execution.
 
 ```bash
-node dist/skill-cli.js add-fact \
+node scripts/board.js add-fact \
   --task-id T-1 \
-  --agent scout \
+  --agent researcher \
   --content "Codebase uses Express 4.18.2 for HTTP routing" \
   --confidence high \
   --evidence '[{"type":"file","reference":"package.json#L12","excerpt":"express: 4.18.2"}]' \
@@ -151,7 +153,7 @@ node dist/skill-cli.js add-fact \
 ```
 
 **Parameters:**
-- `--agent <role>` (required) — One of: scout, verifier, executor
+- `--agent <role>` (required) — Any agent role name (e.g., researcher, implementer, reviewer)
 - `--content <text>` (required) — The fact statement
 - `--confidence <level>` (required) — high | medium | low
 - `--evidence <json-array>` (required) — Array of evidence objects
@@ -183,10 +185,10 @@ node dist/skill-cli.js add-fact \
 Retrieve facts with optional filtering.
 
 ```bash
-node dist/skill-cli.js get-facts \
+node scripts/board.js get-facts \
   --task-id T-1 \
   --confidence high \
-  --agent scout \
+  --agent researcher \
   --path /workspace
 ```
 
@@ -202,7 +204,7 @@ node dist/skill-cli.js get-facts \
       "fact_id": "F-1",
       "content": "Codebase uses Express 4.18.2 for HTTP routing",
       "confidence": "high",
-      "created_by": "scout",
+      "created_by": "researcher",
       "evidence": [...],
       "tags": ["dependency", "http", "routing"],
       "verified": false
@@ -215,12 +217,12 @@ node dist/skill-cli.js get-facts \
 
 ### verify-fact
 
-Verifier validates or disputes a fact.
+A reviewing agent validates or disputes a fact.
 
 ```bash
-node dist/skill-cli.js verify-fact \
+node scripts/board.js verify-fact \
   --task-id T-1 \
-  --agent verifier \
+  --agent reviewer \
   --fact-id F-1 \
   --status confirmed \
   --verification-notes "Verified in package.json and node_modules" \
@@ -238,7 +240,7 @@ node dist/skill-cli.js verify-fact \
   "result": {
     "fact_id": "F-1",
     "verified": true,
-    "verified_by": "verifier",
+    "verified_by": "reviewer",
     "verified_at": "2024-01-15T11:00:00Z"
   }
 }
@@ -253,9 +255,9 @@ node dist/skill-cli.js verify-fact \
 Cache file content for reuse across agents.
 
 ```bash
-node dist/skill-cli.js add-snippet \
+node scripts/board.js add-snippet \
   --task-id T-1 \
-  --agent scout \
+  --agent researcher \
   --path src/auth/routes.ts \
   --lines '{"start":1,"end":45}' \
   --content "$(cat src/auth/routes.ts | head -45)" \
@@ -265,7 +267,7 @@ node dist/skill-cli.js add-snippet \
 ```
 
 **Parameters:**
-- `--agent <role>` (required) — scout or executor
+- `--agent <role>` (required) — Any agent role name
 - `--path <file-path>` (required) — Relative path from workspace root
 - `--lines <json>` (required) — `{"start": N, "end": M}` object
 - `--content <text>` (required) — Actual file content
@@ -290,7 +292,7 @@ node dist/skill-cli.js add-snippet \
 Retrieve cached snippets with optional filtering.
 
 ```bash
-node dist/skill-cli.js get-snippets \
+node scripts/board.js get-snippets \
   --task-id T-1 \
   --path src/auth/routes.ts \
   --tags auth,target \
@@ -312,7 +314,7 @@ node dist/skill-cli.js get-snippets \
       "content": "...",
       "purpose": "Authentication routes implementation",
       "tags": ["auth", "routes", "target"],
-      "created_by": "scout",
+      "created_by": "researcher",
       "created_at": "2024-01-15T10:40:00Z"
     }
   ]
@@ -325,12 +327,12 @@ node dist/skill-cli.js get-snippets \
 
 ### propose-decision
 
-Creative or other agents propose architectural decisions.
+Any agent can propose architectural decisions.
 
 ```bash
-node dist/skill-cli.js propose-decision \
+node scripts/board.js propose-decision \
   --task-id T-1 \
-  --agent creative \
+  --agent planner \
   --title "Use JWT for magic link tokens" \
   --description "Encode user_id + expiry in JWT signed with secret" \
   --rationale "Self-contained, no DB lookup needed, automatic expiry" \
@@ -340,7 +342,7 @@ node dist/skill-cli.js propose-decision \
 ```
 
 **Parameters:**
-- `--agent <role>` (required) — Typically creative
+- `--agent <role>` (required) — Any agent role name
 - `--title <text>` (required) — Decision title
 - `--description <text>` (required) — What is being decided
 - `--rationale <text>` (required) — Why this choice
@@ -371,12 +373,12 @@ node dist/skill-cli.js propose-decision \
 
 ### approve-decision
 
-Orchestrator approves a proposed decision.
+A coordinating agent approves a proposed decision.
 
 ```bash
-node dist/skill-cli.js approve-decision \
+node scripts/board.js approve-decision \
   --task-id T-1 \
-  --agent orchestrator \
+  --agent coordinator \
   --decision-id D-1 \
   --notes "Approved - aligns with existing auth patterns" \
   --path /workspace
@@ -392,7 +394,7 @@ node dist/skill-cli.js approve-decision \
   "result": {
     "decision_id": "D-1",
     "status": "approved",
-    "approved_by": "orchestrator",
+    "approved_by": "coordinator",
     "approved_at": "2024-01-15T11:00:00Z"
   }
 }
@@ -405,9 +407,9 @@ node dist/skill-cli.js approve-decision \
 Reject a proposed decision with reason.
 
 ```bash
-node dist/skill-cli.js reject-decision \
+node scripts/board.js reject-decision \
   --task-id T-1 \
-  --agent orchestrator \
+  --agent coordinator \
   --decision-id D-1 \
   --reason "JWT cannot be revoked - conflicts with security requirements" \
   --path /workspace
@@ -434,12 +436,12 @@ node dist/skill-cli.js reject-decision \
 
 ### set-plan
 
-Orchestrator creates execution plan (after Creative ideation).
+A coordinating agent creates an execution plan.
 
 ```bash
-node dist/skill-cli.js set-plan \
+node scripts/board.js set-plan \
   --task-id T-1 \
-  --agent orchestrator \
+  --agent coordinator \
   --goal "Implement magic link authentication" \
   --approach "Add token generation, email sending, and verification endpoints" \
   --steps '[
@@ -493,7 +495,7 @@ node dist/skill-cli.js set-plan \
 Retrieve current execution plan.
 
 ```bash
-node dist/skill-cli.js get-plan \
+node scripts/board.js get-plan \
   --task-id T-1 \
   --path /workspace
 ```
@@ -530,12 +532,12 @@ node dist/skill-cli.js get-plan \
 
 ### advance-step
 
-Executor moves to next plan step.
+An implementing agent moves to the next plan step.
 
 ```bash
-node dist/skill-cli.js advance-step \
+node scripts/board.js advance-step \
   --task-id T-1 \
-  --agent executor \
+  --agent implementer \
   --path /workspace
 ```
 
@@ -554,12 +556,12 @@ node dist/skill-cli.js advance-step \
 
 ### complete-step
 
-Executor marks current step as completed.
+An implementing agent marks current step as completed.
 
 ```bash
-node dist/skill-cli.js complete-step \
+node scripts/board.js complete-step \
   --task-id T-1 \
-  --agent executor \
+  --agent implementer \
   --notes "All tests passing, snippet X-5 updated" \
   --path /workspace
 ```
@@ -582,12 +584,12 @@ node dist/skill-cli.js complete-step \
 
 ### fail-step
 
-Executor marks current step as failed (escalation needed).
+An implementing agent marks current step as failed (escalation needed).
 
 ```bash
-node dist/skill-cli.js fail-step \
+node scripts/board.js fail-step \
   --task-id T-1 \
-  --agent executor \
+  --agent implementer \
   --reason "Build error - missing dependency 'rate-limiter-flexible'" \
   --path /workspace
 ```
@@ -616,9 +618,9 @@ node dist/skill-cli.js fail-step \
 Any agent can raise alerts for blockers, warnings, or info.
 
 ```bash
-node dist/skill-cli.js raise-alert \
+node scripts/board.js raise-alert \
   --task-id T-1 \
-  --agent executor \
+  --agent implementer \
   --severity blocker \
   --title "Missing dependency prevents build" \
   --description "Package 'rate-limiter-flexible' required but not in package.json\n\nOptions:\n1. npm install rate-limiter-flexible\n2. Use alternative rate limiting" \
@@ -652,9 +654,9 @@ node dist/skill-cli.js raise-alert \
 Mark alert as resolved.
 
 ```bash
-node dist/skill-cli.js resolve-alert \
+node scripts/board.js resolve-alert \
   --task-id T-1 \
-  --agent orchestrator \
+  --agent coordinator \
   --alert-id A-1 \
   --resolution "User approved npm install rate-limiter-flexible" \
   --path /workspace
@@ -681,12 +683,12 @@ node dist/skill-cli.js resolve-alert \
 
 ### append-trail
 
-Executor logs decisions, bug fixes, patterns, insights.
+Any agent logs decisions, bug fixes, patterns, insights.
 
 ```bash
-node dist/skill-cli.js append-trail \
+node scripts/board.js append-trail \
   --task-id T-1 \
-  --agent executor \
+  --agent implementer \
   --marker DECISION \
   --summary "Used crypto.randomBytes for token generation" \
   --details '{"context":"Magic link security","options":["uuid v4","crypto.randomBytes","nanoid"],"choice":"crypto.randomBytes(32)","rationale":"Cryptographically secure, no external dependency"}' \
@@ -718,7 +720,7 @@ node dist/skill-cli.js append-trail \
 Retrieve execution trail logs.
 
 ```bash
-node dist/skill-cli.js get-trails \
+node scripts/board.js get-trails \
   --task-id T-1 \
   --path /workspace
 ```
@@ -733,7 +735,7 @@ node dist/skill-cli.js get-trails \
       "summary": "Used crypto.randomBytes for token generation",
       "details": {...},
       "evidence": ["X-1#L45-50", "F-3"],
-      "created_by": "executor",
+      "created_by": "implementer",
       "created_at": "2024-01-15T11:40:00Z"
     }
   ]
@@ -749,7 +751,7 @@ node dist/skill-cli.js get-trails \
 Full-text search across all board entities (FTS5 with BM25 ranking).
 
 ```bash
-node dist/skill-cli.js search "authentication token" \
+node scripts/board.js search "authentication token" \
   --task-id T-1 \
   --types facts,snippets,decisions \
   --tags auth,security \
@@ -797,9 +799,9 @@ node dist/skill-cli.js search "authentication token" \
 Add a new constraint to the task.
 
 ```bash
-node dist/skill-cli.js add-constraint \
+node scripts/board.js add-constraint \
   --task-id T-1 \
-  --agent orchestrator \
+  --agent coordinator \
   --content "Must not modify existing authentication logic" \
   --priority must \
   --classification non_functional \
@@ -830,20 +832,20 @@ Execute arbitrary JavaScript code with full board API access.
 ### Usage
 
 ```bash
-node dist/skill-cli.js exec \
+node scripts/board.js exec \
   --task-id T-1 \
-  --agent orchestrator \
+  --agent coordinator \
   --code '<javascript-code>' \
   --path /workspace
 ```
 
-The `board` object is injected with all API methods.
+The `board` object is injected with all API methods. Any agent role name can be used with the `--agent` flag.
 
 ### Available Board Methods
 
 All methods from the CLI are available as `board.<method>()`:
 
-- `board.getFacts({ confidence: ["high"], agent: "scout" })`
+- `board.getFacts({ confidence: ["high"], agent: "researcher" })`
 - `board.getSnippets({ path: "src/auth.ts", tags: ["target"] })`
 - `board.getPlan()`
 - `board.getAlerts({ severity: "blocker", status: "active" })`
@@ -854,9 +856,9 @@ All methods from the CLI are available as `board.<method>()`:
 ### Example 1: Query and Filter
 
 ```bash
-node dist/skill-cli.js exec \
+node scripts/board.js exec \
   --task-id T-1 \
-  --agent scout \
+  --agent researcher \
   --code '
     const facts = board.getFacts({ confidence: ["high"] });
     const authFacts = facts.filter(f => f.tags?.includes("auth"));
@@ -872,9 +874,9 @@ node dist/skill-cli.js exec \
 ### Example 2: Board Status
 
 ```bash
-node dist/skill-cli.js exec \
+node scripts/board.js exec \
   --task-id T-1 \
-  --agent orchestrator \
+  --agent coordinator \
   --code '
     const status = board.view();
     const plan = board.getPlan();
@@ -894,9 +896,9 @@ node dist/skill-cli.js exec \
 ### Example 3: Multi-Entity Search
 
 ```bash
-node dist/skill-cli.js exec \
+node scripts/board.js exec \
   --task-id T-1 \
-  --agent verifier \
+  --agent reviewer \
   --code '
     const results = board.search({ text: "authentication", limit: 10 });
     
@@ -921,9 +923,9 @@ node dist/skill-cli.js exec \
 ### Example 4: Conditional Logic
 
 ```bash
-node dist/skill-cli.js exec \
+node scripts/board.js exec \
   --task-id T-1 \
-  --agent orchestrator \
+  --agent coordinator \
   --code '
     const plan = board.getPlan();
     const facts = board.getFacts({ confidence: ["high", "medium"] });
@@ -948,9 +950,9 @@ node dist/skill-cli.js exec \
 ### Example 5: Complex Query Pattern
 
 ```bash
-node dist/skill-cli.js exec \
+node scripts/board.js exec \
   --task-id T-1 \
-  --agent executor \
+  --agent implementer \
   --code '
     // Get snippets for current step files
     const plan = board.getPlan();
@@ -1026,7 +1028,7 @@ Common error patterns:
 1. **Always check snippets before reading files:**
    ```bash
    # Check first
-   node dist/skill-cli.js exec --code 'return board.getSnippets({ path: "src/auth.ts" })'
+   node scripts/board.js exec --code 'return board.getSnippets({ path: "src/auth.ts" })'
    
    # Only read if no snippet exists
    ```
@@ -1034,7 +1036,7 @@ Common error patterns:
 2. **Use exec mode for complex queries:**
    ```bash
    # Better than multiple CLI calls
-   node dist/skill-cli.js exec --code '
+   node scripts/board.js exec --code '
      const facts = board.getFacts({ confidence: ["high"] });
      const snippets = board.getSnippets({ tags: ["target"] });
      return { facts: facts.length, snippets: snippets.length };
@@ -1050,11 +1052,11 @@ Common error patterns:
 4. **Use search for discovery:**
    ```bash
    # Find related entities
-   node dist/skill-cli.js search "authentication" --types facts,snippets
+   node scripts/board.js search "authentication" --types facts,snippets
    ```
 
 5. **Log trails during execution:**
    ```bash
-   # Mandatory for Executor
+   # Log important decisions and patterns
    --marker DECISION --summary "..." --evidence '[...]'
    ```

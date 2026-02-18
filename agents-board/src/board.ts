@@ -81,7 +81,7 @@ import type {
     ViewRequest,
     WriteOperation,
 } from "./types/operations.js";
-import { canPerform, PERMISSIONS } from "./types/operations.js";
+import { canPerform } from "./types/operations.js";
 
 // ============================================================
 // BOARD CLASS
@@ -420,8 +420,7 @@ export class Board {
   private assertPermission(agent: AgentRole, operation: WriteOperation): void {
     if (!this.canPerform(agent, operation)) {
       throw new Error(
-        `Agent '${agent}' is not permitted to perform '${operation}'. ` +
-          `Allowed agents: ${PERMISSIONS[operation].join(", ")}`
+        `Agent '${agent}' is not permitted to perform '${operation}'.`
       );
     }
   }

@@ -114,26 +114,25 @@ describe("Board", () => {
       expect(tagged).toHaveLength(1);
     });
 
-    it("should enforce permission for adding facts", () => {
-      expect(() =>
-        board.addFact("orchestrator", {
-          content: "Unauthorized",
-          confidence: "high",
-          evidence: [],
-        })
-      ).toThrow("not permitted");
+    it("should allow any agent to add facts (agent-agnostic)", () => {
+      const fact = board.addFact("orchestrator", {
+        content: "Any agent can add facts",
+        confidence: "high",
+        evidence: [],
+      });
+      expect(fact.id).toBeDefined();
+      expect(fact.content).toBe("Any agent can add facts");
     });
 
-    it("should enforce permission for verifying facts", () => {
+    it("should allow any agent to verify facts (agent-agnostic)", () => {
       const fact = board.addFact("scout", {
         content: "Test",
         confidence: "low",
         evidence: [],
       });
 
-      expect(() =>
-        board.verifyFact("scout", { id: fact.id })
-      ).toThrow("not permitted");
+      const result = board.verifyFact("scout", { id: fact.id });
+      expect(result.id).toBe(fact.id);
     });
   });
 

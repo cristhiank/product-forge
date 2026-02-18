@@ -1,1275 +1,666 @@
-# Workflow Examples
+# Board Usage Examples
 
-Real-world examples showing complete workflows with actual CLI commands and board operations.
+Generic examples showing how to use the agents-board for multi-agent collaboration. The board is **workflow-agnostic** — use any agent names, any workflow phases, any coordination pattern.
+
+**Note:** Examples use generic role names like `agent-a`, `researcher`, `implementer`. Replace these with your own agent architecture.
 
 ---
 
-## Example 1: Simple Task (Complexity 2)
+## Example 1: Basic Workflow
 
-**Task:** Add a utility function to convert timestamps to ISO format.
+A simple end-to-end workflow showing core board operations.
 
-**Complexity:** 2 (Simple — single file, well-understood pattern)
-
-**Collapsed workflow:** setup → exploration → planning → execution → result_verify → complete
-
-### Step 1: Setup
+### Step 1: Create Task
 
 ```bash
-# Create task
-node dist/skill-cli.js create-task \
-  --goal "Add utility function to convert timestamps to ISO format" \
-  --context "User wants consistent date formatting across API responses" \
-  --constraints '["Must use built-in Date API","Must handle null/undefined"]' \
+node scripts/board.js create-task \
+  --goal "Add user profile endpoint" \
+  --context "Expose GET /api/users/:id endpoint with caching" \
+  --constraints '["Must reuse existing auth middleware","Cache TTL 5 minutes"]' \
   --path /workspace
 
 # Returns: {"result": {"task_id": "T-1", "status": "setup"}}
 ```
 
-### Step 2: Exploration (Scout - quick_scan mode)
+### Step 2: Add Facts
 
-**Orchestrator → Scout:**
-```xml
-<objective>
-Explore codebase for existing date/time utilities and formatting patterns.
-</objective>
+Multiple agents can contribute facts about the codebase.
 
-<context>
-Task: Add utility function to convert timestamps to ISO format
-Mode: quick_scan (5-8 tool calls)
-Focus: Utility files, date handling, API responses
-</context>
-```
-
-**Scout actions:**
 ```bash
-# Find existing utilities
-glob "src/utils/**/*.ts"
-glob "src/lib/**/*.ts"
-
-# Search for date handling
-rg "Date\.|toISO|format.*date" --type ts
-
-# Read utils structure
-view src/utils/index.ts
-
-# Read existing date utilities (if any)
-view src/utils/date.ts
-
-# Add findings
-node dist/skill-cli.js add-fact \
+# Agent A discovers framework
+node scripts/board.js add-fact \
   --task-id T-1 \
-  --agent scout \
-  --content "Utilities organized in src/utils/ with barrel export pattern" \
+  --agent researcher \
+  --content "Codebase uses Express 4.18.2 with custom middleware pipeline" \
   --confidence high \
-  --evidence '[{"type":"file","reference":"src/utils/index.ts","excerpt":"export * from ./date"}]' \
+  --evidence '[{"type":"file","reference":"package.json#L12","excerpt":"express: 4.18.2"}]' \
+  --tags "framework,http" \
   --path /workspace
 
-node dist/skill-cli.js add-fact \
+# Agent B discovers caching layer
+node scripts/board.js add-fact \
   --task-id T-1 \
-  --agent scout \
-  --content "No existing ISO date formatting utility found" \
+  --agent researcher \
+  --content "Redis client configured at src/cache/redis.ts with 5min default TTL" \
   --confidence high \
-  --evidence '[{"type":"search","reference":"rg toISO","excerpt":"No matches"}]' \
+  --evidence '[{"type":"file","reference":"src/cache/redis.ts#L8","excerpt":"DEFAULT_TTL = 300"}]' \
+  --tags "cache,redis,config" \
   --path /workspace
 
-node dist/skill-cli.js add-snippet \
+# Agent C discovers auth pattern
+node scripts/board.js add-fact \
   --task-id T-1 \
-  --agent scout \
-  --path src/utils/index.ts \
-  --lines '{"start":1,"end":15}' \
-  --content "$(cat src/utils/index.ts)" \
-  --purpose "Barrel export pattern for utilities" \
-  --tags "utils,pattern,target" \
-  --path /workspace
-```
-
-**Scout → Orchestrator:**
-```xml
-<report>
-  <facts>F-1, F-2</facts>
-  <snippets>X-1</snippets>
-  <confidence>high</confidence>
-  <blocking_questions></blocking_questions>
-</report>
-```
-
-**Gate:** Auto-proceed (complexity 2, high confidence, no blocking questions)
-
-### Step 3: Planning (Skip Creative)
-
-**Orchestrator creates plan directly (simple task, obvious approach):**
-
-```bash
-node dist/skill-cli.js set-plan \
-  --task-id T-1 \
-  --agent orchestrator \
-  --goal "Add utility function to convert timestamps to ISO format" \
-  --approach "Create formatToISO function in src/utils/date.ts, export via barrel" \
-  --steps '[
-    {
-      "title": "Create formatToISO function",
-      "description": "Add function in src/utils/date.ts that accepts timestamp and returns ISO string",
-      "done_when": [
-        "Function formatToISO exists in src/utils/date.ts",
-        "Handles null/undefined (returns empty string or null)",
-        "Uses Date.toISOString()",
-        "Exported in src/utils/index.ts"
-      ],
-      "files": ["src/utils/date.ts", "src/utils/index.ts"]
-    },
-    {
-      "title": "Add tests",
-      "description": "Write unit tests for formatToISO",
-      "done_when": [
-        "Test file exists at tests/utils/date.test.ts",
-        "Tests cover valid timestamp, null, undefined",
-        "All tests pass"
-      ],
-      "files": ["tests/utils/date.test.ts"]
-    }
-  ]' \
-  --path /workspace
-```
-
-**Gate:** Skip plan_verify (complexity 2, straightforward plan)
-
-### Step 4: Execution
-
-**Orchestrator → Executor:**
-```xml
-<objective>
-Implement Step 1: Create formatToISO function
-</objective>
-
-<context>
-Task ID: T-1
-Complexity: 2
-Current step: 1 of 2
-
-Step details:
-- Title: Create formatToISO function
-- Description: Add function in src/utils/date.ts that accepts timestamp and returns ISO string
-- Done when:
-  * Function formatToISO exists in src/utils/date.ts
-  * Handles null/undefined (returns empty string or null)
-  * Uses Date.toISOString()
-  * Exported in src/utils/index.ts
-- Files: src/utils/date.ts, src/utils/index.ts
-
-Snippets:
-[X-1] src/utils/index.ts — Barrel export pattern
-
-Facts:
-[F-1] Utilities organized in src/utils/ with barrel export pattern
-[F-2] No existing ISO date formatting utility found
-
-Constraints:
-- Must use built-in Date API
-- Must handle null/undefined
-</context>
-
-<output>
-Implement the step following interleaved thinking:
-- Code little (10-20 lines)
-- Verify (ide-get_diagnostics)
-- Repeat
-- Update snippets after edits
-- Log at least 1 trail
-</output>
-```
-
-**Executor actions:**
-
-```bash
-# Check snippets first (snippets-first rule)
-node dist/skill-cli.js exec \
-  --task-id T-1 \
-  --agent executor \
-  --code 'return board.getSnippets({ path: "src/utils/date.ts" });' \
-  --path /workspace
-# Returns: [] (no existing snippet)
-
-# Read file to check if exists
-view src/utils/date.ts
-# File doesn't exist
-
-# Create file with function (small unit)
-cat > src/utils/date.ts << 'EOF'
-/**
- * Converts a timestamp to ISO 8601 format string.
- * @param timestamp - Unix timestamp in milliseconds or Date object
- * @returns ISO string or null if input is null/undefined
- */
-export function formatToISO(timestamp: number | Date | null | undefined): string | null {
-  if (timestamp == null) {
-    return null;
-  }
-  
-  const date = timestamp instanceof Date ? timestamp : new Date(timestamp);
-  return date.toISOString();
-}
-EOF
-
-# Verify immediately
-ide-get_diagnostics src/utils/date.ts
-# Clean ✓
-
-# Update barrel export
-view src/utils/index.ts
-# Add export
-
-cat >> src/utils/index.ts << 'EOF'
-export * from './date';
-EOF
-
-# Verify
-ide-get_diagnostics src/utils/index.ts
-# Clean ✓
-
-# Build (logical unit complete)
-npm run build
-# Success ✓
-
-# Update snippet for created file
-node dist/skill-cli.js add-snippet \
-  --task-id T-1 \
-  --agent executor \
-  --path src/utils/date.ts \
-  --lines '{"start":1,"end":15}' \
-  --content "$(cat src/utils/date.ts)" \
-  --purpose "ISO date formatting utility (CREATED)" \
-  --tags "utils,date,target,created" \
-  --path /workspace
-
-# Log trail (MANDATORY)
-node dist/skill-cli.js append-trail \
-  --task-id T-1 \
-  --agent executor \
-  --marker DECISION \
-  --summary "Return null for null/undefined instead of throwing error" \
-  --details '{"context":"Handling invalid input","options":["throw error","return null","return empty string"],"choice":"return null","rationale":"More flexible for optional fields, matches TypeScript strict null checks"}' \
-  --evidence '["F-1"]' \
-  --path /workspace
-
-# Complete step
-node dist/skill-cli.js complete-step \
-  --task-id T-1 \
-  --agent executor \
-  --notes "Function created, build passes, snippet X-2 added, trail TR-1 logged" \
-  --path /workspace
-
-# Advance to next step
-node dist/skill-cli.js advance-step \
-  --task-id T-1 \
-  --agent executor \
-  --path /workspace
-```
-
-**Executor continues with Step 2 (tests):**
-
-```bash
-# Create test file
-cat > tests/utils/date.test.ts << 'EOF'
-import { describe, it, expect } from 'vitest';
-import { formatToISO } from '../../src/utils/date';
-
-describe('formatToISO', () => {
-  it('converts timestamp to ISO string', () => {
-    const timestamp = 1640000000000; // 2021-12-20T11:33:20.000Z
-    const result = formatToISO(timestamp);
-    expect(result).toBe('2021-12-20T11:33:20.000Z');
-  });
-
-  it('handles Date object', () => {
-    const date = new Date('2021-12-20T11:33:20.000Z');
-    const result = formatToISO(date);
-    expect(result).toBe('2021-12-20T11:33:20.000Z');
-  });
-
-  it('returns null for null input', () => {
-    expect(formatToISO(null)).toBeNull();
-  });
-
-  it('returns null for undefined input', () => {
-    expect(formatToISO(undefined)).toBeNull();
-  });
-});
-EOF
-
-# Verify
-ide-get_diagnostics tests/utils/date.test.ts
-# Clean ✓
-
-# Run tests
-npm test -- tests/utils/date.test.ts
-# 4/4 pass ✓
-
-# Complete step
-node dist/skill-cli.js complete-step \
-  --task-id T-1 \
-  --agent executor \
-  --notes "All tests passing (4/4)" \
-  --path /workspace
-```
-
-**Executor → Orchestrator:**
-```xml
-<report>
-  <status>complete</status>
-  <progress>2/2 steps</progress>
-  <files_changed>
-    <created>src/utils/date.ts, tests/utils/date.test.ts</created>
-    <modified>src/utils/index.ts</modified>
-  </files_changed>
-  <verification>
-    <build>pass</build>
-    <tests>4/4 pass</tests>
-  </verification>
-  <trails_logged>TR-1 (DECISION)</trails_logged>
-</report>
-```
-
-### Step 5: Result Verification (spot_check mode)
-
-**Orchestrator → Verifier:**
-```xml
-<objective>
-Verify execution results for formatToISO utility
-</objective>
-
-<context>
-Mode: spot_check (complexity 2)
-Pass: 1
-
-Plan:
-Step 1: Create formatToISO function ✓
-Step 2: Add tests ✓
-
-Done when criteria:
-- Function formatToISO exists in src/utils/date.ts ✓
-- Handles null/undefined ✓
-- Uses Date.toISOString() ✓
-- Exported in src/utils/index.ts ✓
-- Tests exist and pass ✓
-
-Files changed:
-- Created: src/utils/date.ts, tests/utils/date.test.ts
-- Modified: src/utils/index.ts
-</context>
-```
-
-**Verifier actions:**
-
-```bash
-# Verify files exist
-glob "src/utils/date.ts"
-# Match ✓
-
-glob "tests/utils/date.test.ts"
-# Match ✓
-
-# Check function implementation
-view src/utils/date.ts
-# Contains formatToISO ✓
-# Uses toISOString() ✓
-# Handles null/undefined ✓
-
-# Check export
-rg "export.*from.*date" src/utils/index.ts
-# Found ✓
-
-# Run tests
-npm test -- tests/utils/date.test.ts
-# 4/4 pass ✓
-
-# Build
-npm run build
-# Success ✓
-```
-
-**Verifier → Orchestrator:**
-```xml
-<critique>
-  <status>approved</status>
-  <pass>1</pass>
-  <confidence>high</confidence>
-  <issues></issues>
-</critique>
-```
-
-**Gate:** Auto-complete (complexity 2, all checks pass, no issues)
-
-### Step 6: Complete
-
-```bash
-node dist/skill-cli.js archive-task \
-  --task-id T-1 \
-  --path /workspace
-```
-
-**Summary:**
-- Duration: ~3-5 minutes
-- Phases: setup → exploration → planning → execution → result_verify → complete
-- Skipped: ideation (Creative), plan_verify (simple task)
-- Facts: 2, Snippets: 2, Trails: 1
-- Files: 2 created, 1 modified
-- Auto-gates: All (no user intervention)
-
----
-
-## Example 2: Standard Task (Complexity 5) with Scout Requests
-
-**Task:** Implement rate limiting for API endpoints.
-
-**Complexity:** 5 (Standard — multiple files, existing patterns to follow)
-
-**Full workflow:** setup → exploration → ideation → planning → plan_verify → execution → result_verify → complete
-
-### Step 1: Setup
-
-```bash
-node dist/skill-cli.js create-task \
-  --goal "Implement rate limiting for API endpoints" \
-  --context "Prevent abuse, limit to 100 req/min per IP" \
-  --constraints '["Must not break existing endpoints","Should use Redis for distributed support"]' \
-  --path /workspace
-
-# Returns: {"result": {"task_id": "T-2", "status": "setup"}}
-```
-
-### Step 2: Exploration (Scout - focused_query mode)
-
-```bash
-# Find middleware patterns
-glob "src/middleware/**/*.ts"
-
-# Search for rate limiting
-rg "rate.*limit|throttle" --type ts
-
-# Check Redis setup
-rg "redis|Redis" --type ts
-view src/lib/redis.ts
-
-# Check package.json for rate limiting libs
-view package.json | rg "rate|limit"
-
-# Add facts
-node dist/skill-cli.js add-fact \
-  --task-id T-2 \
-  --agent scout \
-  --content "Middleware pattern: functions in src/middleware/ imported in src/app.ts" \
+  --agent researcher \
+  --content "Auth middleware at src/middleware/auth.ts exports requireAuth function" \
   --confidence high \
-  --evidence '[{"type":"file","reference":"src/app.ts#L10","excerpt":"import { authMiddleware } from ./middleware/auth"}]' \
+  --evidence '[{"type":"file","reference":"src/middleware/auth.ts#L15","excerpt":"export const requireAuth = ..."}]' \
+  --tags "auth,middleware,pattern" \
   --path /workspace
+```
 
-node dist/skill-cli.js add-fact \
-  --task-id T-2 \
-  --agent scout \
-  --content "Redis client configured at src/lib/redis.ts" \
-  --confidence high \
-  --evidence '[{"type":"file","reference":"src/lib/redis.ts#L1-L10","excerpt":"createClient()"}]' \
-  --path /workspace
+### Step 3: Cache Snippets
 
-node dist/skill-cli.js add-fact \
-  --task-id T-2 \
-  --agent scout \
-  --content "No existing rate limiting library in package.json" \
-  --confidence high \
-  --evidence '[{"type":"search","reference":"rg rate package.json","excerpt":"No matches"}]' \
-  --path /workspace
-
-# Cache snippets
-node dist/skill-cli.js add-snippet \
-  --task-id T-2 \
-  --agent scout \
+```bash
+# Cache auth middleware for implementer to reference
+node scripts/board.js add-snippet \
+  --task-id T-1 \
+  --agent researcher \
   --path src/middleware/auth.ts \
-  --lines '{"start":1,"end":25}' \
-  --content "..." \
-  --purpose "Example middleware pattern" \
-  --tags "middleware,pattern" \
+  --lines '{"start":15,"end":30}' \
+  --content "$(cat src/middleware/auth.ts | sed -n '15,30p')" \
+  --purpose "Auth middleware pattern to reuse" \
+  --tags "auth,middleware,pattern" \
   --path /workspace
+
+# Returns: {"result": {"snippet_id": "X-1"}}
 ```
 
-**Scout → Orchestrator:**
-```xml
-<report>
-  <facts>F-1, F-2, F-3</facts>
-  <snippets>X-1</snippets>
-  <confidence>high</confidence>
-  <blocking_questions></blocking_questions>
-</report>
-```
-
-### Step 3: Ideation (Creative)
-
-**Orchestrator → Creative:**
-```xml
-<objective>
-Design approach for API rate limiting (100 req/min per IP).
-</objective>
-
-<context>
-Facts:
-[F-1] Middleware pattern: functions in src/middleware/
-[F-2] Redis client configured at src/lib/redis.ts
-[F-3] No existing rate limiting library
-
-Snippets:
-[X-1] src/middleware/auth.ts — Middleware pattern example
-
-Constraints:
-- Must not break existing endpoints
-- Should use Redis for distributed support
-- 100 req/min per IP
-</context>
-```
-
-**Creative discovers unknown:**
-
-```xml
-<report>
-  <scout_requests>
-    <request>
-      <query>What rate limiting libraries are compatible with Express + Redis?</query>
-      <reason>Need to evaluate library vs. custom implementation</reason>
-      <mode>external_search</mode>
-    </request>
-  </scout_requests>
-</report>
-```
-
-**Orchestrator → Scout (external_search):**
+### Step 4: Search for Related Content
 
 ```bash
-web_search "Express rate limiting Redis library 2024"
-
-# Discovers: rate-limiter-flexible, express-rate-limit
-
-node dist/skill-cli.js add-fact \
-  --task-id T-2 \
-  --agent scout \
-  --content "Popular library: rate-limiter-flexible supports Redis, 10K+ weekly downloads" \
-  --confidence medium \
-  --evidence '[{"type":"external","reference":"npmjs.com/package/rate-limiter-flexible","excerpt":"Redis store support"}]' \
+# Find all auth-related facts and snippets
+node scripts/board.js search "authentication middleware" \
+  --task-id T-1 \
+  --types facts,snippets \
+  --tags auth \
+  --limit 10 \
   --path /workspace
+
+# Returns ranked results across facts and snippets
 ```
 
-**Orchestrator re-invokes Creative with new fact:**
-
-**Creative actions:**
+### Step 5: Create Plan
 
 ```bash
-# Propose Approach 1: Use rate-limiter-flexible
-node dist/skill-cli.js propose-decision \
-  --task-id T-2 \
-  --agent creative \
-  --title "Use rate-limiter-flexible library" \
-  --description "Install rate-limiter-flexible, configure with Redis backend, create middleware" \
-  --rationale "Battle-tested (10K+ downloads), Redis support built-in, minimal code" \
-  --alternatives '[
-    {
-      "title": "Custom implementation",
-      "pros": "No external dependency, full control",
-      "cons": "More code to maintain, edge cases"
-    },
-    {
-      "title": "express-rate-limit + Redis store",
-      "pros": "Express-specific",
-      "cons": "Two packages, less flexible"
-    }
-  ]' \
-  --tags "rate-limit,library,recommended" \
-  --path /workspace
-```
-
-**Creative → Orchestrator:**
-```xml
-<report>
-  <decisions>D-1</decisions>
-  <recommendation>D-1</recommendation>
-  <rationale>rate-limiter-flexible is production-ready and matches our Redis requirement</rationale>
-</report>
-```
-
-**Gate:** User gate (standard complexity, library decision)
-
-**Orchestrator → User:**
-```
-Creative proposed 1 approach:
-
-[D-1] Use rate-limiter-flexible library
-- Pros: Battle-tested, Redis support, minimal code
-- Cons: External dependency
-
-Alternatives considered:
-- Custom implementation (more code, more maintenance)
-- express-rate-limit (less flexible)
-
-Recommendation: D-1 because it's production-ready and matches Redis requirement.
-
-Approve?
-```
-
-**User:** "Approved"
-
-```bash
-node dist/skill-cli.js approve-decision \
-  --task-id T-2 \
-  --agent orchestrator \
-  --decision-id D-1 \
-  --notes "User approved" \
-  --path /workspace
-```
-
-### Step 4: Planning
-
-```bash
-node dist/skill-cli.js set-plan \
-  --task-id T-2 \
-  --agent orchestrator \
-  --goal "Implement rate limiting for API endpoints" \
-  --approach "Use rate-limiter-flexible with Redis backend" \
+node scripts/board.js set-plan \
+  --task-id T-1 \
+  --agent planner \
+  --goal "Add user profile endpoint" \
+  --approach "Create new route with auth middleware and Redis caching" \
   --steps '[
     {
-      "title": "Install dependency",
-      "description": "Add rate-limiter-flexible to package.json",
-      "done_when": [
-        "Package in package.json dependencies",
-        "npm install completes successfully"
-      ],
-      "files": ["package.json", "package-lock.json"]
+      "title": "Create route handler",
+      "description": "Add GET /api/users/:id to src/routes/users.ts",
+      "done_when": ["Route registered", "Uses requireAuth middleware", "Returns user profile JSON"],
+      "files": ["src/routes/users.ts"]
     },
     {
-      "title": "Create rate limit middleware",
-      "description": "Implement middleware using rate-limiter-flexible with Redis store",
-      "done_when": [
-        "File src/middleware/rate-limit.ts exists",
-        "Exports rateLimitMiddleware function",
-        "Configured for 100 req/min per IP",
-        "Uses Redis client from src/lib/redis.ts"
-      ],
-      "files": ["src/middleware/rate-limit.ts"]
-    },
-    {
-      "title": "Apply middleware to routes",
-      "description": "Add rate limit middleware to Express app",
-      "done_when": [
-        "Middleware imported in src/app.ts",
-        "Applied globally or to specific routes",
-        "Existing endpoints still functional"
-      ],
-      "files": ["src/app.ts"]
+      "title": "Add caching layer",
+      "description": "Wrap handler with Redis cache using existing client",
+      "done_when": ["Cache hit returns cached data", "Cache miss fetches and stores", "TTL set to 5 minutes"],
+      "files": ["src/routes/users.ts", "src/cache/redis.ts"]
     },
     {
       "title": "Add tests",
-      "description": "Test rate limiting behavior",
-      "done_when": [
-        "Test file exists",
-        "Tests verify 100 req/min limit",
-        "Tests verify 429 response after limit",
-        "All tests pass"
-      ],
-      "files": ["tests/middleware/rate-limit.test.ts"]
+      "description": "Unit tests for route and caching behavior",
+      "done_when": ["Auth test passes", "Cache hit test passes", "Cache miss test passes"],
+      "files": ["tests/routes/users.test.ts"]
     }
   ]' \
   --path /workspace
+
+# Returns: {"result": {"plan_id": "P-1", "total_steps": 3, "current_step": 0}}
 ```
 
-### Step 5: Plan Verification (Pass 1)
-
-**Verifier actions:**
+### Step 6: Execute Steps
 
 ```bash
-# Verify files exist (plan targets)
-glob "src/lib/redis.ts"
-# Exists ✓
-
-glob "src/middleware/auth.ts"
-# Exists ✓ (pattern reference)
-
-# Check if rate-limiter-flexible is already installed
-rg "rate-limiter-flexible" package.json
-# Not found ✓ (will be installed)
-
-# Verify Redis client is usable
-view src/lib/redis.ts
-# Exports client ✓
-
-# Check app.ts structure
-view src/app.ts
-# Middleware can be added ✓
-
-# Validate plan steps
-# All steps have clear done_when ✓
-# Files are concrete paths ✓
-```
-
-**Verifier → Orchestrator:**
-```xml
-<critique>
-  <status>approved</status>
-  <pass>1</pass>
-  <confidence>high</confidence>
-  <issues></issues>
-</critique>
-```
-
-**Gate:** Auto-proceed (standard complexity, approved plan, no issues)
-
-### Step 6: Execution
-
-**Executor implements Step 1-4 with interleaved verification:**
-
-```bash
-# Step 1: Install dependency
-npm install rate-limiter-flexible
-# Success ✓
-
-node dist/skill-cli.js complete-step --task-id T-2 --agent executor --path /workspace
-node dist/skill-cli.js advance-step --task-id T-2 --agent executor --path /workspace
-
-# Step 2: Create middleware (interleaved)
-# Unit 1: Imports (10 lines)
-cat > src/middleware/rate-limit.ts << 'EOF'
-import { RateLimiterRedis } from 'rate-limiter-flexible';
-import { Request, Response, NextFunction } from 'express';
-import { redisClient } from '../lib/redis';
-
-const rateLimiter = new RateLimiterRedis({
-  storeClient: redisClient,
-  keyPrefix: 'ratelimit',
-  points: 100, // requests
-  duration: 60, // per 60 seconds
-});
-EOF
-
-ide-get_diagnostics src/middleware/rate-limit.ts
-# Clean ✓
-
-# Unit 2: Middleware function (15 lines)
-cat >> src/middleware/rate-limit.ts << 'EOF'
-
-export async function rateLimitMiddleware(
-  req: Request,
-  res: Response,
-  next: NextFunction
-): Promise<void> {
-  const ip = req.ip || 'unknown';
-  
-  try {
-    await rateLimiter.consume(ip);
-    next();
-  } catch (error) {
-    res.status(429).json({ error: 'Too many requests' });
-  }
-}
-EOF
-
-ide-get_diagnostics src/middleware/rate-limit.ts
-# Clean ✓
-
-npm run build
-# Success ✓
-
-# Log trail
-node dist/skill-cli.js append-trail \
-  --task-id T-2 \
-  --agent executor \
-  --marker DECISION \
-  --summary "Used IP address as rate limit key" \
-  --details '{"context":"Identify unique clients","options":["IP address","User ID","API key"],"choice":"IP address","rationale":"Works for both authenticated and anonymous requests, matches requirement"}' \
-  --evidence '["F-1","D-1"]' \
-  --path /workspace
-
-# Update snippet
-node dist/skill-cli.js add-snippet \
-  --task-id T-2 \
-  --agent executor \
-  --path src/middleware/rate-limit.ts \
-  --lines '{"start":1,"end":30}' \
-  --content "$(cat src/middleware/rate-limit.ts)" \
-  --purpose "Rate limiting middleware implementation" \
-  --tags "middleware,rate-limit,created" \
-  --path /workspace
-
-node dist/skill-cli.js complete-step --task-id T-2 --agent executor --path /workspace
-node dist/skill-cli.js advance-step --task-id T-2 --agent executor --path /workspace
-
-# Step 3: Apply middleware
-view src/app.ts
-# Check structure
-
-# Add import + middleware
-# (edit commands...)
-
-npm run build
-# Success ✓
-
-node dist/skill-cli.js complete-step --task-id T-2 --agent executor --path /workspace
-node dist/skill-cli.js advance-step --task-id T-2 --agent executor --path /workspace
-
-# Step 4: Tests
-# (create tests, verify pass...)
-
-node dist/skill-cli.js complete-step --task-id T-2 --agent executor --path /workspace
-```
-
-### Step 7: Result Verification (standard mode)
-
-**Verifier actions:**
-
-```bash
-# Verify all files changed
-glob "src/middleware/rate-limit.ts"
-# Exists ✓
-
-# Check implementation
-view src/middleware/rate-limit.ts
-# Uses rate-limiter-flexible ✓
-# Configured 100/60s ✓
-# Uses Redis client ✓
-
-# Verify applied to app
-rg "rateLimitMiddleware" src/app.ts
-# Found ✓
-
-# Run tests
-npm test -- tests/middleware/rate-limit.test.ts
-# All pass ✓
-
-# Build
-npm run build
-# Success ✓
-
-# Check existing endpoints still work
-npm test
-# All pass ✓
-```
-
-**Verifier → Orchestrator:**
-```xml
-<critique>
-  <status>approved</status>
-  <pass>1</pass>
-  <confidence>high</confidence>
-</critique>
-```
-
-**Gate:** Auto-complete (standard complexity, all checks pass)
-
-### Summary
-
-- Duration: ~15-20 minutes
-- Phases: All standard phases
-- Scout requests: 1 (external search for library)
-- User gates: 1 (decision approval)
-- Facts: 4, Snippets: 2, Decisions: 1, Trails: 1+
-- Pass limits: Plan verified in 1 pass, result verified in 1 pass
-
----
-
-## Example 3: Complex Task with Escalation (Complexity 7)
-
-**Task:** Refactor authentication to support OAuth + JWT + magic link.
-
-**Complexity:** 7 (Complex — architectural change, many files, novel patterns)
-
-### Scenario: Result Verification Fails Twice
-
-After execution, Verifier finds issues:
-
-**Pass 1:**
-
-```xml
-<critique>
-  <status>revision_required</status>
-  <pass>1</pass>
-  <critique>
-    <issue>
-      <severity>blocking</severity>
-      <item>OAuth callback handler</item>
-      <issue>Missing state parameter validation (CSRF vulnerability)</issue>
-      <evidence>X-8#L45 no state check</evidence>
-      <suggestion>Validate state matches session value before exchanging code</suggestion>
-    </issue>
-    <issue>
-      <severity>blocking</severity>
-      <item>JWT refresh logic</item>
-      <issue>No token rotation on refresh</issue>
-      <evidence>X-10#L30 reuses same refresh token</evidence>
-      <suggestion>Issue new refresh token on each refresh request</suggestion>
-    </issue>
-  </critique>
-</critique>
-```
-
-**Executor fixes issues:**
-
-```bash
-# Fix OAuth state validation
-# Fix JWT rotation
-# Re-run tests
-```
-
-**Pass 2:**
-
-```xml
-<critique>
-  <status>revision_required</status>
-  <pass>2</pass>
-  <critique>
-    <issue>
-      <severity>blocking</severity>
-      <item>OAuth callback</item>
-      <issue>State validation still bypassable if session is empty</issue>
-      <evidence>X-8#L47 doesn't check if state exists</evidence>
-      <suggestion>Require state in session, reject if missing</suggestion>
-    </issue>
-  </critique>
-</critique>
-```
-
-**Max passes exceeded (2) → Escalation:**
-
-```bash
-node dist/skill-cli.js raise-alert \
-  --task-id T-3 \
-  --agent orchestrator \
-  --severity blocker \
-  --title "Result verification failed after 2 passes" \
-  --description "OAuth state validation issue persists after fixes.
-
-Pass 1 issues:
-- Missing state parameter validation ✓ FIXED
-- No token rotation ✓ FIXED
-
-Pass 2 issues:
-- State validation bypassable if session empty ✗ PERSISTS
-
-Attempted:
-- Added state check (X-8#L47)
-- Added session validation
-- Issue: Edge case when session expires between auth start and callback
-
-Options:
-A. Accept current state — Document limitation that auth fails if session expires (low risk)
-B. Add Redis-based state store — More robust but adds complexity (1-2 more steps)
-C. Reject auth if no session — Simpler but worse UX (user must restart flow)
-
-Recommendation: Option B — Security-critical feature justifies extra complexity" \
-  --tags "escalation,verification,security,user_decision" \
-  --path /workspace
-```
-
-**Orchestrator → User:**
-
-```
-Verification failed after 2 passes on OAuth security issue.
-
-Issue: State validation bypassable if session expires during OAuth flow.
-
-Options:
-A. Accept with documentation (fastest, low risk)
-B. Add Redis state store (more robust, +2 steps)
-C. Reject auth if no session (simpler, worse UX)
-
-Recommendation: B (Redis state store) because this is a security-critical feature.
-
-How should I proceed?
-```
-
-**User:** "Go with option B"
-
-**Orchestrator:**
-1. Resolves alert
-2. Updates plan (adds 2 steps)
-3. Re-invokes Executor
-4. Re-verifies → passes
-
----
-
-## Example 4: Exec Mode — Multi-Step Query
-
-**Scenario:** Orchestrator checks if ready to proceed from exploration to ideation.
-
-```bash
-node dist/skill-cli.js exec \
+# Implementer advances to step 1
+node scripts/board.js advance-step \
   --task-id T-1 \
-  --agent orchestrator \
+  --agent implementer \
+  --path /workspace
+
+# ... implementer does work ...
+
+# Mark step complete
+node scripts/board.js complete-step \
+  --task-id T-1 \
+  --agent implementer \
+  --notes "Route created, uses requireAuth from X-1 pattern" \
+  --path /workspace
+
+# Log decision trail
+node scripts/board.js append-trail \
+  --task-id T-1 \
+  --agent implementer \
+  --marker DECISION \
+  --summary "Used existing requireAuth middleware instead of creating new" \
+  --details '{"context":"Need auth protection","options":["Create new middleware","Reuse requireAuth"],"choice":"Reuse requireAuth","rationale":"Matches existing pattern in X-1"}' \
+  --evidence '["X-1#L15-30","F-3"]' \
+  --path /workspace
+```
+
+### Step 7: Quick Status Check
+
+```bash
+node scripts/board.js view \
+  --task-id T-1 \
+  --path /workspace
+
+# Returns:
+# {
+#   "result": {
+#     "task_id": "T-1",
+#     "status": "in_progress",
+#     "facts_count": 3,
+#     "snippets_count": 1,
+#     "decisions_count": 0,
+#     "alerts_count": 0,
+#     "current_step": 2,
+#     "total_steps": 3
+#   }
+# }
+```
+
+---
+
+## Example 2: Multi-Agent Collaboration
+
+Two agents working in parallel, sharing knowledge through the board.
+
+### Agent A: Explores Database Layer
+
+```bash
+# Agent A finds database info
+node scripts/board.js add-fact \
+  --task-id T-1 \
+  --agent agent-a \
+  --content "PostgreSQL 14 with Prisma ORM, User model defined in schema.prisma" \
+  --confidence high \
+  --evidence '[{"type":"file","reference":"prisma/schema.prisma#L10-25","excerpt":"model User {...}"}]' \
+  --tags "database,prisma,schema" \
+  --path /workspace
+
+# Agent A caches schema snippet
+node scripts/board.js add-snippet \
+  --task-id T-1 \
+  --agent agent-a \
+  --path prisma/schema.prisma \
+  --lines '{"start":10,"end":25}' \
+  --content "model User {\n  id String @id\n  email String @unique\n  name String?\n}" \
+  --purpose "User model schema for implementer" \
+  --tags "database,schema,user" \
+  --path /workspace
+```
+
+### Agent B: Explores API Layer
+
+```bash
+# Agent B finds API patterns (parallel with Agent A)
+node scripts/board.js add-fact \
+  --task-id T-1 \
+  --agent agent-b \
+  --content "API routes follow REST pattern in src/routes/, use async/await with try/catch" \
+  --confidence high \
+  --evidence '[{"type":"file","reference":"src/routes/posts.ts#L5-20","excerpt":"router.get(/, async (req, res) => { try {...} catch {...} })"}]' \
+  --tags "api,pattern,error-handling" \
+  --path /workspace
+
+# Agent B caches error handling pattern
+node scripts/board.js add-snippet \
+  --task-id T-1 \
+  --agent agent-b \
+  --path src/routes/posts.ts \
+  --lines '{"start":5,"end":20}' \
+  --content "router.get('/', async (req, res) => {\n  try {\n    const posts = await db.post.findMany();\n    res.json(posts);\n  } catch (err) {\n    res.status(500).json({ error: err.message });\n  }\n});" \
+  --purpose "Error handling pattern for implementer" \
+  --tags "api,pattern,error-handling" \
+  --path /workspace
+```
+
+### Agent C: Reads Both Agents' Work
+
+```bash
+# Agent C uses exec mode to combine both findings
+node scripts/board.js exec \
+  --task-id T-1 \
+  --agent agent-c \
   --code '
-    // Check exploration completeness
-    const facts = board.getFacts({ confidence: ["high", "medium"] });
-    const snippets = board.getSnippets();
-    const alerts = board.getAlerts({ status: "active", severity: "blocker" });
+    const facts = board.getFacts({ confidence: ["high"] });
+    const dbFacts = facts.filter(f => f.tags?.includes("database"));
+    const apiFacts = facts.filter(f => f.tags?.includes("api"));
     
-    // Check for blocking questions (scout_requests pattern)
-    const scoutFacts = board.getFacts({ agent: "scout" });
-    const hasBlockingQuestions = scoutFacts.some(f => 
-      f.content.toLowerCase().includes("question") || 
-      f.tags?.includes("blocking_question")
-    );
-    
-    // Determine if ready
-    const ready = 
-      facts.length >= 3 && 
-      snippets.length >= 2 && 
-      alerts.length === 0 && 
-      !hasBlockingQuestions;
+    const snippets = board.getSnippets({});
+    const dbSnippets = snippets.filter(s => s.tags?.includes("schema"));
+    const apiSnippets = snippets.filter(s => s.tags?.includes("pattern"));
     
     return {
-      ready,
-      reason: ready ? "Sufficient context to proceed" : "Need more exploration",
-      facts_count: facts.length,
-      snippets_count: snippets.length,
-      active_blockers: alerts.length,
-      has_blocking_questions: hasBlockingQuestions,
-      next_action: ready ? "invoke_creative" : "request_user_input"
+      db_info: {
+        facts: dbFacts.map(f => f.fact_id),
+        snippets: dbSnippets.map(s => s.snippet_id)
+      },
+      api_info: {
+        facts: apiFacts.map(f => f.fact_id),
+        snippets: apiSnippets.map(s => s.snippet_id)
+      },
+      ready_to_implement: dbSnippets.length > 0 && apiSnippets.length > 0
+    };
+  ' \
+  --path /workspace
+
+# Agent C now has complete context from both A and B without re-reading files
+```
+
+---
+
+## Example 3: Exec Mode Patterns
+
+Complex queries using the JavaScript API.
+
+### Pattern 1: Conditional Readiness Check
+
+```bash
+node scripts/board.js exec \
+  --task-id T-1 \
+  --agent coordinator \
+  --code '
+    const plan = board.getPlan();
+    const facts = board.getFacts({ confidence: ["high"] });
+    const snippets = board.getSnippets({});
+    const alerts = board.getAlerts({ status: "active", severity: "blocker" });
+    
+    if (alerts.length > 0) {
+      return {
+        ready: false,
+        reason: "Blocker alerts unresolved",
+        blockers: alerts.map(a => a.alert_id)
+      };
+    }
+    
+    if (!plan) {
+      return { ready: false, reason: "No plan created" };
+    }
+    
+    if (facts.length < 3) {
+      return {
+        ready: false,
+        reason: "Insufficient exploration",
+        facts_needed: 3 - facts.length
+      };
+    }
+    
+    return {
+      ready: true,
+      facts: facts.length,
+      snippets: snippets.length,
+      current_step: plan.current_step
     };
   ' \
   --path /workspace
 ```
 
-**Returns:**
-```json
-{
-  "result": {
-    "ready": true,
-    "reason": "Sufficient context to proceed",
-    "facts_count": 5,
-    "snippets_count": 3,
-    "active_blockers": 0,
-    "has_blocking_questions": false,
-    "next_action": "invoke_creative"
-  }
-}
-```
-
----
-
-## Example 5: Exec Mode — Snippet-First Pattern
-
-**Scenario:** Executor checks if snippets exist before reading files.
+### Pattern 2: Gap Analysis
 
 ```bash
-node dist/skill-cli.js exec \
+node scripts/board.js exec \
   --task-id T-1 \
-  --agent executor \
+  --agent coordinator \
   --code '
-    // Get current step from plan
     const plan = board.getPlan();
+    if (!plan || plan.current_step === 0) {
+      return { status: "no_plan" };
+    }
+    
     const currentStep = plan.steps[plan.current_step - 1];
+    const gaps = [];
     
-    // Check snippets for each file
-    const snippetsNeeded = [];
-    const snippetsAvailable = [];
-    
+    // Check if we have snippets for all files in current step
     for (const file of currentStep.files) {
       const snippets = board.getSnippets({ path: file });
       if (snippets.length === 0) {
-        snippetsNeeded.push(file);
-      } else {
-        snippetsAvailable.push({
-          file,
-          snippet_id: snippets[0].id,
-          lines: snippets[0].lines,
-          purpose: snippets[0].purpose
+        gaps.push({
+          type: "missing_snippet",
+          file: file,
+          step: currentStep.title
         });
       }
     }
     
+    // Check for related facts
+    const facts = board.getFacts({ confidence: ["high"] });
+    const relevantFacts = facts.filter(f =>
+      currentStep.files.some(file =>
+        f.evidence?.some(e => e.reference?.includes(file))
+      )
+    );
+    
+    if (relevantFacts.length === 0) {
+      gaps.push({
+        type: "no_related_facts",
+        step: currentStep.title,
+        files: currentStep.files
+      });
+    }
+    
     return {
       step: currentStep.title,
-      files: currentStep.files,
-      snippets_available: snippetsAvailable,
-      snippets_needed: snippetsNeeded,
-      ready_to_code: snippetsNeeded.length === 0,
-      action: snippetsNeeded.length > 0 
-        ? `Read files: ${snippetsNeeded.join(", ")}` 
-        : "Start coding with available snippets"
+      gaps: gaps,
+      ready: gaps.length === 0,
+      relevant_facts: relevantFacts.map(f => f.fact_id)
     };
   ' \
   --path /workspace
 ```
 
-**Returns:**
-```json
-{
-  "result": {
-    "step": "Add POST /auth/magic endpoint",
-    "files": ["src/routes/auth.ts", "src/auth/token.ts"],
-    "snippets_available": [
-      {
-        "file": "src/auth/token.ts",
-        "snippet_id": "X-1",
-        "lines": {"start": 1, "end": 50},
-        "purpose": "Token generation logic"
-      }
-    ],
-    "snippets_needed": ["src/routes/auth.ts"],
-    "ready_to_code": false,
-    "action": "Read files: src/routes/auth.ts"
-  }
-}
-```
-
----
-
-## Example 6: Exec Mode — Search + Filter Pattern
-
-**Scenario:** Creative searches for authentication-related context before proposing approach.
+### Pattern 3: Cross-Entity Search
 
 ```bash
-node dist/skill-cli.js exec \
+node scripts/board.js exec \
   --task-id T-1 \
-  --agent creative \
+  --agent researcher \
   --code '
-    // Search for auth-related entities
-    const searchResults = board.search({ 
-      text: "authentication auth jwt token", 
-      types: ["facts", "snippets", "decisions"],
-      limit: 20 
+    // Search for "cache" across all entity types
+    const searchResults = board.search({
+      text: "cache redis",
+      types: ["facts", "snippets", "decisions", "trails"],
+      limit: 20
     });
     
-    // Group by type
-    const byType = searchResults.reduce((acc, r) => {
-      if (!acc[r.type]) acc[r.type] = [];
-      acc[r.type].push(r);
+    // Group by entity type
+    const byType = searchResults.reduce((acc, result) => {
+      if (!acc[result.type]) {
+        acc[result.type] = [];
+      }
+      acc[result.type].push({
+        id: result.id,
+        rank: result.rank,
+        preview: result.content?.substring(0, 100) || result.path
+      });
       return acc;
     }, {});
     
-    // Get high-confidence facts about auth
-    const authFacts = (byType.facts || [])
-      .map(f => board.getFacts().find(fact => fact.fact_id === f.id))
-      .filter(f => f && f.confidence === "high");
-    
-    // Get snippets with auth patterns
-    const authSnippets = (byType.snippets || [])
-      .map(s => board.getSnippets().find(snip => snip.snippet_id === s.id))
-      .filter(s => s && s.tags?.includes("pattern"));
-    
-    // Check for existing decisions
-    const existingDecisions = byType.decisions || [];
+    // Find highest-ranked result of each type
+    const topByType = {};
+    for (const [type, results] of Object.entries(byType)) {
+      topByType[type] = results.sort((a, b) => b.rank - a.rank)[0];
+    }
     
     return {
-      search_results_count: searchResults.length,
-      high_confidence_facts: authFacts.length,
-      pattern_snippets: authSnippets.length,
-      existing_decisions: existingDecisions.length,
-      context_sufficient: authFacts.length >= 2 && authSnippets.length >= 1,
-      facts: authFacts.map(f => ({ id: f.fact_id, content: f.content })),
-      patterns: authSnippets.map(s => ({ id: s.snippet_id, path: s.path, purpose: s.purpose }))
+      total_results: searchResults.length,
+      by_type: Object.keys(byType).reduce((acc, k) => {
+        acc[k] = byType[k].length;
+        return acc;
+      }, {}),
+      top_match_per_type: topByType
     };
   ' \
   --path /workspace
 ```
 
-**Returns:**
-```json
-{
-  "result": {
-    "search_results_count": 12,
-    "high_confidence_facts": 3,
-    "pattern_snippets": 2,
-    "existing_decisions": 0,
-    "context_sufficient": true,
-    "facts": [
-      {"id": "F-1", "content": "Express 4.18.2 for routing"},
-      {"id": "F-4", "content": "JWT pattern in X-1#L45"},
-      {"id": "F-6", "content": "Redis available for session"}
-    ],
-    "patterns": [
-      {"id": "X-1", "path": "src/auth/jwt.ts", "purpose": "JWT auth pattern"},
-      {"id": "X-3", "path": "src/middleware/auth.ts", "purpose": "Middleware pattern"}
-    ]
-  }
-}
-```
-
 ---
 
-## Key Takeaways from Examples
+## Example 4: Search Patterns
 
-### Example 1 (Simple):
-- Collapsed workflow (skip Creative, skip plan_verify)
-- Auto-gates throughout
-- Minimal tool calls (5-8 per agent)
-- Duration: 3-5 minutes
+Using full-text search with filters.
 
-### Example 2 (Standard):
-- Full workflow with Scout requests
-- User gate at decision approval
-- Creative asks Scout for external info
-- Duration: 15-20 minutes
+### Search 1: Find All Authentication-Related Content
 
-### Example 3 (Complex):
-- Max passes enforced (2)
-- Escalation with structured options
-- User makes final call
-- Plan updated mid-execution
-
-### Example 4-6 (Exec Mode):
-- Complex queries in single call
-- Multi-entity coordination
-- Context-aware decision making
-- Efficient alternative to multiple CLI calls
-
----
-
-## CLI Command Patterns
-
-### Quick Fact Addition
 ```bash
-node dist/skill-cli.js add-fact \
-  --task-id T-1 --agent scout \
-  --content "..." \
-  --confidence high \
-  --evidence '[{"type":"file","reference":"...","excerpt":"..."}]' \
-  --path /workspace
-```
-
-### Snippet After File Edit
-```bash
-node dist/skill-cli.js add-snippet \
-  --task-id T-1 --agent executor \
-  --path src/auth/token.ts \
-  --lines '{"start":1,"end":50}' \
-  --content "$(cat src/auth/token.ts | head -50)" \
-  --purpose "Token generation (UPDATED)" \
-  --tags "auth,target,modified" \
-  --path /workspace
-```
-
-### Decision Proposal
-```bash
-node dist/skill-cli.js propose-decision \
-  --task-id T-1 --agent creative \
-  --title "..." \
-  --description "..." \
-  --rationale "..." \
-  --alternatives '[...]' \
-  --path /workspace
-```
-
-### Trail Logging
-```bash
-node dist/skill-cli.js append-trail \
-  --task-id T-1 --agent executor \
-  --marker DECISION \
-  --summary "..." \
-  --details '{"context":"...","choice":"...","rationale":"..."}' \
-  --evidence '["X-1#L45","F-3"]' \
-  --path /workspace
-```
-
-### Search
-```bash
-node dist/skill-cli.js search "auth token" \
+# Keyword search across facts and snippets
+node scripts/board.js search "authentication jwt token" \
   --task-id T-1 \
   --types facts,snippets \
   --limit 10 \
   --path /workspace
+
+# Returns BM25-ranked results:
+# [
+#   {
+#     "type": "fact",
+#     "id": "F-3",
+#     "content": "JWT tokens used for authentication in src/auth/jwt.ts",
+#     "rank": 0.95,
+#     "highlights": ["<b>authentication</b> ... <b>JWT</b> <b>tokens</b>"]
+#   },
+#   {
+#     "type": "snippet",
+#     "id": "X-2",
+#     "path": "src/auth/jwt.ts",
+#     "purpose": "JWT token generation and validation",
+#     "rank": 0.87
+#   }
+# ]
+```
+
+### Search 2: Filter by Tags
+
+```bash
+# Find high-confidence facts tagged with "security"
+node scripts/board.js search "validation input" \
+  --task-id T-1 \
+  --types facts \
+  --tags security,validation \
+  --limit 5 \
+  --path /workspace
+```
+
+### Search 3: Decision Trails
+
+```bash
+# Find all decisions related to database
+node scripts/board.js search "database schema migration" \
+  --task-id T-1 \
+  --types decisions,trails \
+  --limit 10 \
+  --path /workspace
+
+# Returns decisions and trail entries that mention database
+```
+
+### Search 4: Combine with Exec for Post-Processing
+
+```bash
+node scripts/board.js exec \
+  --task-id T-1 \
+  --agent researcher \
+  --code '
+    // Search for error handling patterns
+    const results = board.search({
+      text: "error handling try catch",
+      types: ["snippets", "facts"],
+      limit: 20
+    });
+    
+    // Filter to only snippets with rank > 0.7
+    const highQualitySnippets = results
+      .filter(r => r.type === "snippet" && r.rank > 0.7)
+      .map(r => ({
+        snippet_id: r.id,
+        path: r.path,
+        rank: r.rank,
+        tags: r.tags
+      }));
+    
+    // Get full snippet details for top match
+    const topSnippetId = highQualitySnippets[0]?.snippet_id;
+    const topSnippet = topSnippetId 
+      ? board.getSnippets({}).find(s => s.snippet_id === topSnippetId)
+      : null;
+    
+    return {
+      total_results: results.length,
+      high_quality_snippets: highQualitySnippets.length,
+      top_match: topSnippet ? {
+        id: topSnippet.snippet_id,
+        path: topSnippet.path,
+        purpose: topSnippet.purpose,
+        lines: topSnippet.lines
+      } : null
+    };
+  ' \
+  --path /workspace
 ```
 
 ---
 
-These examples demonstrate real-world workflows with actual commands, showing how the board coordinates multi-agent workflows from simple to complex scenarios.
+## Example 5: Alert Management
+
+Handling blockers and escalations.
+
+### Raise Alert
+
+```bash
+node scripts/board.js raise-alert \
+  --task-id T-1 \
+  --agent implementer \
+  --severity blocker \
+  --title "Missing dependency: ioredis" \
+  --description "Redis caching requires ioredis package which is not installed.
+
+Current error:
+  Error: Cannot find module 'ioredis'
+
+Options:
+1. Install ioredis: npm install ioredis
+2. Use alternative caching (memory-based)
+3. Skip caching for now" \
+  --tags "dependency,blocker,redis" \
+  --path /workspace
+
+# Returns: {"result": {"alert_id": "A-1", "severity": "blocker", "status": "active"}}
+```
+
+### Check Active Alerts
+
+```bash
+# Coordinator checks for blockers
+node scripts/board.js exec \
+  --task-id T-1 \
+  --agent coordinator \
+  --code '
+    const alerts = board.getAlerts({ status: "active" });
+    const blockers = alerts.filter(a => a.severity === "blocker");
+    const warnings = alerts.filter(a => a.severity === "warning");
+    
+    return {
+      total_alerts: alerts.length,
+      blockers: blockers.map(a => ({
+        id: a.alert_id,
+        title: a.title,
+        created_by: a.created_by
+      })),
+      warnings: warnings.map(a => ({
+        id: a.alert_id,
+        title: a.title
+      }))
+    };
+  ' \
+  --path /workspace
+```
+
+### Resolve Alert
+
+```bash
+node scripts/board.js resolve-alert \
+  --task-id T-1 \
+  --agent coordinator \
+  --alert-id A-1 \
+  --resolution "Installed ioredis@5.3.2 via npm. Build now passes." \
+  --path /workspace
+```
+
+---
+
+## Example 6: Decision Workflow
+
+Proposing, reviewing, and approving decisions.
+
+### Propose Decision
+
+```bash
+node scripts/board.js propose-decision \
+  --task-id T-1 \
+  --agent planner \
+  --title "Use Redis for session storage" \
+  --description "Store user sessions in Redis with 24hr TTL instead of in-memory" \
+  --rationale "Scalable across multiple server instances, automatic expiry, battle-tested" \
+  --alternatives '[
+    {
+      "title": "PostgreSQL sessions table",
+      "pros": "Single data store, ACID guarantees",
+      "cons": "Slower, manual cleanup needed, higher DB load"
+    },
+    {
+      "title": "In-memory sessions",
+      "pros": "Fast, simple",
+      "cons": "Lost on restart, not scalable"
+    }
+  ]' \
+  --tags "architecture,sessions,redis" \
+  --path /workspace
+
+# Returns: {"result": {"decision_id": "D-1", "status": "proposed"}}
+```
+
+### Review and Approve
+
+```bash
+# Coordinator reviews
+node scripts/board.js exec \
+  --task-id T-1 \
+  --agent coordinator \
+  --code '
+    const decisions = board.getDecisions({ status: "proposed" });
+    
+    // Check if we have Redis facts
+    const facts = board.getFacts({ confidence: ["high"] });
+    const redisFacts = facts.filter(f => 
+      f.tags?.includes("redis") || f.content.toLowerCase().includes("redis")
+    );
+    
+    return {
+      pending_decisions: decisions.length,
+      decisions: decisions.map(d => ({
+        id: d.decision_id,
+        title: d.title,
+        proposed_by: d.created_by
+      })),
+      redis_context_available: redisFacts.length > 0,
+      redis_facts: redisFacts.map(f => f.fact_id)
+    };
+  ' \
+  --path /workspace
+
+# Approve decision
+node scripts/board.js approve-decision \
+  --task-id T-1 \
+  --agent coordinator \
+  --decision-id D-1 \
+  --notes "Approved. Redis client already configured per F-2. Aligns with scalability requirements." \
+  --path /workspace
+```
+
+---
+
+## Summary
+
+These examples show the board as a **generic shared blackboard**:
+
+- **Any agent** can add facts, snippets, decisions, alerts, trails
+- **No prescribed workflow** — agents coordinate however makes sense for your task
+- **Search across everything** — FTS5 full-text search with ranking
+- **Exec mode** — JavaScript API for complex queries and logic
+- **Role-agnostic** — use your own agent names (researcher, planner, implementer, etc.)
+
+The board provides **shared memory and coordination primitives**. Your agents define the workflow.

@@ -30,12 +30,7 @@ export type SnippetId = `X-${number}`;
 // ENUMS
 // ============================================================
 
-export type AgentRole =
-  | "orchestrator"
-  | "scout"
-  | "creative"
-  | "verifier"
-  | "executor";
+export type AgentRole = string;
 
 export type Confidence = "high" | "medium" | "low";
 
