@@ -2,6 +2,8 @@ export interface ParsedBacklogMarkdown {
   title: string;
   metadata: Record<string, string>;
   tags: string[];
+  depends_on: string[];
+  related: string[];
 }
 
 /**
@@ -19,6 +21,8 @@ export function parseBacklogMarkdown(markdown: string): ParsedBacklogMarkdown {
 
   const metadata: Record<string, string> = {};
   const tags: string[] = [];
+  const depends_on: string[] = [];
+  const related: string[] = [];
 
   for (const line of lines) {
     const m = line.match(/^\*\*(.+?):\*\*\s*(.*)$/);
@@ -26,16 +30,22 @@ export function parseBacklogMarkdown(markdown: string): ParsedBacklogMarkdown {
     const key = m[1].trim();
     const value = m[2].trim();
     metadata[key] = value;
+
+    const parsedList = value
+      .replace(/^\[/, "")
+      .replace(/\]$/, "")
+      .split(",")
+      .map((t) => t.trim())
+      .filter(Boolean);
+
     if (key.toLowerCase() === "tags") {
-      const list = value
-        .replace(/^\[/, "")
-        .replace(/\]$/, "")
-        .split(",")
-        .map((t) => t.trim())
-        .filter(Boolean);
-      tags.push(...list);
+      tags.push(...parsedList);
+    } else if (key.toLowerCase() === "depends-on" || key.toLowerCase() === "depends on") {
+      depends_on.push(...parsedList);
+    } else if (key.toLowerCase() === "related") {
+      related.push(...parsedList);
     }
   }
 
-  return { title, metadata, tags };
+  return { title, metadata, tags, depends_on, related };
 }

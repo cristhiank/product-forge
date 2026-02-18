@@ -15,6 +15,19 @@ export async function makeTempBacklogRootFromFixture(): Promise<{ root: string; 
   };
 }
 
+export async function makeTempMultiProjectFixture(): Promise<{ scanDir: string; cleanup: () => Promise<void> }> {
+  const src = path.resolve("test/fixtures/multi-project");
+  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "backlog-mcp-multi-"));
+  const dest = path.join(tmp, "workspace");
+  await copyDir(src, dest);
+  return {
+    scanDir: dest,
+    cleanup: async () => {
+      await fs.rm(tmp, { recursive: true, force: true });
+    },
+  };
+}
+
 async function copyDir(src: string, dest: string): Promise<void> {
   await fs.mkdir(dest, { recursive: true });
   const entries = await fs.readdir(src, { withFileTypes: true });

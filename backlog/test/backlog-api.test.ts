@@ -5,21 +5,21 @@ import { describe, expect, test } from "vitest";
 
 import { createBacklogAPI } from "../src/backlog-api.js";
 import { executeCode } from "../src/sandbox/index.js";
-import { FileSystemBacklogStore } from "../src/storage/fs-store.js";
+import { singleProjectStore } from "../src/storage/multi-root-store.js";
 import { makeTempBacklogRootFromFixture } from "./test-helpers.js";
 
 describe("backlog API", () => {
   test("list/get/search/stats", async () => {
     const { root, cleanup } = await makeTempBacklogRootFromFixture();
     try {
-      const store = new FileSystemBacklogStore({ root });
+      const store = singleProjectStore(root);
       const backlog = createBacklogAPI(store);
 
       const stats = await backlog.stats();
-      expect(stats.next).toBe(2);
-      expect(stats.working).toBe(1);
-      expect(stats.done).toBe(1);
-      expect(stats.archive).toBe(1);
+      expect(stats.default.next).toBe(2);
+      expect(stats.default.working).toBe(1);
+      expect(stats.default.done).toBe(1);
+      expect(stats.default.archive).toBe(1);
 
       const next = await backlog.list({ folder: "next" });
       expect(next.map((x) => x.id)).toContain("B-001");
@@ -39,7 +39,7 @@ describe("backlog API", () => {
   test("create allocates next id and writes to next/", async () => {
     const { root, cleanup } = await makeTempBacklogRootFromFixture();
     try {
-      const store = new FileSystemBacklogStore({ root });
+      const store = singleProjectStore(root);
       const backlog = createBacklogAPI(store);
 
       const created = await backlog.create({
@@ -65,7 +65,7 @@ describe("backlog API", () => {
   test("move/complete/archive", async () => {
     const { root, cleanup } = await makeTempBacklogRootFromFixture();
     try {
-      const store = new FileSystemBacklogStore({ root });
+      const store = singleProjectStore(root);
       const backlog = createBacklogAPI(store);
 
       const moved = await backlog.move({ id: "B-001", to: "working" });
@@ -91,7 +91,7 @@ describe("backlog API", () => {
   test("validate reports issues", async () => {
     const { root, cleanup } = await makeTempBacklogRootFromFixture();
     try {
-      const store = new FileSystemBacklogStore({ root });
+      const store = singleProjectStore(root);
       const backlog = createBacklogAPI(store);
 
       const ok = await backlog.validate({ id: "B-001" });
@@ -108,7 +108,7 @@ describe("backlog API", () => {
   test("updateBody creates history snapshots and increments version", async () => {
     const { root, cleanup } = await makeTempBacklogRootFromFixture();
     try {
-      const store = new FileSystemBacklogStore({ root });
+      const store = singleProjectStore(root);
       const backlog = createBacklogAPI(store);
 
       const first = await backlog.updateBody({
@@ -141,7 +141,7 @@ describe("backlog API", () => {
   test("sandbox executes code against injected backlog API", async () => {
     const { root, cleanup } = await makeTempBacklogRootFromFixture();
     try {
-      const store = new FileSystemBacklogStore({ root });
+      const store = singleProjectStore(root);
       const backlog = createBacklogAPI(store);
 
       const resp = await executeCode(backlog, {
@@ -150,7 +150,7 @@ describe("backlog API", () => {
       });
 
       expect(resp.success).toBe(true);
-      expect((resp.result as any).next).toBe(2);
+      expect((resp.result as any).default.next).toBe(2);
     } finally {
       await cleanup();
     }

@@ -12,7 +12,8 @@ import { z } from "zod";
 
 import { createBacklogAPI } from "../backlog-api.js";
 import { executeCode } from "../sandbox/index.js";
-import { FileSystemBacklogStore } from "../storage/fs-store.js";
+import { singleProjectStore, MultiRootBacklogStore } from "../storage/multi-root-store.js";
+import { discoverProjects, parseProjectConfig, parseRootsArg } from "../storage/project-discovery.js";
 
 const TOOL_BACKLOG: Tool = {
   name: "backlog",
@@ -43,12 +44,15 @@ const TOOLS: Tool[] = [TOOL_BACKLOG];
 
 const CliArgsSchema = z.object({
   root: z.string().optional(),
+  scanDir: z.string().optional(),
+  roots: z.string().optional(),
+  config: z.string().optional(),
   help: z.boolean().optional(),
 });
 
 function parseArgs(): z.infer<typeof CliArgsSchema> {
   const argv = process.argv.slice(2);
-  const parsed: { root?: string; help?: boolean } = {};
+  const parsed: { root?: string; scanDir?: string; roots?: string; config?: string; help?: boolean } = {};
 
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -67,22 +71,57 @@ function parseArgs(): z.infer<typeof CliArgsSchema> {
       parsed.root = a.substring("--root=".length);
       continue;
     }
+
+    if (a === "--scan-dir" && argv[i + 1]) {
+      parsed.scanDir = argv[i + 1];
+      i++;
+      continue;
+    }
+    if (a.startsWith("--scan-dir=")) {
+      parsed.scanDir = a.substring("--scan-dir=".length);
+      continue;
+    }
+
+    if (a === "--roots" && argv[i + 1]) {
+      parsed.roots = argv[i + 1];
+      i++;
+      continue;
+    }
+    if (a.startsWith("--roots=")) {
+      parsed.roots = a.substring("--roots=".length);
+      continue;
+    }
+
+    if (a === "--config" && argv[i + 1]) {
+      parsed.config = argv[i + 1];
+      i++;
+      continue;
+    }
+    if (a.startsWith("--config=")) {
+      parsed.config = a.substring("--config=".length);
+      continue;
+    }
   }
 
   return CliArgsSchema.parse(parsed);
 }
 
 function printHelp(): void {
-  // Intentionally small (keep parity with agents-board which is stdio-first)
   console.error(`backlog MCP server (stdio)
 
 Usage:
   node dist/cli.js serve --root <path>
+  node dist/cli.js serve --scan-dir <dir>
+  node dist/cli.js serve --roots name1=path1,name2=path2
+  node dist/cli.js serve --config <path-to-.backlog-projects.json>
   node dist/cli.js --help
 
 Options:
-  --root <path>   Backlog root directory (default: app/.backlog)
-  -h, --help      Show this help
+  --root <path>       Single backlog root directory (default: app/.backlog)
+  --scan-dir <dir>    Auto-discover projects with .backlog/ subdirectories
+  --roots <spec>      Explicit project roots (name=path,name=path)
+  --config <path>     Path to .backlog-projects.json config file
+  -h, --help          Show this help
 `);
 }
 
@@ -136,13 +175,12 @@ async function handleToolCall(
   }
 }
 
-export async function createServer(backlogRoot: string): Promise<Server> {
+export async function createServer(multiStore: MultiRootBacklogStore): Promise<Server> {
   if (TOOLS.length !== 1 || TOOLS[0]?.name !== "backlog") {
     throw new Error("Invariant: backlog MCP server must expose exactly one tool named 'backlog'");
   }
 
-  const store = new FileSystemBacklogStore({ root: backlogRoot });
-  const backlogApi = createBacklogAPI(store);
+  const backlogApi = createBacklogAPI(multiStore);
 
   const server = new Server(
     { name: "agent-collab-backlog", version: "0.1.0" },
@@ -169,12 +207,33 @@ export async function main(): Promise<void> {
     printHelp();
     return;
   }
-  const backlogRoot = cliArgs.root || process.env.BACKLOG_ROOT || "app/.backlog";
 
-  console.error(`[agent-collab-backlog] Backlog root: ${backlogRoot}`);
+  let multiStore: MultiRootBacklogStore;
+
+  if (cliArgs.scanDir) {
+    const projects = await discoverProjects(cliArgs.scanDir);
+    if (projects.length === 0) {
+      throw new Error(`No projects with .backlog/ directories found under: ${cliArgs.scanDir}`);
+    }
+    console.error(`[agent-collab-backlog] Discovered ${projects.length} project(s): ${projects.map((p) => p.name).join(", ")}`);
+    multiStore = new MultiRootBacklogStore(projects);
+  } else if (cliArgs.roots) {
+    const projects = parseRootsArg(cliArgs.roots);
+    console.error(`[agent-collab-backlog] Configured ${projects.length} project(s): ${projects.map((p) => p.name).join(", ")}`);
+    multiStore = new MultiRootBacklogStore(projects);
+  } else if (cliArgs.config) {
+    const projects = await parseProjectConfig(cliArgs.config);
+    console.error(`[agent-collab-backlog] Loaded ${projects.length} project(s) from config: ${projects.map((p) => p.name).join(", ")}`);
+    multiStore = new MultiRootBacklogStore(projects);
+  } else {
+    const backlogRoot = cliArgs.root || process.env.BACKLOG_ROOT || "app/.backlog";
+    console.error(`[agent-collab-backlog] Single-project mode, root: ${backlogRoot}`);
+    multiStore = singleProjectStore(backlogRoot);
+  }
+
   console.error(`[agent-collab-backlog] Minimal Architecture: 1 tool (backlog)`);
 
-  const server = await createServer(backlogRoot);
+  const server = await createServer(multiStore);
   const transport = new StdioServerTransport();
   await server.connect(transport);
 }

@@ -1,13 +1,19 @@
 import type { BacklogItem } from "../types.js";
+import { parseQualifiedId, isValidLocalId } from "../id-utils.js";
 
-export function validateBacklogItem(item: BacklogItem): { ok: boolean; issues: string[] } {
+export function validateBacklogItem(
+  item: BacklogItem,
+  allItems?: BacklogItem[]
+): { ok: boolean; issues: string[]; warnings: string[] } {
   const issues: string[] = [];
+  const warnings: string[] = [];
 
-  if (!/^B-\d+(?:\.\d+)*$/i.test(item.id)) {
-    issues.push("id must match B-NNN(.N)* format");
+  const { localId } = parseQualifiedId(item.id);
+  if (!isValidLocalId(localId)) {
+    issues.push("id must match B-NNN(.N)* format (optionally prefixed with project/)");
   }
 
-  if (!item.body.includes(`# ${item.id}`) && !item.body.toLowerCase().includes(`# ${item.id.toLowerCase()}`)) {
+  if (!item.body.includes(`# ${localId}`) && !item.body.toLowerCase().includes(`# ${localId.toLowerCase()}`)) {
     issues.push("body should start with an H1 containing the item id");
   }
 
@@ -24,5 +30,21 @@ export function validateBacklogItem(item: BacklogItem): { ok: boolean; issues: s
     issues.push("missing '## Acceptance Criteria' section");
   }
 
-  return { ok: issues.length === 0, issues };
+  // Check dependencies if allItems provided
+  if (allItems && item.depends_on && item.depends_on.length > 0) {
+    const allIds = new Set(allItems.map(i => i.id));
+    const archivedIds = new Set(
+      allItems.filter(i => i.folder === "archive").map(i => i.id)
+    );
+    
+    for (const depId of item.depends_on) {
+      if (!allIds.has(depId)) {
+        warnings.push(`depends_on target not found: ${depId}`);
+      } else if (archivedIds.has(depId)) {
+        warnings.push(`depends_on target is archived: ${depId}`);
+      }
+    }
+  }
+
+  return { ok: issues.length === 0, issues, warnings };
 }

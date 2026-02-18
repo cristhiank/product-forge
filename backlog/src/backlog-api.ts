@@ -1,8 +1,9 @@
 import { createHistorySnapshot, listHistory } from "./history/history.js";
+import { toQualifiedId } from "./id-utils.js";
 import { parseBacklogMarkdown } from "./markdown/parser.js";
 import { formatBacklogItemTemplate } from "./markdown/templates.js";
 import { validateBacklogItem } from "./markdown/validate.js";
-import type { BacklogStore } from "./storage/backlog-store.js";
+import type { MultiRootBacklogStore } from "./storage/multi-root-store.js";
 import type { BacklogHistoryEntry, BacklogItem, BacklogItemSummary, Folder } from "./types.js";
 import { isFolder } from "./types.js";
 
@@ -18,35 +19,58 @@ function slugify(input: string): string {
 }
 
 function ensureSerializable(value: unknown): unknown {
-  // No-op for now; vm result must be JSON-serializable anyway.
   return value;
 }
 
-export function createBacklogAPI(store: BacklogStore) {
+export function createBacklogAPI(store: MultiRootBacklogStore) {
+  const singleProject = store.isSingleProject();
+  const defaultProject = store.getDefaultProject();
+
+  function qualifyId(project: string, localId: string): string {
+    return singleProject ? localId : toQualifiedId(project, localId);
+  }
+
+  function resolveProject(project?: string): string {
+    if (project) return project;
+    if (defaultProject) return defaultProject;
+    throw new Error(
+      `Project is required in multi-project mode. Available: ${store.getProjects().join(", ")}`
+    );
+  }
+
   const api = {
     help: () => {
+      const projects = store.getProjects();
       return {
         name: "backlog",
-        description: "Repo backlog maintenance API for app/.backlog (Kanban-lite)",
-        root: store.getRoot(),
+        description: singleProject
+          ? "Repo backlog maintenance API (Kanban-lite)"
+          : `Multi-project backlog API. Projects: ${projects.join(", ")}`,
+        projects,
+        singleProjectMode: singleProject,
         folders: ["next", "working", "done", "archive"],
         safety: {
           note: "User code runs in a restricted VM sandbox. Only the injected backlog API is available.",
-          root_sandbox: "All filesystem operations are rooted under the configured backlog root; path traversal is rejected.",
+          root_sandbox: "All filesystem operations are rooted under configured backlog roots; path traversal is rejected.",
         },
         api: {
           help: "backlog.help()",
-          list: "backlog.list({ folder?, limit?, offset? })",
+          projects: "backlog.projects()",
+          list: "backlog.list({ project?, folder?, limit?, offset? })",
           get: "backlog.get({ id })",
-          search: "backlog.search({ text, folder?, limit? })",
-          stats: "backlog.stats()",
-          create: "backlog.create({ kind, title, description?, acceptance_criteria?, tags?, priority?, parent? })",
+          search: "backlog.search({ text, project?, folder?, limit? })",
+          stats: "backlog.stats({ project? })",
+          globalStats: "backlog.globalStats()",
+          globalSearch: "backlog.globalSearch({ text, folder?, limit? })",
+          hygiene: "backlog.hygiene({ project?, staleAfterDays?, doneAfterDays? })",
+          create: "backlog.create({ kind, title, project?, description?, acceptance_criteria?, tags?, priority?, parent?, depends_on?, related? })",
           move: "backlog.move({ id, to })",
           complete: "backlog.complete({ id, completedDate? })",
           archive: "backlog.archive({ id })",
           validate: "backlog.validate({ id })",
           updateBody: "backlog.updateBody({ id, body, message? })",
           getHistory: "backlog.getHistory({ id, limit? })",
+          xref: "backlog.xref({ id })",
         },
         best_practices: {
           ordered_refined: "Keep the backlog ordered and continuously refined (Scrum.org)",
@@ -58,33 +82,49 @@ export function createBacklogAPI(store: BacklogStore) {
             title: "List next items",
             code: "return backlog.list({ folder: 'next', limit: 20 })",
           },
-          {
-            title: "Search for duplicates",
-            code: "return backlog.search({ text: 'mcp', folder: 'next', limit: 50 })",
-          },
-          {
-            title: "Update body with history",
-            code: "return backlog.updateBody({ id: 'B-046.1', body: '# B-046.1: ...\\n', message: 'Refine acceptance criteria' })",
-          },
+          ...(singleProject
+            ? []
+            : [
+                {
+                  title: "List items for a specific project",
+                  code: "return backlog.list({ project: 'frontend', folder: 'next' })",
+                },
+                {
+                  title: "Global stats across all projects",
+                  code: "return backlog.globalStats()",
+                },
+                {
+                  title: "Find cross-references",
+                  code: "return backlog.xref({ id: 'frontend/B-001' })",
+                },
+              ]),
         ],
       };
     },
 
-    list: async (opts?: { folder?: Folder; limit?: number; offset?: number }): Promise<BacklogItemSummary[]> => {
+    projects: () => {
+      return store.getProjects();
+    },
+
+    list: async (opts?: { project?: string; folder?: Folder; limit?: number; offset?: number }): Promise<BacklogItemSummary[]> => {
       const folder = opts?.folder;
       if (folder && !isFolder(folder)) throw new Error(`Invalid folder: ${String(folder)}`);
-      const items = await store.list(folder);
+
+      const items = await store.list(opts?.project, folder);
       const mapped = items.map((i) => {
         const parsed = parseBacklogMarkdown(i.body);
         return {
-          id: i.id,
+          id: qualifyId(i.project, i.id),
           title: parsed.title,
           folder: i.folder,
           path: i.path,
+          project: i.project,
           kind: parsed.metadata.Type,
           priority: parsed.metadata.Priority,
           status: parsed.metadata.Status,
           tags: parsed.tags,
+          depends_on: parsed.depends_on.length ? parsed.depends_on : undefined,
+          related: parsed.related.length ? parsed.related : undefined,
         } satisfies BacklogItemSummary;
       });
 
@@ -94,56 +134,127 @@ export function createBacklogAPI(store: BacklogStore) {
     },
 
     get: async (req: { id: string }): Promise<BacklogItem> => {
+      const resolved = store.resolveId(req.id);
       const item = await store.getById(req.id);
       const parsed = parseBacklogMarkdown(item.body);
       return {
-        id: item.id,
+        id: qualifyId(resolved.project, resolved.localId),
         title: parsed.title,
         folder: item.folder,
         path: item.path,
+        project: resolved.project,
         body: item.body,
         metadata: parsed.metadata,
         kind: parsed.metadata.Type,
         priority: parsed.metadata.Priority,
         status: parsed.metadata.Status,
         tags: parsed.tags,
+        depends_on: parsed.depends_on.length ? parsed.depends_on : undefined,
+        related: parsed.related.length ? parsed.related : undefined,
       };
     },
 
-    search: async (req: { text: string; folder?: Folder; limit?: number }): Promise<BacklogItemSummary[]> => {
+    search: async (req: { text: string; project?: string; folder?: Folder; limit?: number }): Promise<BacklogItemSummary[]> => {
       const folder = req.folder;
       if (folder && !isFolder(folder)) throw new Error(`Invalid folder: ${String(folder)}`);
-      const items = await store.search(req.text, folder);
+
+      const items = await store.search(req.text, req.project, folder);
       const mapped = items.map((i) => {
         const parsed = parseBacklogMarkdown(i.body);
         return {
-          id: i.id,
+          id: qualifyId(i.project, i.id),
           title: parsed.title,
           folder: i.folder,
           path: i.path,
+          project: i.project,
           kind: parsed.metadata.Type,
           priority: parsed.metadata.Priority,
           status: parsed.metadata.Status,
           tags: parsed.tags,
+          depends_on: parsed.depends_on.length ? parsed.depends_on : undefined,
+          related: parsed.related.length ? parsed.related : undefined,
         };
       });
       return mapped.slice(0, req.limit ?? mapped.length);
     },
 
-    stats: async () => {
+    globalSearch: async (req: { text: string; folder?: Folder; limit?: number }): Promise<BacklogItemSummary[]> => {
+      return api.search({ ...req, project: undefined });
+    },
+
+    stats: async (opts?: { project?: string }) => {
+      const baseCounts = await store.stats(opts?.project);
+      const allItems = await store.list(opts?.project);
+      
+      const now = new Date();
+      const ageByFolder: Record<string, { oldest_days: number; avg_days: number; items_over_30d: number }> = {};
+      
+      // Group items by folder
+      const itemsByFolder: Record<Folder, Array<{ age_days: number }>> = {
+        next: [],
+        working: [],
+        done: [],
+        archive: [],
+      };
+      
+      for (const item of allItems) {
+        const parsed = parseBacklogMarkdown(item.body);
+        const updatedDate = parsed.metadata.Updated;
+        const createdDate = parsed.metadata.Created;
+        const referenceDate = updatedDate || createdDate;
+        
+        if (referenceDate) {
+          const itemDate = new Date(referenceDate);
+          const ageDays = Math.max(0, Math.floor((now.getTime() - itemDate.getTime()) / (1000 * 60 * 60 * 24)));
+          itemsByFolder[item.folder].push({ age_days: ageDays });
+        }
+      }
+      
+      // Compute age stats per folder
+      for (const folder of ["next", "working", "done", "archive"] as Folder[]) {
+        const items = itemsByFolder[folder];
+        if (items.length === 0) {
+          ageByFolder[folder] = { oldest_days: 0, avg_days: 0, items_over_30d: 0 };
+        } else {
+          const ages = items.map(i => i.age_days);
+          const oldest = Math.max(...ages);
+          const avg = Math.floor(ages.reduce((a, b) => a + b, 0) / ages.length);
+          const over30 = ages.filter(a => a > 30).length;
+          ageByFolder[folder] = { oldest_days: oldest, avg_days: avg, items_over_30d: over30 };
+        }
+      }
+      
+      // Merge age into the base counts structure
+      const result: any = {};
+      for (const [projectName, counts] of Object.entries(baseCounts)) {
+        result[projectName] = {
+          ...counts,
+          age: ageByFolder,
+        };
+      }
+      
+      return result;
+    },
+
+    globalStats: async () => {
       return store.stats();
     },
 
     create: async (req: {
       kind: "task" | "epic";
       title: string;
+      project?: string;
       description?: string;
       acceptance_criteria?: string[];
       tags?: string[];
       priority?: "low" | "medium" | "high";
       parent?: string;
-    }): Promise<{ id: string; path: string }> => {
-      const newId = await allocateId(store, req.parent);
+      depends_on?: string[];
+      related?: string[];
+    }): Promise<{ id: string; path: string; project: string }> => {
+      const project = resolveProject(req.project);
+      const projectStore = store.getStore(project);
+      const newId = await allocateId(projectStore, req.parent);
       const filename = `${newId}_${slugify(req.title) || "item"}.md`;
       const body = formatBacklogItemTemplate({
         id: newId,
@@ -154,59 +265,155 @@ export function createBacklogAPI(store: BacklogStore) {
         tags: req.tags,
         priority: req.priority,
         parent: req.parent,
+        depends_on: req.depends_on,
+        related: req.related,
       });
-      const created = await store.createFile("next", filename, body);
-      return ensureSerializable({ id: newId, path: created.path }) as { id: string; path: string };
+      const created = await store.createFile(project, "next", filename, body);
+      return ensureSerializable({
+        id: qualifyId(project, newId),
+        path: created.path,
+        project,
+      }) as { id: string; path: string; project: string };
     },
 
     move: async (req: { id: string; to: Folder }) => {
       if (!isFolder(req.to)) throw new Error(`Invalid folder: ${String(req.to)}`);
-      return store.move(req.id, req.to);
+      const moved = await store.move(req.id, req.to);
+      const item = await store.getById(req.id);
+      const updated = stampUpdated(item.body);
+      await store.writeBody(req.id, updated);
+      return moved;
     },
 
     complete: async (req: { id: string; completedDate?: string }) => {
       const moved = await store.move(req.id, "done");
       const item = await store.getById(req.id);
-      const updated = stampCompleted(item.body, req.completedDate);
+      let updated = stampCompleted(item.body, req.completedDate);
+      updated = stampUpdated(updated);
       await store.writeBody(req.id, updated);
-      return { path: moved.path };
+      return { path: moved.path, project: moved.project };
     },
 
     archive: async (req: { id: string }) => {
       const moved = await store.move(req.id, "archive");
-      return { path: moved.path };
+      const item = await store.getById(req.id);
+      let updated = stampArchived(item.body);
+      updated = stampUpdated(updated);
+      await store.writeBody(req.id, updated);
+      return { path: moved.path, project: moved.project };
     },
 
     validate: async (req: { id: string }) => {
       const item = await api.get({ id: req.id });
-      return validateBacklogItem(item);
+      const resolved = store.resolveId(req.id);
+      const allItems = await api.list({ project: resolved.project });
+      const allItemsFull = await Promise.all(
+        allItems.map(summary => api.get({ id: summary.id }))
+      );
+      return validateBacklogItem(item, allItemsFull);
     },
 
     updateBody: async (req: { id: string; body: string; message?: string }) => {
-      // Ensure item exists & load current
+      const resolved = store.resolveId(req.id);
       const current = await store.getById(req.id);
-      // snapshot current -> history
       const historyEntry = await createHistorySnapshot({
-        root: store.getRoot(),
-        id: req.id,
+        root: store.getRoot(resolved.project),
+        id: resolved.localId,
         currentBody: current.body,
         message: req.message,
       });
 
-      await store.writeBody(req.id, req.body);
-      return { id: req.id, version: historyEntry.version, path: current.path };
+      const updated = stampUpdated(req.body);
+      await store.writeBody(req.id, updated);
+      return { id: qualifyId(resolved.project, resolved.localId), version: historyEntry.version, path: current.path };
     },
 
     getHistory: async (req: { id: string; limit?: number }): Promise<BacklogHistoryEntry[]> => {
-      const entries = await listHistory({ root: store.getRoot(), id: req.id });
+      const resolved = store.resolveId(req.id);
+      const entries = await listHistory({ root: store.getRoot(resolved.project), id: resolved.localId });
       return entries.slice(0, req.limit ?? entries.length);
+    },
+
+    xref: async (req: { id: string }): Promise<BacklogItemSummary[]> => {
+      const refs = await store.findReferences(req.id);
+      return refs.map((i) => {
+        const parsed = parseBacklogMarkdown(i.body);
+        return {
+          id: qualifyId(i.project, i.id),
+          title: parsed.title,
+          folder: i.folder,
+          path: i.path,
+          project: i.project,
+          kind: parsed.metadata.Type,
+          priority: parsed.metadata.Priority,
+          status: parsed.metadata.Status,
+          tags: parsed.tags,
+          depends_on: parsed.depends_on.length ? parsed.depends_on : undefined,
+          related: parsed.related.length ? parsed.related : undefined,
+        };
+      });
+    },
+
+    hygiene: async (opts?: { project?: string; staleAfterDays?: number; doneAfterDays?: number }) => {
+      const staleAfterDays = opts?.staleAfterDays ?? 30;
+      const workingStaleAfterDays = 14;
+      const doneAfterDays = opts?.doneAfterDays ?? 7;
+      const now = new Date();
+
+      const allItems = await store.list(opts?.project);
+      
+      const stale_in_next: Array<{ id: string; title: string; folder: string; age_days: number; project: string }> = [];
+      const stuck_in_working: Array<{ id: string; title: string; folder: string; age_days: number; project: string }> = [];
+      const old_in_done: Array<{ id: string; title: string; folder: string; age_days: number; project: string }> = [];
+      
+      for (const item of allItems) {
+        const parsed = parseBacklogMarkdown(item.body);
+        const updatedDate = parsed.metadata.Updated;
+        const createdDate = parsed.metadata.Created;
+        const referenceDate = updatedDate || createdDate;
+        
+        if (!referenceDate) continue;
+        
+        const itemDate = new Date(referenceDate);
+        const ageDays = Math.max(0, Math.floor((now.getTime() - itemDate.getTime()) / (1000 * 60 * 60 * 24)));
+        
+        const itemInfo = {
+          id: qualifyId(item.project, item.id),
+          title: parsed.title,
+          folder: item.folder,
+          age_days: ageDays,
+          project: item.project,
+        };
+        
+        if (item.folder === "next" && ageDays > staleAfterDays) {
+          stale_in_next.push(itemInfo);
+        } else if (item.folder === "working" && ageDays > workingStaleAfterDays) {
+          stuck_in_working.push(itemInfo);
+        } else if (item.folder === "done" && ageDays > doneAfterDays) {
+          old_in_done.push(itemInfo);
+        }
+      }
+      
+      const total_items = allItems.length;
+      const issue_count = stale_in_next.length + stuck_in_working.length + old_in_done.length;
+      const health_score = 
+        issue_count === 0 ? "healthy" :
+        issue_count < total_items * 0.1 ? "needs_attention" : "unhealthy";
+      
+      return {
+        stale_in_next,
+        stuck_in_working,
+        old_in_done,
+        total_items,
+        health_score,
+      };
     },
   };
 
   return api;
 }
 
-async function allocateId(store: BacklogStore, parent?: string): Promise<string> {
+async function allocateId(store: { list(folder?: Folder): Promise<Array<{ id: string }>> }, parent?: string): Promise<string> {
   const all = await store.list();
   const ids = all.map((i) => i.id);
 
@@ -251,5 +458,53 @@ function stampCompleted(body: string, completedDate?: string): string {
   const createdIdx = out.findIndex((l) => /^\*\*Created:\*\*/.test(l));
   const insertAt = createdIdx >= 0 ? createdIdx + 1 : 2;
   out.splice(insertAt, 0, `**Completed:** ${date}  `);
+  return out.join("\n");
+}
+
+function stampUpdated(body: string, updatedDate?: string): string {
+  const date = updatedDate || new Date().toISOString().slice(0, 10);
+  const lines = body.split(/\r?\n/);
+  const out: string[] = [];
+  let inserted = false;
+
+  for (const line of lines) {
+    if (/^\*\*Updated:\*\*/.test(line)) {
+      out.push(`**Updated:** ${date}  `);
+      inserted = true;
+    } else {
+      out.push(line);
+    }
+  }
+
+  if (inserted) return out.join("\n");
+
+  // Insert after Created if present, else after title
+  const createdIdx = out.findIndex((l) => /^\*\*Created:\*\*/.test(l));
+  const insertAt = createdIdx >= 0 ? createdIdx + 1 : 2;
+  out.splice(insertAt, 0, `**Updated:** ${date}  `);
+  return out.join("\n");
+}
+
+function stampArchived(body: string, archivedDate?: string): string {
+  const date = archivedDate || new Date().toISOString().slice(0, 10);
+  const lines = body.split(/\r?\n/);
+  const out: string[] = [];
+  let inserted = false;
+
+  for (const line of lines) {
+    if (/^\*\*Archived:\*\*/.test(line)) {
+      out.push(`**Archived:** ${date}  `);
+      inserted = true;
+    } else {
+      out.push(line);
+    }
+  }
+
+  if (inserted) return out.join("\n");
+
+  // Insert after Created if present, else after title
+  const createdIdx = out.findIndex((l) => /^\*\*Created:\*\*/.test(l));
+  const insertAt = createdIdx >= 0 ? createdIdx + 1 : 2;
+  out.splice(insertAt, 0, `**Archived:** ${date}  `);
   return out.join("\n");
 }

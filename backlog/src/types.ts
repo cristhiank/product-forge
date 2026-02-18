@@ -5,10 +5,13 @@ export interface BacklogItemSummary {
   title: string;
   folder: Folder;
   path: string;
+  project?: string;
   kind?: string;
   priority?: string;
   status?: string;
   tags?: string[];
+  depends_on?: string[];
+  related?: string[];
 }
 
 export interface BacklogItem extends BacklogItemSummary {
