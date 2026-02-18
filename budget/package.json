@@ -1,10 +1,10 @@
 {
   "name": "@agent-collab/budget",
-  "version": "0.1.0",
-  "description": "Budget MCP server - Family finance engine with cascade updates for finance/ CSV store",
+  "version": "0.2.0",
+  "description": "Budget engine - Family finance CLI with cascade updates for finance/ CSV store",
   "type": "module",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "main": "dist/skill-cli.js",
+  "types": "dist/skill-cli.d.ts",
   "bin": {
     "agent-collab-budget": "./dist/cli.js"
   },
@@ -13,14 +13,16 @@
     "dev": "tsc --watch",
     "test": "vitest run",
     "test:watch": "vitest",
-    "clean": "rm -rf dist"
+    "clean": "rm -rf dist",
+    "bundle": "npm run build && node -e \"const{build}=await import('esbuild');await build({entryPoints:['dist/skill-cli.js'],bundle:true,platform:'node',format:'esm',outfile:'scripts/budget.js',minify:false})\"",
+    "publish:skill": "bash publish-skill.sh"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.0.0",
     "zod": "^3.24.1"
   },
   "devDependencies": {
     "@types/node": "^22.10.5",
+    "esbuild": "^0.24.0",
     "typescript": "^5.7.2",
     "vitest": "^2.1.8"
   },
@@ -29,6 +31,7 @@
   },
   "files": [
     "dist",
+    "scripts",
     "README.md"
   ],
   "license": "MIT"

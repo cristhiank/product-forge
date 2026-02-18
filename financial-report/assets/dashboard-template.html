@@ -1,0 +1,656 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Lopez Financial Intelligence Dashboard</title>
+  <style>
+    :root {
+      --bg-1: #070b19; --bg-2: #101a32;
+      --card: rgba(17, 25, 48, 0.72); --card-strong: rgba(15, 23, 42, 0.92);
+      --line: rgba(148, 163, 184, 0.22);
+      --txt: #e6edf8; --muted: #9fb0cb;
+      --accent: #7dd3fc; --accent-2: #38bdf8;
+      --good: #22c55e; --warn: #f59e0b; --bad: #ef4444;
+      --pink: #f472b6; --violet: #a78bfa; --amber: #fbbf24;
+      --radius: 16px; --shadow: 0 10px 30px rgba(0,0,0,.35);
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; }
+    body {
+      font-family: Inter, Segoe UI, Roboto, Arial, sans-serif; color: var(--txt);
+      background: radial-gradient(1200px 1200px at 10% -10%, #1f2e5f 0%, transparent 60%),
+                  radial-gradient(1200px 1200px at 95% 0%, #123b59 0%, transparent 60%),
+                  linear-gradient(160deg, var(--bg-1), var(--bg-2));
+      min-height: 100vh; line-height: 1.45;
+    }
+    .container { max-width: 1320px; margin: 0 auto; padding: 26px; }
+    .hero {
+      background: linear-gradient(135deg, rgba(56,189,248,.2), rgba(167,139,250,.16));
+      border: 1px solid var(--line); border-radius: 22px; box-shadow: var(--shadow);
+      padding: 24px; position: relative; overflow: hidden; backdrop-filter: blur(8px);
+    }
+    .hero::after {
+      content: ''; position: absolute; inset: auto -100px -120px auto;
+      width: 280px; height: 280px; border-radius: 50%;
+      background: radial-gradient(circle, rgba(125,211,252,.25), transparent 70%);
+      pointer-events: none;
+    }
+    .hero h1 { margin: 0 0 8px; font-size: clamp(26px, 4vw, 38px); letter-spacing: .2px; }
+    .hero p { margin: 0; color: var(--muted); }
+    .tags { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
+    .tag {
+      background: rgba(15, 23, 42, 0.65); border: 1px solid var(--line);
+      color: #d6e3fb; font-size: 12px; border-radius: 999px; padding: 6px 10px; letter-spacing: .3px;
+    }
+    .report-nav {
+      display: flex; gap: 6px; margin: 16px 0; padding: 6px;
+      background: rgba(15,23,42,.6); border-radius: 14px; border: 1px solid var(--line);
+    }
+    .report-nav a {
+      color: var(--muted); text-decoration: none; font-size: 13px; font-weight: 500;
+      padding: 8px 14px; border-radius: 10px; transition: all 0.2s;
+    }
+    .report-nav a:hover { color: var(--txt); background: rgba(56,189,248,.12); }
+    .report-nav a.active { color: var(--txt); background: rgba(56,189,248,.2); font-weight: 600; }
+    .grid { display: grid; gap: 14px; }
+    .kpi-grid { grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); margin-bottom: 20px; }
+    .card {
+      background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
+      box-shadow: var(--shadow); backdrop-filter: blur(6px); padding: 16px;
+    }
+    .kpi .label { color: var(--muted); font-size: 12px; letter-spacing: .45px; text-transform: uppercase; }
+    .kpi .value { margin-top: 6px; font-size: clamp(22px, 2.4vw, 30px); font-weight: 700; }
+    .kpi .sub { margin-top: 6px; color: #c7d3ea; font-size: 12px; }
+    .status-chip {
+      display: inline-block; padding: 3px 7px; margin-left: 8px; border-radius: 6px;
+      font-size: 11px; font-weight: 600; vertical-align: middle;
+    }
+    .status-chip.good { background: rgba(34,197,94,.18); color: #6ee7b7; }
+    .status-chip.warn { background: rgba(245,158,11,.18); color: #fcd34d; }
+    .status-chip.bad { background: rgba(239,68,68,.18); color: #fca5a5; }
+    .section { margin-top: 22px; }
+    .section h2 { margin: 0 0 6px; font-size: 22px; }
+    .section .lead { color: var(--muted); margin: 0 0 14px; font-size: 14px; }
+    .chart-wrap { position: relative; height: 280px; width: 100%; margin-top: 10px; }
+    canvas { max-width: 100%; height: 100% !important; }
+    table { width: 100%; border-collapse: collapse; background: var(--card-strong); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+    th, td { padding: 10px 12px; border-bottom: 1px solid var(--line); font-size: 13px; }
+    th { text-align: left; color: #9db1cf; font-weight: 600; letter-spacing: .2px; }
+    td.num { text-align: right; font-variant-numeric: tabular-nums; }
+    tr:last-child td { border-bottom: none; }
+    .progress-row { margin-bottom: 10px; }
+    .progress-head { display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 4px; }
+    .bar { background: rgba(148,163,184,.16); height: 10px; border-radius: 999px; overflow: hidden; }
+    .bar > span { display: block; height: 100%; border-radius: 999px; transition: width 0.5s; }
+    .callout {
+      border: 1px solid var(--line); border-left: 4px solid var(--accent);
+      border-radius: 12px; padding: 12px; background: rgba(15,23,42,.75); margin-top: 14px;
+    }
+    .callout.warn { border-left-color: var(--warn); }
+    .callout-title { font-weight: 600; margin-bottom: 6px; }
+    .callout-body { font-size: 13px; color: var(--muted); }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header class="hero">
+      <h1>Financial Intelligence Dashboard</h1>
+      <p>Comprehensive financial overview with actionable insights powered by Chart.js</p>
+      <div class="tags">
+        <span class="tag">As of <strong id="asOf"></strong></span>
+        <span class="tag">Latest Transaction: <strong id="latestTxnDate"></strong></span>
+        <span class="tag" id="auditTag"></span>
+      </div>
+    </header>
+
+    <nav class="report-nav">
+      <a href="comprehensive-dashboard.html" class="active">Full Dashboard</a>
+      <a href="weekly-pulse.html">Weekly Pulse</a>
+      <a href="debt-tracker.html">Debt Tracker</a>
+      <a href="goal-progress.html">Goal Progress</a>
+    </nav>
+
+    <section class="section">
+      <h2>Financial Vitals</h2>
+      <p class="lead">Key metrics snapshot showing financial health indicators</p>
+      <div class="grid kpi-grid" id="kpiGrid"></div>
+    </section>
+
+    <section class="section">
+      <h2>Income Review</h2>
+      <p class="lead">Gross and net income breakdown with salary vs other income analysis</p>
+      <div class="card">
+        <div class="grid kpi-grid" style="margin-bottom: 14px;">
+          <div class="kpi">
+            <div class="label">Gross Income (Monthly)</div>
+            <div class="value" id="incomeGross"></div>
+            <div class="sub">Before taxes and deductions</div>
+          </div>
+          <div class="kpi">
+            <div class="label">Net Income (Monthly)</div>
+            <div class="value" id="incomeNet"></div>
+            <div class="sub">Take-home pay</div>
+          </div>
+          <div class="kpi">
+            <div class="label">Tax Rate</div>
+            <div class="value" id="incomeTaxRate"></div>
+            <div class="sub">Effective tax burden</div>
+          </div>
+        </div>
+        <div id="incomeBreakdown"></div>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>Spending Trends</h2>
+      <p class="lead">Monthly expense trajectory over the past 3 months</p>
+      <div class="card">
+        <div class="chart-wrap">
+          <canvas id="monthlyExpensesChart" aria-label="Line chart showing monthly expense trends"></canvas>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>Weekly Cadence</h2>
+      <p class="lead">Last 8 weeks of spending patterns</p>
+      <div class="card">
+        <div class="chart-wrap">
+          <canvas id="weeklyExpensesChart" aria-label="Bar chart showing weekly spending"></canvas>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>Budget vs Actual by Bucket</h2>
+      <p class="lead">Monthly budget allocation compared to actual year-to-date spend (prorated)</p>
+      <div class="card">
+        <div class="chart-wrap">
+          <canvas id="budgetActualChart" aria-label="Grouped bar chart comparing budget vs actual by bucket"></canvas>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>Category Breakdown</h2>
+      <p class="lead">Top spending categories with percentage distribution</p>
+      <div class="card">
+        <div class="chart-wrap" style="height: 320px;">
+          <canvas id="categoryDoughnutChart" aria-label="Doughnut chart showing category spending distribution"></canvas>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>Debt Payoff Timeline</h2>
+      <p class="lead">Projected debt balances over time using avalanche method</p>
+      <div class="card">
+        <div class="grid kpi-grid" style="margin-bottom: 14px;">
+          <div class="kpi">
+            <div class="label">Total Debt</div>
+            <div class="value" id="debtBalance"></div>
+          </div>
+          <div class="kpi">
+            <div class="label">Weighted APR</div>
+            <div class="value" id="weightedApr"></div>
+          </div>
+          <div class="kpi">
+            <div class="label">Monthly Minimum</div>
+            <div class="value" id="debtMin"></div>
+          </div>
+          <div class="kpi">
+            <div class="label">Debt Service Ratio</div>
+            <div class="value" id="debtService"></div>
+          </div>
+        </div>
+        <div class="chart-wrap">
+          <canvas id="debtWaterfallChart" aria-label="Stacked area chart showing debt payoff projection"></canvas>
+        </div>
+        <table style="margin-top: 16px;">
+          <thead>
+            <tr>
+              <th>Debt</th><th>Balance</th><th>APR</th><th>Min Pay</th><th>Interest Cost</th><th>Payoff Date</th><th>Months</th>
+            </tr>
+          </thead>
+          <tbody id="debtTable"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>Goal Progress</h2>
+      <p class="lead">Savings goals with current progress and completion projections</p>
+      <div class="card" id="goalsContainer"></div>
+    </section>
+
+    <section class="section">
+      <h2>Month-over-Month Comparison</h2>
+      <p class="lead">Current month vs prior month spend analysis</p>
+      <div class="card" id="monthComparison"></div>
+    </section>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+  <script src="https://cdn.jsdelivr.net/npm/hammerjs@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2"></script>
+
+  <script>
+    const DATA = {"asOf": "2026-02-16", "latestTxnDate": "2026-02-16", "counts": {"all": 90, "expenses": 81, "incomes": 6, "transfers": 3}, "totals": {"expensesYtd": 26556.3, "incomeYtd": 15094.7, "transfersYtd": 52213.75}, "vitals": {"dti": 0.134, "savingsRate": 0.116, "emergencyMonths": 3.34, "housingRatio": 0.248, "netWorth": 89156.14, "debtBalance": 133542.97, "emergencyFund": 20000, "netIncomeMonthly": 9886.18, "grossIncomeMonthly": 16350.4, "transportMonthly": 1044.82}, "audit": {"ok": true, "summary": {"errors": 0, "warnings": 0, "infos": 17}, "infoCount": 17}, "budget": {"monthlyByBucket": {"needs": 5991, "wants": 831.5, "savings": 1148.68, "debt": 2914.82}, "annualByBucket": {"needs": 71892, "wants": 9978, "savings": 13784.16, "debt": 34977.84}, "actualYtdByBucket": {"needs": 20708.94, "wants": 5847.36, "savings": 0, "debt": 0, "uncategorized": 0}, "recurringByBucket": {"needs": 5103, "wants": 177.51, "savings": 555.56, "debt": 914.82}}, "monthlyExpenses": [{"month": "2025-12", "total": 4.02}, {"month": "2026-01", "total": 10019.88}, {"month": "2026-02", "total": 16532.4}], "weeklyExpenses": [{"week_start": "2025-12-29", "week_end": "2026-01-04", "total": 3622.88, "txns": 6, "avg": 603.81}, {"week_start": "2026-01-05", "week_end": "2026-01-11", "total": 300.07, "txns": 2, "avg": 150.03}, {"week_start": "2026-01-12", "week_end": "2026-01-18", "total": 975.38, "txns": 7, "avg": 139.34}, {"week_start": "2026-01-19", "week_end": "2026-01-25", "total": 925.2, "txns": 4, "avg": 231.3}, {"week_start": "2026-01-26", "week_end": "2026-02-01", "total": 4377.9, "txns": 20, "avg": 218.89}, {"week_start": "2026-02-02", "week_end": "2026-02-08", "total": 8511.11, "txns": 16, "avg": 531.94}, {"week_start": "2026-02-09", "week_end": "2026-02-15", "total": 7652.62, "txns": 21, "avg": 364.41}, {"week_start": "2026-02-16", "week_end": "2026-02-22", "total": 191.14, "txns": 5, "avg": 38.23}], "topCategories": [{"category_id": "CAT-001", "total": 7114, "category": "Housing", "subcategory": "Rent"}, {"category_id": "CAT-020", "total": 7096.7, "category": "Transportation", "subcategory": "Uber & Rental"}, {"category_id": "CAT-008", "total": 2868.61, "category": "Food", "subcategory": "Takeout/Dining"}, {"category_id": "CAT-009", "total": 2804.51, "category": "Entertainment", "subcategory": "General"}, {"category_id": "CAT-006", "total": 1564.36, "category": "Food", "subcategory": "Groceries"}, {"category_id": "CAT-007", "total": 1483.45, "category": "Miscellaneous", "subcategory": "Buffer"}, {"category_id": "CAT-017", "total": 1058.7, "category": "Children", "subcategory": "Baby Supplies"}, {"category_id": "CAT-025", "total": 780, "category": "Transportation", "subcategory": "Car Insurance"}], "topMerchants": [{"merchant": "Eaves at Redmond", "total": 7114}, {"merchant": "Harris Ford Lincoln", "total": 5150}, {"merchant": "DoorDash", "total": 2413.16}, {"merchant": "Amazon", "total": 2162.43}], "debt": {"weightedApr": 9.93, "monthlyMinTotal": 2191.82, "debtServiceRatio": 0.1341, "summaries": [{"debt_id": "DEBT-001", "description": "Credit Card", "type": "credit_card", "balance": 9650, "apr": 11.75, "min_payment": 250, "payoff_month": "2028-07", "payoff_months": 30, "projected_interest": 1081.78, "first_payment": 1750, "last_payment": 105.99}, {"debt_id": "DEBT-002", "description": "Colombia Home Loan", "type": "mortgage", "balance": 78378, "apr": 11.12, "min_payment": 1027, "payoff_month": "2027-04", "payoff_months": 15, "projected_interest": 5085.07, "first_payment": 9049, "last_payment": 0.07}, {"debt_id": "DEBT-003", "description": "Car Loan - 2025 Ford Explorer", "type": "auto_loan", "balance": 45514.97, "apr": 7.49, "min_payment": 914.82, "payoff_month": "2031-01", "payoff_months": 60, "projected_interest": 9156, "first_payment": 914.82, "last_payment": 696.59}]}, "goals": [{"goal_id": "GOAL-001", "description": "House Down Payment", "target": 50000, "current": 0, "monthly": 907.94, "progress_pct": 0, "months_to_goal": 56, "status": "active"}, {"goal_id": "GOAL-002", "description": "Pay Off Credit Card", "target": 4500, "current": 0, "monthly": 1000, "progress_pct": 0, "months_to_goal": 5, "status": "active"}, {"goal_id": "GOAL-003", "description": "Emergency Fund (6 months)", "target": 33366, "current": 20000, "monthly": 0, "progress_pct": 59.9, "months_to_goal": null, "status": "on-hold"}], "monthComparison": {"currentMonth": "2026-02", "currentActual": 16532.4, "priorMonth": "2026-01", "priorActual": 10019.88, "deltaVsPrior": 6512.52, "monthProgress": 0.5714, "plannedNeedsWants": 6822.5, "plannedMtd": 3898.57, "varianceMtd": 12633.83}};
+
+    const money = (v) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 2 }).format(v || 0);
+    const pct = (v, d = 1) => `${(v * 100).toFixed(d)}%`;
+    const COLORS = ['#38bdf8','#a78bfa','#34d399','#f59e0b','#f472b6','#22d3ee','#f97316','#60a5fa','#10b981','#eab308'];
+
+    function status(metric, value) {
+      if (metric === 'dti') return value <= 0.36 ? ['good','Healthy'] : ['bad','Critical'];
+      if (metric === 'savings') return value >= 0.2 ? ['good','Healthy'] : value >= 0.12 ? ['warn','Caution'] : ['bad','Critical'];
+      if (metric === 'emergency') return value >= 6 ? ['good','Healthy'] : value >= 3 ? ['warn','Caution'] : ['bad','Critical'];
+      if (metric === 'housing') return value <= 0.28 ? ['good','Healthy'] : ['bad','Critical'];
+      if (metric === 'transport') return value <= 0.10 ? ['good','Healthy'] : ['bad','Critical'];
+      return ['warn','Info'];
+    }
+
+    // Chart.js global dark theme
+    Chart.defaults.color = '#9fb0cb';
+    Chart.defaults.borderColor = 'rgba(148,163,184,0.22)';
+    Chart.defaults.font.family = 'Inter, Segoe UI, Roboto, Arial, sans-serif';
+    Chart.defaults.plugins.tooltip.backgroundColor = 'rgba(15,23,42,0.95)';
+    Chart.defaults.plugins.tooltip.titleColor = '#e6edf8';
+    Chart.defaults.plugins.tooltip.bodyColor = '#c7d3ea';
+    Chart.defaults.plugins.tooltip.borderColor = 'rgba(148,163,184,0.3)';
+    Chart.defaults.plugins.tooltip.borderWidth = 1;
+    Chart.defaults.plugins.tooltip.cornerRadius = 12;
+    Chart.defaults.plugins.tooltip.padding = 10;
+    Chart.defaults.plugins.legend.labels.usePointStyle = true;
+    Chart.defaults.plugins.legend.labels.pointStyleWidth = 10;
+    Chart.defaults.elements.line.tension = 0.4;
+    Chart.defaults.elements.bar.borderRadius = 8;
+    Chart.defaults.responsive = true;
+    Chart.defaults.maintainAspectRatio = false;
+
+    function renderKpis() {
+      document.getElementById('asOf').textContent = DATA.asOf;
+      document.getElementById('latestTxnDate').textContent = DATA.latestTxnDate;
+      document.getElementById('auditTag').textContent = `Audit: ${DATA.audit.summary.errors} errors / ${DATA.audit.summary.warnings} warnings / ${DATA.audit.summary.infos} infos`;
+
+      const transportRatio = DATA.vitals.transportMonthly / DATA.vitals.grossIncomeMonthly;
+      const kpis = [
+        ['Net Worth', money(DATA.vitals.netWorth), 'Assets minus debts'],
+        ['Debt Balance', money(DATA.vitals.debtBalance), '3 active debts'],
+        ['Emergency Fund', `${money(DATA.vitals.emergencyFund)}`, `${DATA.vitals.emergencyMonths.toFixed(1)} months`, ...status('emergency', DATA.vitals.emergencyMonths)],
+        ['DTI Ratio', pct(DATA.vitals.dti), 'Target ≤ 36%', ...status('dti', DATA.vitals.dti)],
+        ['Savings Rate', pct(DATA.vitals.savingsRate), 'Target ≥ 20%', ...status('savings', DATA.vitals.savingsRate)],
+        ['Housing Ratio', pct(DATA.vitals.housingRatio), 'Target ≤ 28%', ...status('housing', DATA.vitals.housingRatio)],
+        ['Transport Ratio', pct(transportRatio), 'Target ≤ 10%', ...status('transport', transportRatio)],
+        ['Expense YTD', money(DATA.totals.expensesYtd), `${DATA.counts.expenses} transactions`]
+      ];
+
+      document.getElementById('kpiGrid').innerHTML = kpis.map(k => {
+        const [label, value, sub, cls, txt] = k;
+        return `<article class="card kpi">
+          <div class="label">${label}</div>
+          <div class="value">${value}${txt ? ` <span class="status-chip ${cls}">${txt}</span>` : ''}</div>
+          <div class="sub">${sub}</div>
+        </article>`;
+      }).join('');
+    }
+
+    function renderMonthlyExpensesChart() {
+      const ctx = document.getElementById('monthlyExpensesChart').getContext('2d');
+      const labels = DATA.monthlyExpenses.map(m => m.month);
+      const values = DATA.monthlyExpenses.map(m => m.total);
+      
+      new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels,
+          datasets: [{
+            label: 'Monthly Expenses',
+            data: values,
+            borderColor: '#38bdf8',
+            backgroundColor: 'rgba(56,189,248,0.15)',
+            fill: true,
+            pointBackgroundColor: '#38bdf8',
+            pointRadius: 5,
+            pointHoverRadius: 8,
+            pointBorderColor: '#fff',
+            pointBorderWidth: 2
+          }]
+        },
+        options: {
+          plugins: {
+            legend: { display: false },
+            tooltip: { callbacks: { label: (ctx) => `Spent: ${money(ctx.raw)}` } },
+            zoom: {
+              zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: 'x' },
+              pan: { enabled: true, mode: 'x' }
+            }
+          },
+          scales: {
+            y: { beginAtZero: true, ticks: { callback: (v) => money(v) } }
+          }
+        }
+      });
+    }
+
+    function renderWeeklyExpensesChart() {
+      const ctx = document.getElementById('weeklyExpensesChart').getContext('2d');
+      const labels = DATA.weeklyExpenses.map(w => w.week_start);
+      const values = DATA.weeklyExpenses.map(w => w.total);
+      
+      new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels,
+          datasets: [{
+            label: 'Weekly Spending',
+            data: values,
+            backgroundColor: values.map((_, i) => COLORS[i % COLORS.length] + 'CC'),
+            borderColor: values.map((_, i) => COLORS[i % COLORS.length]),
+            borderWidth: 1
+          }]
+        },
+        options: {
+          plugins: {
+            legend: { display: false },
+            tooltip: { callbacks: { label: (ctx) => `Spent: ${money(ctx.raw)}` } }
+          },
+          scales: {
+            y: { beginAtZero: true, ticks: { callback: (v) => money(v) } }
+          }
+        }
+      });
+    }
+
+    function renderBudgetActualChart() {
+      const ctx = document.getElementById('budgetActualChart').getContext('2d');
+      const labels = ['Needs', 'Wants', 'Savings', 'Debt'];
+      const budgetData = [
+        DATA.budget.monthlyByBucket.needs,
+        DATA.budget.monthlyByBucket.wants,
+        DATA.budget.monthlyByBucket.savings,
+        DATA.budget.monthlyByBucket.debt
+      ];
+      const actualData = [
+        DATA.budget.actualYtdByBucket.needs / 1.5,
+        DATA.budget.actualYtdByBucket.wants / 1.5,
+        DATA.budget.actualYtdByBucket.savings / 1.5,
+        DATA.budget.actualYtdByBucket.debt / 1.5
+      ];
+      
+      new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels,
+          datasets: [
+            {
+              label: 'Budget',
+              data: budgetData,
+              backgroundColor: '#38bdf8AA',
+              borderColor: '#38bdf8',
+              borderWidth: 1
+            },
+            {
+              label: 'Actual (prorated)',
+              data: actualData,
+              backgroundColor: '#f472b6AA',
+              borderColor: '#f472b6',
+              borderWidth: 1
+            }
+          ]
+        },
+        options: {
+          plugins: {
+            tooltip: {
+              mode: 'index',
+              callbacks: { label: (ctx) => `${ctx.dataset.label}: ${money(ctx.raw)}` }
+            }
+          },
+          scales: {
+            x: { stacked: false },
+            y: { stacked: false, beginAtZero: true, ticks: { callback: (v) => money(v) } }
+          }
+        }
+      });
+    }
+
+    function renderCategoryDoughnut() {
+      const ctx = document.getElementById('categoryDoughnutChart').getContext('2d');
+      const top8 = DATA.topCategories.slice(0, 8);
+      const labels = top8.map(c => `${c.category} · ${c.subcategory}`);
+      const values = top8.map(c => c.total);
+      
+      new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+          labels,
+          datasets: [{
+            data: values,
+            backgroundColor: COLORS.slice(0, 8),
+            borderColor: 'rgba(15,23,42,0.9)',
+            borderWidth: 2,
+            hoverOffset: 8
+          }]
+        },
+        options: {
+          cutout: '62%',
+          plugins: {
+            legend: { position: 'right', labels: { padding: 14, font: { size: 11 } } },
+            tooltip: {
+              callbacks: {
+                label: (ctx) => {
+                  const total = ctx.dataset.data.reduce((a, b) => a + b, 0);
+                  return `${ctx.label}: ${money(ctx.raw)} (${pct(ctx.raw / total, 1)})`;
+                }
+              }
+            }
+          }
+        }
+      });
+    }
+
+    function renderDebtWaterfall() {
+      const ctx = document.getElementById('debtWaterfallChart').getContext('2d');
+      
+      // Generate projection data (simplified - showing declining balances)
+      const months = [];
+      const datasets = [];
+      const maxMonths = Math.max(...DATA.debt.summaries.map(d => d.payoff_months));
+      
+      for (let i = 0; i <= Math.min(maxMonths, 60); i += 6) {
+        const date = new Date();
+        date.setMonth(date.getMonth() + i);
+        months.push(date.toISOString().slice(0, 7));
+      }
+      
+      DATA.debt.summaries.forEach((debt, idx) => {
+        const balances = months.map((_, i) => {
+          const monthsElapsed = i * 6;
+          if (monthsElapsed >= debt.payoff_months) return 0;
+          const remaining = debt.balance * (1 - monthsElapsed / debt.payoff_months);
+          return Math.max(0, remaining);
+        });
+        
+        datasets.push({
+          label: debt.description,
+          data: balances,
+          fill: idx === 0 ? 'origin' : '-1',
+          backgroundColor: COLORS[idx] + '55',
+          borderColor: COLORS[idx],
+          borderWidth: 2,
+          pointRadius: 0
+        });
+      });
+      
+      new Chart(ctx, {
+        type: 'line',
+        data: { labels: months, datasets },
+        options: {
+          plugins: {
+            tooltip: {
+              mode: 'index',
+              callbacks: { label: (ctx) => `${ctx.dataset.label}: ${money(ctx.raw)}` }
+            }
+          },
+          scales: {
+            y: { stacked: true, ticks: { callback: (v) => money(v) } }
+          },
+          interaction: { mode: 'nearest', axis: 'x', intersect: false }
+        }
+      });
+    }
+
+    function renderDebtTable() {
+      document.getElementById('debtBalance').textContent = money(DATA.vitals.debtBalance);
+      document.getElementById('weightedApr').textContent = `${DATA.debt.weightedApr.toFixed(2)}%`;
+      document.getElementById('debtMin').textContent = money(DATA.debt.monthlyMinTotal);
+      document.getElementById('debtService').textContent = pct(DATA.debt.debtServiceRatio);
+
+      const totalInterest = DATA.debt.summaries.reduce((s, d) => s + d.projected_interest, 0);
+      document.getElementById('debtTable').innerHTML = DATA.debt.summaries.map(d => `
+        <tr>
+          <td>${d.description}</td>
+          <td class="num">${money(d.balance)}</td>
+          <td class="num">${d.apr.toFixed(2)}%</td>
+          <td class="num">${money(d.min_payment)}</td>
+          <td class="num">${money(d.projected_interest)}</td>
+          <td class="num">${d.payoff_month}</td>
+          <td class="num">${d.payoff_months}</td>
+        </tr>
+      `).join('') + `
+        <tr style="font-weight: 600; background: rgba(56,189,248,.08);">
+          <td>TOTAL</td>
+          <td class="num">${money(DATA.vitals.debtBalance)}</td>
+          <td class="num">${DATA.debt.weightedApr.toFixed(2)}%</td>
+          <td class="num">${money(DATA.debt.monthlyMinTotal)}</td>
+          <td class="num">${money(totalInterest)}</td>
+          <td class="num">—</td>
+          <td class="num">—</td>
+        </tr>
+      `;
+    }
+
+    function renderGoals() {
+      const container = document.getElementById('goalsContainer');
+      container.innerHTML = DATA.goals.map((g, i) => {
+        const progressPct = g.progress_pct || (g.target > 0 ? (g.current / g.target) * 100 : 0);
+        const [cls, txt] = progressPct >= 75 ? ['good', 'On Track'] : progressPct >= 50 ? ['warn', 'Needs Boost'] : ['bad', 'Behind'];
+        
+        return `
+          <div style="margin-bottom: 16px; padding-bottom: 16px; border-bottom: 1px solid var(--line);">
+            <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+              <strong>${g.description}</strong>
+              <span class="status-chip ${cls}">${txt}</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; font-size: 13px; color: var(--muted); margin-bottom: 6px;">
+              <span>${money(g.current)} of ${money(g.target)}</span>
+              <span>${progressPct.toFixed(1)}% · ${g.months_to_goal ? g.months_to_goal + ' months to goal' : 'On hold'}</span>
+            </div>
+            <div class="bar">
+              <span style="width: ${progressPct}%; background: ${COLORS[i % COLORS.length]}"></span>
+            </div>
+            <div style="font-size: 12px; color: var(--muted); margin-top: 4px;">
+              Monthly contribution: ${money(g.monthly)}
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function renderMonthComparison() {
+      const mc = DATA.monthComparison;
+      const delta = mc.deltaVsPrior;
+      const deltaPct = (delta / mc.priorActual) * 100;
+      const direction = delta > 0 ? '↑' : delta < 0 ? '↓' : '→';
+      const dirClass = delta > 0 ? 'bad' : delta < 0 ? 'good' : 'warn';
+      
+      document.getElementById('monthComparison').innerHTML = `
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; margin-bottom: 16px;">
+          <div>
+            <div class="label">Current Month (${mc.currentMonth})</div>
+            <div class="value" style="font-size: 24px;">${money(mc.currentActual)}</div>
+          </div>
+          <div>
+            <div class="label">Prior Month (${mc.priorMonth})</div>
+            <div class="value" style="font-size: 24px;">${money(mc.priorActual)}</div>
+          </div>
+          <div>
+            <div class="label">Change</div>
+            <div class="value" style="font-size: 24px;">
+              ${direction} ${money(Math.abs(delta))}
+              <span class="status-chip ${dirClass}">${deltaPct > 0 ? '+' : ''}${deltaPct.toFixed(1)}%</span>
+            </div>
+          </div>
+        </div>
+        <div class="callout ${dirClass}">
+          <div class="callout-title">${delta > 0 ? '⚠️ Spending Increased' : delta < 0 ? '✅ Spending Decreased' : 'ℹ️ Spending Stable'}</div>
+          <div class="callout-body">
+            ${delta > 0 
+              ? `Spending up ${pct(deltaPct / 100, 1)} vs last month. Review top categories to identify drivers.`
+              : delta < 0
+              ? `Great work! Spending down ${pct(Math.abs(deltaPct) / 100, 1)} vs last month.`
+              : 'Spending consistent with last month.'
+            }
+          </div>
+        </div>
+      `;
+    }
+
+    function renderIncomeReview() {
+      const gross = DATA.vitals.grossIncomeMonthly;
+      const net = DATA.vitals.netIncomeMonthly;
+      const taxRate = gross > 0 ? (gross - net) / gross : 0;
+      
+      document.getElementById('incomeGross').textContent = money(gross);
+      document.getElementById('incomeNet').textContent = money(net);
+      document.getElementById('incomeTaxRate').textContent = pct(taxRate);
+      
+      // Income breakdown by type (salary vs other)
+      // Assuming salary is primary and other income calculated from totals
+      const totalIncomeYtd = DATA.totals.incomeYtd || 0;
+      const incomeCount = DATA.counts.incomes || 0;
+      
+      document.getElementById('incomeBreakdown').innerHTML = `
+        <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line);">
+          <h3 style="font-size: 14px; margin: 0 0 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px;">Income Sources</h3>
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px;">
+            <div>
+              <div style="font-size: 12px; color: var(--muted); margin-bottom: 4px;">Salary (Primary)</div>
+              <div style="font-size: 18px; font-weight: 600;">${money(gross)}</div>
+            </div>
+            <div>
+              <div style="font-size: 12px; color: var(--muted); margin-bottom: 4px;">Other Income</div>
+              <div style="font-size: 18px; font-weight: 600;">${money(Math.max(0, totalIncomeYtd - (gross * 1.5)))}</div>
+              <div style="font-size: 11px; color: var(--muted); margin-top: 2px;">${incomeCount} transactions YTD</div>
+            </div>
+          </div>
+        </div>
+        <div class="callout" style="margin-top: 14px;">
+          <div class="callout-title">💡 Income Insight</div>
+          <div class="callout-body">
+            ${taxRate > 0.35 
+              ? `High tax burden at ${pct(taxRate)}. Consider tax-advantaged savings strategies.`
+              : taxRate > 0.25
+              ? `Tax rate of ${pct(taxRate)} is moderate. Review deductions and withholding annually.`
+              : `Tax rate of ${pct(taxRate)} is healthy. Good income efficiency.`
+            }
+          </div>
+        </div>
+      `;
+    }
+
+    // Render everything
+    renderKpis();
+    renderIncomeReview();
+    renderMonthlyExpensesChart();
+    renderWeeklyExpensesChart();
+    renderBudgetActualChart();
+    renderCategoryDoughnut();
+    renderDebtWaterfall();
+    renderDebtTable();
+    renderGoals();
+    renderMonthComparison();
+  </script>
+</body>
+</html>

@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 /**
- * Budget MCP Server - CLI Entry Point
+ * Budget Engine - CLI Entry Point
  */
 
-import { main } from "./mcp/server.js";
+import { main } from "./skill-cli.js";
 
 main().catch((err) => {
-  console.error("Failed to start budget MCP server:", err);
+  console.error("Failed to start budget CLI:", err);
   process.exit(1);
 });
