@@ -14,6 +14,12 @@ export interface ParsedBacklogMarkdown {
  * - Metadata lines look like: **Key:** Value
  * - Tags are within metadata as: **Tags:** [a, b, c]
  */
+
+/** Strip all parenthetical comments from a value string before splitting. */
+function stripParentheticals(value: string): string {
+  return value.replace(/\s*\([^)]*\)/g, "");
+}
+
 export function parseBacklogMarkdown(markdown: string): ParsedBacklogMarkdown {
   const lines = markdown.split(/\r?\n/);
   const titleLine = lines.find((l) => l.startsWith("# ")) || "# (untitled)";
@@ -31,7 +37,15 @@ export function parseBacklogMarkdown(markdown: string): ParsedBacklogMarkdown {
     const value = m[2].trim();
     metadata[key] = value;
 
-    const parsedList = value
+    const isDepOrRelated =
+      key.toLowerCase() === "depends-on" ||
+      key.toLowerCase() === "depends on" ||
+      key.toLowerCase() === "related";
+
+    // Strip parenthetical comments before splitting for dep/related fields
+    const cleanValue = isDepOrRelated ? stripParentheticals(value) : value;
+
+    const parsedList = cleanValue
       .replace(/^\[/, "")
       .replace(/\]$/, "")
       .split(",")

@@ -13,6 +13,7 @@ import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import { createBacklogAPI } from "./backlog-api.js";
 import { executeCode } from "./sandbox/index.js";
+import { startServer } from "./serve/server.js";
 import { MultiRootBacklogStore } from "./storage/multi-root-store.js";
 import { discoverProjects } from "./storage/project-discovery.js";
 import type { Folder } from "./types.js";
@@ -64,12 +65,13 @@ Commands:
   complete <id> [--date 2026-01-15]
   archive <id>
   validate <id>
-  hygiene [--project X] [--stale-days 30] [--done-days 7]
+  hygiene [--project X] [--stale-days 30] [--done-days 7] [--fix]
   stats [--project X]
   xref <id>
   history <id> [--limit N]
   update-body <id> [--message "edit note"]
   exec --code "..." [--timeout 5000]
+  serve [--port 3000]               Start HTML dashboard
 
 Options:
   --root <path>     Override scan directory (default: cwd)
@@ -212,7 +214,8 @@ export async function main() {
         const project = args.project as string | undefined;
         const staleAfterDays = args["stale-days"] ? parseInt(args["stale-days"] as string, 10) : undefined;
         const doneAfterDays = args["done-days"] ? parseInt(args["done-days"] as string, 10) : undefined;
-        result = await api.hygiene({ project, staleAfterDays, doneAfterDays });
+        const fix = args.fix === true;
+        result = await api.hygiene({ project, staleAfterDays, doneAfterDays, fix });
         break;
       }
 
@@ -253,6 +256,12 @@ export async function main() {
         const execResult = await executeCode(api, { code, timeout });
         result = execResult;
         break;
+      }
+
+      case "serve": {
+        const port = args.port ? parseInt(args.port as string, 10) : 3000;
+        await startServer({ port, scanDir });
+        return; // server keeps running
       }
 
       default:

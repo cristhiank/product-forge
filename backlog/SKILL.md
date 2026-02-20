@@ -51,6 +51,9 @@ $BACKLOG exec --code '
 
 # See all commands
 $BACKLOG help
+
+# Start HTML dashboard (read-only, live-reloading)
+$BACKLOG serve --port 3000
 ```
 
 ### Project Discovery
@@ -84,6 +87,8 @@ Items live in exactly one folder at a time:
 | `archive/` | Archived (won't do, or historical) |
 
 **Flow:** Create in `next/` → move to `working/` when started → `done/` when completed → `archive/` when cancelled/obsolete.
+
+**Status auto-sync:** The `Status` field is automatically updated when items move between folders: `next→Not Started`, `working→In Progress`, `done→Done`, `archive→Archived`. Folder is always the source of truth.
 
 ### ID Conventions
 
@@ -149,6 +154,9 @@ node scripts/backlog.js hygiene [--stale-days 30] [--done-days 7]
 
 # Validate item structure
 node scripts/backlog.js validate <id>
+
+# Start HTML dashboard (read-only, live-reloading)
+node scripts/backlog.js serve [--port 3000] [--root <path>]
 ```
 
 ### Write Operations
@@ -303,6 +311,16 @@ node scripts/backlog.js hygiene --stale-days 30
 for id in $(node scripts/backlog.js hygiene --done-days 7 | jq -r '.old_done[].id'); do
   node scripts/backlog.js archive $id
 done
+```
+
+### Fix Status/Folder Mismatches
+
+```bash
+# Detect mismatches (items where Status field doesn't match folder)
+node scripts/backlog.js hygiene | jq '.status_folder_mismatches'
+
+# Auto-repair all mismatches
+node scripts/backlog.js hygiene --fix
 ```
 
 ### Dependency Validation

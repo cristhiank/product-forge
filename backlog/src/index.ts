@@ -30,5 +30,9 @@ export { createBacklogAPI } from "./backlog-api.js";
 export { executeCode, createSandboxAPI, BACKLOG_API_HELP } from "./sandbox/index.js";
 export type { ExecuteRequest, ExecuteResponse } from "./sandbox/index.js";
 
+// Serve
+export { startServer } from "./serve/server.js";
+export type { ServeOptions } from "./serve/server.js";
+
 // CLI entry
 export { main } from "./skill-cli.js";

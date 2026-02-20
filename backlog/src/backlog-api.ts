@@ -4,8 +4,8 @@ import { parseBacklogMarkdown } from "./markdown/parser.js";
 import { formatBacklogItemTemplate } from "./markdown/templates.js";
 import { validateBacklogItem } from "./markdown/validate.js";
 import type { MultiRootBacklogStore } from "./storage/multi-root-store.js";
-import type { BacklogHistoryEntry, BacklogItem, BacklogItemSummary, Folder } from "./types.js";
-import { isFolder } from "./types.js";
+import type { BacklogHistoryEntry, BacklogItem, BacklogItemSummary, Folder, HygieneResult } from "./types.js";
+import { folderToStatus, isFolder } from "./types.js";
 
 function slugify(input: string): string {
   return input
@@ -276,7 +276,8 @@ export function createBacklogAPI(store: MultiRootBacklogStore) {
       if (!isFolder(req.to)) throw new Error(`Invalid folder: ${String(req.to)}`);
       const moved = await store.move(req.id, req.to);
       const item = await store.getById(req.id);
-      const updated = stampUpdated(item.body);
+      let updated = stampStatus(item.body, folderToStatus(req.to));
+      updated = stampUpdated(updated);
       await store.writeBody(req.id, updated);
       return moved;
     },
@@ -285,6 +286,7 @@ export function createBacklogAPI(store: MultiRootBacklogStore) {
       const moved = await store.move(req.id, "done");
       const item = await store.getById(req.id);
       let updated = stampCompleted(item.body, req.completedDate);
+      updated = stampStatus(updated, folderToStatus("done"));
       updated = stampUpdated(updated);
       await store.writeBody(req.id, updated);
       return { path: moved.path, project: moved.project };
@@ -294,6 +296,7 @@ export function createBacklogAPI(store: MultiRootBacklogStore) {
       const moved = await store.move(req.id, "archive");
       const item = await store.getById(req.id);
       let updated = stampArchived(item.body);
+      updated = stampStatus(updated, folderToStatus("archive"));
       updated = stampUpdated(updated);
       await store.writeBody(req.id, updated);
       return { path: moved.path, project: moved.project };
@@ -350,7 +353,7 @@ export function createBacklogAPI(store: MultiRootBacklogStore) {
       });
     },
 
-    hygiene: async (opts?: { project?: string; staleAfterDays?: number; doneAfterDays?: number }) => {
+    hygiene: async (opts?: { project?: string; staleAfterDays?: number; doneAfterDays?: number; fix?: boolean }): Promise<HygieneResult> => {
       const staleAfterDays = opts?.staleAfterDays ?? 30;
       const workingStaleAfterDays = 14;
       const doneAfterDays = opts?.doneAfterDays ?? 7;
@@ -358,9 +361,10 @@ export function createBacklogAPI(store: MultiRootBacklogStore) {
 
       const allItems = await store.list(opts?.project);
       
-      const stale_in_next: Array<{ id: string; title: string; folder: string; age_days: number; project: string }> = [];
-      const stuck_in_working: Array<{ id: string; title: string; folder: string; age_days: number; project: string }> = [];
-      const old_in_done: Array<{ id: string; title: string; folder: string; age_days: number; project: string }> = [];
+      const stale_in_next: HygieneResult["stale_in_next"] = [];
+      const stuck_in_working: HygieneResult["stuck_in_working"] = [];
+      const old_in_done: HygieneResult["old_in_done"] = [];
+      const status_folder_mismatches: HygieneResult["status_folder_mismatches"] = [];
       
       for (const item of allItems) {
         const parsed = parseBacklogMarkdown(item.body);
@@ -388,11 +392,29 @@ export function createBacklogAPI(store: MultiRootBacklogStore) {
         } else if (item.folder === "done" && ageDays > doneAfterDays) {
           old_in_done.push(itemInfo);
         }
+
+        // Detect status/folder mismatches
+        const expectedStatus = folderToStatus(item.folder);
+        const actualStatus = parsed.metadata.Status;
+        if (actualStatus && actualStatus !== expectedStatus) {
+          status_folder_mismatches.push({
+            ...itemInfo,
+            status: actualStatus,
+            expected_status: expectedStatus,
+          });
+
+          if (opts?.fix) {
+            let body = item.body;
+            body = stampStatus(body, expectedStatus);
+            body = stampUpdated(body);
+            await store.writeBody(qualifyId(item.project, item.id), body);
+          }
+        }
       }
       
       const total_items = allItems.length;
-      const issue_count = stale_in_next.length + stuck_in_working.length + old_in_done.length;
-      const health_score = 
+      const issue_count = stale_in_next.length + stuck_in_working.length + old_in_done.length + status_folder_mismatches.length;
+      const health_score: HygieneResult["health_score"] = 
         issue_count === 0 ? "healthy" :
         issue_count < total_items * 0.1 ? "needs_attention" : "unhealthy";
       
@@ -400,8 +422,10 @@ export function createBacklogAPI(store: MultiRootBacklogStore) {
         stale_in_next,
         stuck_in_working,
         old_in_done,
+        status_folder_mismatches,
         total_items,
         health_score,
+        ...(opts?.fix ? { fixed: status_folder_mismatches.length } : {}),
       };
     },
   };
@@ -502,5 +526,28 @@ function stampArchived(body: string, archivedDate?: string): string {
   const createdIdx = out.findIndex((l) => /^\*\*Created:\*\*/.test(l));
   const insertAt = createdIdx >= 0 ? createdIdx + 1 : 2;
   out.splice(insertAt, 0, `**Archived:** ${date}  `);
+  return out.join("\n");
+}
+
+function stampStatus(body: string, status: string): string {
+  const lines = body.split(/\r?\n/);
+  const out: string[] = [];
+  let inserted = false;
+
+  for (const line of lines) {
+    if (/^\*\*Status:\*\*/.test(line)) {
+      out.push(`**Status:** ${status}  `);
+      inserted = true;
+    } else {
+      out.push(line);
+    }
+  }
+
+  if (inserted) return out.join("\n");
+
+  // Insert after Created if present, else after title
+  const createdIdx = out.findIndex((l) => /^\*\*Created:\*\*/.test(l));
+  const insertAt = createdIdx >= 0 ? createdIdx + 1 : 2;
+  out.splice(insertAt, 0, `**Status:** ${status}  `);
   return out.join("\n");
 }
