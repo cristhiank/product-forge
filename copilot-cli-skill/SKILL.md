@@ -186,33 +186,6 @@ $WORKER exec 'return sdk.cleanupAll()'
 
 ---
 
-## CLI Fallback Reference
-
-For backward compatibility, shell scripts are also available:
-
-```bash
-# Spawn
-./scripts/spawn-worker.sh --prompt "..." --agent Executor --autopilot
-
-# Status
-./scripts/worker-status.sh --list
-./scripts/worker-status.sh <worker-id>
-
-# Cleanup
-./scripts/cleanup-worker.sh <worker-id> [--force]
-```
-
-CLI commands also available via `worker.js`:
-
-```bash
-$WORKER spawn --prompt "..." --agent Executor --autopilot
-$WORKER status [worker-id]
-$WORKER cleanup <worker-id> [--force]
-$WORKER cleanup-all [--force]
-```
-
----
-
 ## Troubleshooting
 
 ### Worker shows "stopped" but worktree exists

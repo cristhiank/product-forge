@@ -264,23 +264,6 @@ $HUB exec --author orchestrator \
 
 ---
 
-## CLI Fallback Reference
-
-For backward compatibility, all operations are also available as CLI commands:
-
-```bash
-$HUB post --channel '#main' --type note --author scout --content "..." --tags '["..."]'
-$HUB search "query" [--channel '#main'] [--limit 10]
-$HUB read [--channel '#main'] [--type note] [--limit 20]
-$HUB reply --thread <id> --author <role> --content "..."
-$HUB status
-$HUB watch [--channel '#main'] [--type request] [--timeout 120]
-```
-
-See **[API Reference](references/api-reference.md)** for full CLI command documentation.
-
----
-
 ## Integration with Agents Board
 
 The hub **complements** the agents-board skill:
