@@ -1,0 +1,15 @@
+# Worker state directories (created by spawn-worker.sh)
+.copilot-workers/
+
+# Temporary investigation files
+temp/
+
+# macOS
+.DS_Store
+
+# Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
