@@ -109,6 +109,21 @@ Main Repo (working on feature-x)
 
 ---
 
+## Hub Integration (Parallel Workers)
+
+When workers need to communicate through the agents-hub, symlink the hub database into each worktree **immediately after spawning**:
+
+```bash
+# After sdk.spawnWorker() returns { worktreePath, ... }
+ln -s "$(pwd)/.devpartner" "<worktreePath>/.devpartner"
+```
+
+This allows the worker's hub CLI to find the shared database at the default path. **Without this symlink, workers cannot post findings, request help, or coordinate with other agents.**
+
+The Super-Orchestrator is responsible for creating these symlinks as part of the spawn workflow.
+
+---
+
 ## Common Patterns
 
 ### Feature Implementation

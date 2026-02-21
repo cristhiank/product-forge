@@ -142,21 +142,21 @@ The `hub` object is also in scope for operations not covered by SDK:
 
 ## Channel Awareness
 
-### Single-Worker Mode (v16 compatible)
+### Single-Worker Mode (default)
 - One `#main` channel
 - All agents (Scout, Creative, Planner, Executor, Verifier) share one channel
 
-### Multi-Worker Mode (v17)
+### Multi-Worker Mode
 - `#general` for cross-worker announcements
 - `#worker-{item-id}` per parallel worker (e.g., `#worker-B042`, `#worker-B043`)
 - Super-Orchestrator monitors all channels
 
 ```bash
 # Initialize multi-worker hub
-$HUB init --mode multi
+$HUB exec 'hub.init({ mode: "multi" })'
 
 # Create worker channel
-$HUB channel create '#worker-B042' --worker-id B042
+$HUB exec 'hub.channelCreate("#worker-B042", { workerId: "B042" })'
 ```
 
 ---
@@ -246,6 +246,18 @@ $HUB exec --author orchestrator \
 
 ---
 
+## Worktree Usage (Parallel Workers)
+
+When workers run in git worktrees, they need access to the shared hub database. After spawning a worker (via the `copilot-cli` skill), symlink the hub database into the worktree:
+
+```bash
+ln -s "$(pwd)/.devpartner" "<worktree_path>/.devpartner"
+```
+
+Workers then use `--db` implicitly (the default `.devpartner/hub.db` path resolves via the symlink). No special configuration is needed — just ensure the symlink exists before the worker starts posting.
+
+---
+
 ## When to Use the Hub
 
 ### ✅ Always Use For:
@@ -261,17 +273,6 @@ $HUB exec --author orchestrator \
 - **Source code storage** — Use snippets in board, not full files in hub
 - **Large binary data** — Hub is for text messages only
 - **Secret storage** — Never post tokens, credentials, private keys
-
----
-
-## Integration with Agents Board
-
-The hub **complements** the agents-board skill:
-
-| Tool | Purpose | When to Use |
-|------|---------|-------------|
-| **agents-board** | Task state, plan, snippets, facts, trails | Primary workflow orchestration |
-| **agents-hub** | Agent-to-agent messaging, cross-worker coordination | Communication & discovery |
 
 ---
 

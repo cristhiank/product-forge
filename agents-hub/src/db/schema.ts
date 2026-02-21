@@ -86,25 +86,25 @@ export function initSchema(db: Database.Database): void {
     END
   `);
 
-  // Trigger: Sync FTS on DELETE
+  // Trigger: Sync FTS on DELETE (external content tables require 'delete' command)
   db.exec(`
     CREATE TRIGGER IF NOT EXISTS messages_fts_delete
     AFTER DELETE ON messages
     BEGIN
-      DELETE FROM messages_fts WHERE rowid = old.rowid;
+      INSERT INTO messages_fts(messages_fts, rowid, content, tags, metadata)
+      VALUES ('delete', old.rowid, old.content, old.tags, old.metadata);
     END
   `);
 
-  // Trigger: Sync FTS on UPDATE
+  // Trigger: Sync FTS on UPDATE (delete old + insert new for external content)
   db.exec(`
     CREATE TRIGGER IF NOT EXISTS messages_fts_update
     AFTER UPDATE ON messages
     BEGIN
-      UPDATE messages_fts
-      SET content = new.content,
-          tags = new.tags,
-          metadata = new.metadata
-      WHERE rowid = new.rowid;
+      INSERT INTO messages_fts(messages_fts, rowid, content, tags, metadata)
+      VALUES ('delete', old.rowid, old.content, old.tags, old.metadata);
+      INSERT INTO messages_fts(rowid, content, tags, metadata)
+      VALUES (new.rowid, new.content, new.tags, new.metadata);
     END
   `);
 }

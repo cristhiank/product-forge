@@ -96,7 +96,7 @@ export interface SearchResult extends Message {
 export interface WatchOptions {
   channel?: string;
   type?: MessageType;
-  timeout?: number; // Milliseconds
+  timeout?: number; // Seconds (default 300, 0 = forever)
   count?: number; // Number of messages to wait for
 }
 
