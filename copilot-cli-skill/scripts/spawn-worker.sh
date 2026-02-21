@@ -36,7 +36,7 @@ BRANCH_PREFIX="worker"
 PROMPT=""
 AGENT=""
 MODEL=""
-declare -a ADD_DIRS
+ADD_DIRS=()
 ALLOW_ALL_PATHS=false
 ALLOW_ALL_URLS=false
 AUTOPILOT=false
@@ -134,11 +134,9 @@ fi
 if [[ "$ALLOW_ALL_PATHS" == "true" ]]; then
   COPILOT_CMD+=(--allow-all-paths)
 else
-  if [[ ${#ADD_DIRS[@]} -gt 0 ]]; then
-    for dir in "${ADD_DIRS[@]}"; do
-      COPILOT_CMD+=(--add-dir "$dir")
-    done
-  fi
+  for dir in "${ADD_DIRS[@]+"${ADD_DIRS[@]}"}"; do
+    [[ -n "$dir" ]] && COPILOT_CMD+=(--add-dir "$dir")
+  done
 fi
 
 if [[ "$ALLOW_ALL_URLS" == "true" ]]; then
@@ -149,7 +147,7 @@ if [[ "$AUTOPILOT" == "true" ]]; then
   COPILOT_CMD+=(--autopilot)
 fi
 
-COPILOT_CMD+=("$PROMPT")
+COPILOT_CMD+=(-p "$PROMPT")
 
 # Spawn detached copilot process
 cd "$WORKTREE_PATH"
