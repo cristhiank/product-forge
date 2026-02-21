@@ -30,6 +30,10 @@ export type SnippetId = `X-${number}`;
 // ENUMS
 // ============================================================
 
+/**
+ * Agent roles in the multi-agent system.
+ * Valid roles: "orchestrator", "scout", "creative", "planner", "verifier", "executor"
+ */
 export type AgentRole = string;
 
 export type Confidence = "high" | "medium" | "low";
@@ -99,6 +103,9 @@ export interface Mission {
     risk_level: RiskLevel;
     scope: Scope;
   };
+
+  /** Reference to backlog item ID this task is linked to */
+  backlog_ref?: string;
 }
 
 export interface Constraint {
@@ -318,6 +325,9 @@ export interface Snippet {
 
   /** When snippet was last verified as current (for staleness tracking) */
   verified_at?: Timestamp;
+
+  /** Git commit hash when this snippet was cached — stale if file's current hash differs */
+  git_hash?: string;
 
   /** Optional link to entities this snippet supports */
   linked_to?: EntityId[];

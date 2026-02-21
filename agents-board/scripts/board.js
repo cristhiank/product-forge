@@ -4397,6 +4397,12 @@ ALERTS:
     --resolved       true|false
     --path           Project path (default: cwd)
 
+  checkpoint         Create a checkpoint
+    --task-id        Task ID (required)
+    --agent          Agent role (required)
+    --message        Checkpoint message (required)
+    --path           Project path (default: cwd)
+
 TRAILS:
   append-trail       Append a trail entry
     --task-id        Task ID (required)
@@ -4703,6 +4709,40 @@ async function handleGetAlerts(flags) {
   });
   success({ alerts });
 }
+async function handleCheckpoint(flags) {
+  const taskId = requireFlag(flags, "task-id");
+  const agent = requireFlag(flags, "agent");
+  const message = requireFlag(flags, "message");
+  const projectPath = getFlag(flags, "path") || process.cwd();
+  const manager = getBoardManager(projectPath);
+  const board = manager.getBoard(taskId);
+  const status = board.getStatus();
+  const plan = board.getPlan();
+  const facts = board.getFacts({});
+  const snippets = board.getSnippets({});
+  const alerts = board.getAlerts({ resolved: false });
+  const stateSnapshot = {
+    phase: status.phase,
+    steps_done: plan ? status.current_step : 0,
+    steps_total: plan ? status.total_steps : 0,
+    facts_count: facts.length,
+    snippets_count: snippets.length,
+    unresolved_alerts: alerts.length
+  };
+  const alert = board.raiseAlert(agent, {
+    severity: "info",
+    title: `Checkpoint: ${message}`,
+    description: `Board state: ${JSON.stringify(stateSnapshot, null, 2)}`,
+    tags: ["checkpoint"]
+  });
+  const checkpoint = {
+    alert_id: alert.id,
+    message,
+    timestamp: alert.raised_at,
+    state: stateSnapshot
+  };
+  success({ checkpoint });
+}
 async function handleAppendTrail(flags) {
   const taskId = requireFlag(flags, "task-id");
   const agent = requireFlag(flags, "agent");
@@ -4886,6 +4926,9 @@ async function main() {
         break;
       case "get-alerts":
         await handleGetAlerts(parsed.flags);
+        break;
+      case "checkpoint":
+        await handleCheckpoint(parsed.flags);
         break;
       // Trails
       case "append-trail":
