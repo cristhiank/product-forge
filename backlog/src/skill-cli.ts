@@ -75,6 +75,7 @@ Commands:
 
 Options:
   --root <path>     Override scan directory (default: cwd)
+  --format <type>   Output format: json (default) | board-context
   --help            Show this help
 
 All output is JSON for easy parsing.
@@ -87,6 +88,41 @@ async function readStdin(): Promise<string> {
     chunks.push(chunk as Buffer);
   }
   return Buffer.concat(chunks).toString("utf8");
+}
+
+function formatBoardContext(result: unknown): string {
+  // For list command: output as compact fact-ready format
+  // id | title | folder | priority | tags
+  if (Array.isArray(result)) {
+    const items = result.map((item: any) => ({
+      id: item.id,
+      title: item.title,
+      folder: item.folder,
+      priority: item.priority || 'none',
+      status: item.status || item.folder,
+      tags: item.tags || [],
+      depends_on: item.depends_on || []
+    }));
+    return JSON.stringify({ type: 'backlog_context', items, count: items.length }, null, 2);
+  }
+  // For single item: output as board-ready snippet
+  if (result && typeof result === 'object' && 'id' in result) {
+    const item = result as any;
+    return JSON.stringify({
+      type: 'backlog_item',
+      id: item.id,
+      title: item.title,
+      folder: item.folder,
+      priority: item.priority,
+      status: item.status,
+      body: item.body,
+      metadata: item.metadata,
+      tags: item.tags || [],
+      depends_on: item.depends_on || []
+    }, null, 2);
+  }
+  // Fallback: regular JSON
+  return JSON.stringify(result, null, 2);
 }
 
 export async function main() {
@@ -268,8 +304,13 @@ export async function main() {
         throw new Error(`Unknown command: ${command}`);
     }
 
-    // Output result as JSON
-    console.log(JSON.stringify(result, null, 2));
+    // Output result based on format
+    const format = (args.format as string) || 'json';
+    if (format === 'board-context') {
+      console.log(formatBoardContext(result));
+    } else {
+      console.log(JSON.stringify(result, null, 2));
+    }
     process.exit(0);
   } catch (error) {
     const err = error as Error;

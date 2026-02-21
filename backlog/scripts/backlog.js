@@ -162,6 +162,7 @@ function formatBacklogItemTemplate(opts) {
 **Priority:** ${priority}  
 **Status:** Not Started  
 **Estimate:** TBD  
+**Verified-By:** N/A  
 ` + parentLine + `
 ` + depsLine + relatedLine + `**Tags:** ${tags}  
 
@@ -2258,6 +2259,7 @@ Commands:
 
 Options:
   --root <path>     Override scan directory (default: cwd)
+  --format <type>   Output format: json (default) | board-context
   --help            Show this help
 
 All output is JSON for easy parsing.
@@ -2269,6 +2271,36 @@ async function readStdin() {
     chunks.push(chunk);
   }
   return Buffer.concat(chunks).toString("utf8");
+}
+function formatBoardContext(result) {
+  if (Array.isArray(result)) {
+    const items = result.map((item) => ({
+      id: item.id,
+      title: item.title,
+      folder: item.folder,
+      priority: item.priority || "none",
+      status: item.status || item.folder,
+      tags: item.tags || [],
+      depends_on: item.depends_on || []
+    }));
+    return JSON.stringify({ type: "backlog_context", items, count: items.length }, null, 2);
+  }
+  if (result && typeof result === "object" && "id" in result) {
+    const item = result;
+    return JSON.stringify({
+      type: "backlog_item",
+      id: item.id,
+      title: item.title,
+      folder: item.folder,
+      priority: item.priority,
+      status: item.status,
+      body: item.body,
+      metadata: item.metadata,
+      tags: item.tags || [],
+      depends_on: item.depends_on || []
+    }, null, 2);
+  }
+  return JSON.stringify(result, null, 2);
 }
 async function main() {
   try {
@@ -2430,7 +2462,12 @@ async function main() {
       default:
         throw new Error(`Unknown command: ${command}`);
     }
-    console.log(JSON.stringify(result, null, 2));
+    const format = args.format || "json";
+    if (format === "board-context") {
+      console.log(formatBoardContext(result));
+    } else {
+      console.log(JSON.stringify(result, null, 2));
+    }
     process.exit(0);
   } catch (error) {
     const err = error;

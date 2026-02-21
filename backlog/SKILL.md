@@ -1,25 +1,39 @@
 ---
 name: backlog
 description: >-
-  Use when the user mentions "backlog" or asks about work items, tasks, or
-  priorities — including "what's next", "what should I work on", "show tasks",
-  "backlog status", or any question about upcoming, in-progress, or completed
-  work. Covers creating, listing, searching, moving, completing, or reviewing
-  work items; planning sprints; checking backlog health; and tracking
-  dependencies across projects. Auto-discovers .backlog/ folders in the
-  workspace.
+  ALWAYS use when the user mentions "backlog" or asks about work items, tasks,
+  priorities, or bookkeeping — including "what's next", "what should I work on",
+  "show tasks", "backlog status", "do bookkeeping", "work on [project]",
+  "continue where you left", "implement [item]", or any question about upcoming,
+  in-progress, or completed work. Also use when starting any task that involves
+  picking, creating, moving, completing, or reviewing work items; planning
+  sprints; checking backlog health; or tracking dependencies. NEVER browse
+  .backlog/ directories directly — always use this skill's CLI.
 ---
 
 # Backlog Skill
 
 Patterns and conventions for using the backlog CLI to manage work items, track progress, and maintain project health.
 
+## ⛔ CRITICAL: Never Browse .backlog/ Directly
+
+**DO NOT** use `ls`, `cat`, `view`, `find`, or any file browsing on `.backlog/` directories. The markdown files have structured metadata that requires the CLI parser. Direct file browsing:
+- Misses metadata parsing (priority, status, dependencies, tags)
+- Skips cross-project discovery
+- Returns raw markdown instead of structured JSON
+- Breaks the kanban workflow model
+
+**ALWAYS use the CLI** (`node <skill-dir>/scripts/backlog.js <command>`) for ALL backlog operations.
+
 ## When to Use
 
-Use this skill whenever the user asks about their backlog, tasks, or work items — including casual queries like "what's next?", "what am I working on?", "show my tasks", or "backlog status". Specifically:
+Use this skill whenever the user asks about their backlog, tasks, or work items — including casual queries like "what's next?", "what am I working on?", "show my tasks", "backlog status", "do bookkeeping", or "what should I work on?". Specifically:
 
 - Answer questions about upcoming, in-progress, or completed work
 - Create, list, search, or manage work items
+- "Bookkeeping" — update item status, move items between folders after implementation
+- "Work on [project/task]" — find and select the right backlog item
+- "Continue where you left" — check working/ items and resume
 - Plan sprints or review backlog health  
 - Cross-reference items across projects
 - Run hygiene checks to prevent backlog rot

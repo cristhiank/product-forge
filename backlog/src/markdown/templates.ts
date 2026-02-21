@@ -34,6 +34,7 @@ export function formatBacklogItemTemplate(opts: {
     `**Priority:** ${priority}  \n` +
     `**Status:** Not Started  \n` +
     `**Estimate:** TBD  \n` +
+    `**Verified-By:** N/A  \n` +
     parentLine +
     `\n` +
     depsLine +
