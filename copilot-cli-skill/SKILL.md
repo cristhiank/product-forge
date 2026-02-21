@@ -10,70 +10,72 @@ description: >-
 
 Manage autonomous Copilot CLI workers in isolated git worktrees.
 
-## What This Skill Provides
+## Quick Reference — SDK (Preferred)
 
-Three scripts for spawning, monitoring, and cleaning up independent Copilot CLI workers:
+Use `worker exec` with SDK helpers. The `sdk` and `manager` objects are pre-loaded.
 
-1. **`spawn-worker.sh`** — Create a new worker in an isolated git worktree
-2. **`worker-status.sh`** — Check status of running workers
-3. **`cleanup-worker.sh`** — Terminate worker and remove its worktree
+```bash
+WORKER="node <skill-dir>/scripts/worker.js --repo-root ."
+
+# Spawn a worker
+$WORKER exec --agent Executor --autopilot \
+  'return sdk.spawnWorker("implement magic link authentication per plan.md")'
+
+# Spawn with options
+$WORKER exec 'return sdk.spawnWorker("investigate auth bug #42", {
+  agent: "Scout",
+  model: "claude-opus-4.6",
+  allowAllPaths: true
+})'
+
+# List all workers
+$WORKER exec 'return sdk.listAll()'
+
+# Check specific worker
+$WORKER exec 'return sdk.checkWorker("<worker-id>")'
+
+# Clean up a worker
+$WORKER exec 'return sdk.cleanupWorker("<worker-id>")'
+
+# Clean up all stopped workers
+$WORKER exec 'return sdk.cleanupAll()'
+```
+
+The `--agent`, `--model`, and `--autopilot` flags set SDK defaults.
+
+---
 
 ## When to Use
 
-Use this skill when you want to:
-
-- **Run parallel tasks** — Work on multiple features/bugs simultaneously without context switching
-- **Delegate long-running work** — Spawn a worker for extensive refactoring while continuing other work
+- **Run parallel tasks** — Work on multiple features/bugs simultaneously
+- **Delegate long-running work** — Spawn a worker for extensive refactoring
 - **Isolate risky changes** — Test experimental approaches in separate worktrees
-- **Background processing** — Let a worker handle time-consuming tasks (documentation, test generation) autonomously
+- **Background processing** — Let a worker handle time-consuming tasks autonomously
 
-## Quick Start
+---
 
-### Spawn a Worker
+## SDK Method Reference
 
-```bash
-./scripts/spawn-worker.sh \
-  --prompt "implement magic link authentication per plan.md" \
-  --agent Executor \
-  --add-dir ./src/auth \
-  --add-dir ./tests/auth \
-  --autopilot
-```
+| Method | Description |
+|--------|-------------|
+| `sdk.spawnWorker(prompt, opts?)` | Spawn new worker. opts: `{ agent?, model?, autopilot?, worktreeBase?, addDirs?, allowAllPaths?, allowAllUrls? }` |
+| `sdk.checkWorker(workerId)` | Get detailed status: pid, status, prompt, worktree, log size |
+| `sdk.listAll()` | List all workers with basic info (id, pid, status) |
+| `sdk.cleanupWorker(workerId, force?)` | Kill process, remove worktree, clean state |
+| `sdk.cleanupAll(force?)` | Clean up all stopped workers (or all if force=true) |
 
-Output:
-```json
-{
-  "worker_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
-  "pid": 12345,
-  "worktree_path": "/Users/you/worktrees/a1b2c3d4-...",
-  "branch_name": "worker/a1b2c3d4-...",
-  "state_dir": ".copilot-workers/a1b2c3d4-...",
-  "output_log": ".copilot-workers/a1b2c3d4-.../output.log",
-  "status": "running"
-}
-```
+### Low-Level Manager Access
 
-### Check Status
+The `manager` object is also in scope:
 
-```bash
-# List all workers
-./scripts/worker-status.sh --list
+| Method | Description |
+|--------|-------------|
+| `manager.spawn(opts)` | Spawn with full SpawnOptions |
+| `manager.getStatus(workerId)` | Detailed WorkerStatus |
+| `manager.listWorkers()` | List basic worker info |
+| `manager.cleanup(workerId, force?)` | Clean up single worker |
 
-# Check specific worker
-./scripts/worker-status.sh a1b2c3d4-e5f6-7890-abcd-ef1234567890
-```
-
-### Monitor Output
-
-```bash
-tail -f .copilot-workers/<worker-id>/output.log
-```
-
-### Clean Up
-
-```bash
-./scripts/cleanup-worker.sh a1b2c3d4-e5f6-7890-abcd-ef1234567890
-```
+---
 
 ## How It Works
 
@@ -105,118 +107,71 @@ Main Repo (working on feature-x)
 4. Output streams to `output.log` for monitoring
 5. **Cleanup** terminates process, removes worktree, deletes branch
 
-### State Management
-
-Each worker's state is tracked in `.copilot-workers/<worker-id>/`:
-
-- **`meta.json`** — Worker configuration and metadata
-- **`worker.pid`** — Process ID for status checks and cleanup
-- **`output.log`** — Complete Copilot CLI output
+---
 
 ## Common Patterns
 
-### Pattern: Feature Implementation
+### Feature Implementation
 
 ```bash
-./scripts/spawn-worker.sh \
-  --prompt "implement rate limiting per references/rate-limit-spec.md" \
-  --agent Executor \
-  --model claude-sonnet-4.6 \
-  --add-dir ./src/middleware \
-  --add-dir ./tests/middleware \
-  --autopilot
+$WORKER exec --agent Executor --model claude-sonnet-4.6 --autopilot \
+  'return sdk.spawnWorker("implement rate limiting per references/rate-limit-spec.md", {
+    addDirs: ["./src/middleware", "./tests/middleware"]
+  })'
 ```
 
-### Pattern: Bug Investigation
+### Bug Investigation
 
 ```bash
-./scripts/spawn-worker.sh \
-  --prompt "investigate session expiration bug - see issue #42" \
-  --agent Scout \
-  --model claude-opus-4.6 \
-  --add-dir ./src/auth \
-  --allow-all-paths
+$WORKER exec 'return sdk.spawnWorker("investigate session expiration bug - see issue #42", {
+  agent: "Scout",
+  model: "claude-opus-4.6",
+  allowAllPaths: true
+})'
 ```
 
-### Pattern: Documentation Generation
-
-```bash
-./scripts/spawn-worker.sh \
-  --prompt "generate API documentation for all routes in src/routes/" \
-  --agent Executor \
-  --add-dir ./src/routes \
-  --add-dir ./docs \
-  --autopilot
-```
-
-### Pattern: Parallel Test Suites
+### Parallel Workers
 
 ```bash
 # Worker 1: Unit tests
-./scripts/spawn-worker.sh --prompt "write unit tests for src/auth/" --agent Executor --add-dir ./src/auth --add-dir ./tests/unit --autopilot
+$WORKER exec --agent Executor --autopilot \
+  'return sdk.spawnWorker("write unit tests for src/auth/", { addDirs: ["./src/auth", "./tests/unit"] })'
 
 # Worker 2: Integration tests
-./scripts/spawn-worker.sh --prompt "write integration tests for API routes" --agent Executor --add-dir ./src/routes --add-dir ./tests/integration --autopilot
+$WORKER exec --agent Executor --autopilot \
+  'return sdk.spawnWorker("write integration tests for API routes", { addDirs: ["./src/routes", "./tests/integration"] })'
 ```
 
-## Script Reference
-
-### spawn-worker.sh
-
-**Required:**
-- `--prompt <text>` — Task for the worker
-
-**Optional:**
-- `--agent <agent>` — Scout, Executor, Planner, Creative, Verifier
-- `--model <model>` — claude-opus-4.6, claude-sonnet-4.6, etc.
-- `--worktree-base <path>` — Base directory for worktrees (default: `../worktrees/`)
-- `--branch-prefix <prefix>` — Branch name prefix (default: `worker`)
-- `--add-dir <dir>` — Allow access to specific directory (repeatable)
-- `--allow-all-paths` — Allow all file access
-- `--allow-all-urls` — Allow all URL access
-- `--autopilot` — Enable autonomous multi-turn execution
-
-See `references/cli-flags.md` for detailed flag documentation.
-
-### worker-status.sh
+### Multi-Model Comparison
 
 ```bash
+$WORKER exec 'return [
+  sdk.spawnWorker("implement auth refactor", { agent: "Executor", model: "claude-opus-4.6" }),
+  sdk.spawnWorker("implement auth refactor", { agent: "Executor", model: "gpt-5.3-codex" }),
+  sdk.spawnWorker("implement auth refactor", { agent: "Executor", model: "gemini-3-pro-preview" })
+]'
+```
+
+### Monitor & Cleanup
+
+```bash
+# Check progress
+tail -f .copilot-workers/<worker-id>/output.log
+
 # List all workers
-./scripts/worker-status.sh --list
+$WORKER exec 'return sdk.listAll()'
 
-# Get specific worker status
-./scripts/worker-status.sh <worker-id>
+# Clean up all stopped
+$WORKER exec 'return sdk.cleanupAll()'
 ```
 
-Output includes: worker ID, PID, status (running/stopped), worktree path, log size, and metadata.
-
-### cleanup-worker.sh
-
-```bash
-# Graceful cleanup
-./scripts/cleanup-worker.sh <worker-id>
-
-# Force kill if needed
-./scripts/cleanup-worker.sh <worker-id> --force
-```
-
-Terminates the process, removes the worktree, deletes the branch, and cleans up state files.
-
-## Prompt Templates
-
-For common worker scenarios, see `references/prompt-templates.md`:
-
-- Standard feature implementation
-- Bug investigation and fixing
-- Documentation generation
-- Refactoring tasks
-- Custom agent delegation
+---
 
 ## Safety and Best Practices
 
 ### ✅ Do
 
-- **Use `--add-dir`** to limit worker access to relevant directories
+- **Limit access** with `addDirs` to relevant directories
 - **Monitor output logs** periodically to check progress
 - **Clean up completed workers** to avoid worktree clutter
 - **Use specific prompts** with clear success criteria
@@ -224,72 +179,60 @@ For common worker scenarios, see `references/prompt-templates.md`:
 
 ### ⚠️ Don't
 
-- **Avoid `--allow-all-paths`** unless necessary (security risk)
+- **Avoid `allowAllPaths: true`** unless necessary
 - **Don't spawn too many workers** — each consumes system resources
 - **Don't forget to clean up** — orphaned worktrees waste disk space
-- **Don't use for interactive tasks** — workers run autonomously without user input
+- **Don't use for interactive tasks** — workers run autonomously
+
+---
+
+## CLI Fallback Reference
+
+For backward compatibility, shell scripts are also available:
+
+```bash
+# Spawn
+./scripts/spawn-worker.sh --prompt "..." --agent Executor --autopilot
+
+# Status
+./scripts/worker-status.sh --list
+./scripts/worker-status.sh <worker-id>
+
+# Cleanup
+./scripts/cleanup-worker.sh <worker-id> [--force]
+```
+
+CLI commands also available via `worker.js`:
+
+```bash
+$WORKER spawn --prompt "..." --agent Executor --autopilot
+$WORKER status [worker-id]
+$WORKER cleanup <worker-id> [--force]
+$WORKER cleanup-all [--force]
+```
+
+---
 
 ## Troubleshooting
 
 ### Worker shows "stopped" but worktree exists
 
-The process crashed or was killed externally. Check `output.log` for errors, then clean up:
-
+The process crashed or was killed. Check `output.log`, then clean up:
 ```bash
-./scripts/cleanup-worker.sh <worker-id> --force
-```
-
-### Worktree creation fails
-
-Ensure the worktree base directory exists and is writable:
-
-```bash
-mkdir -p ../worktrees
+$WORKER exec 'return sdk.cleanupWorker("<worker-id>", true)'
 ```
 
 ### Worker not making progress
-
-Check the output log:
 
 ```bash
 tail -f .copilot-workers/<worker-id>/output.log
 ```
 
-If stuck, the prompt may be ambiguous or the worker may need more context. Clean up and respawn with a clearer prompt.
-
-## Advanced Usage
-
-### Custom Worktree Location
-
-```bash
-./scripts/spawn-worker.sh \
-  --prompt "..." \
-  --worktree-base /tmp/copilot-workers
-```
-
-### Resume Worker Session
-
-Workers don't currently support resume. To continue work from a stopped worker:
-
-1. Review the worker's branch: `git checkout worker/<worker-id>`
-2. Check progress and manually continue, OR
-3. Spawn a new worker with updated prompt: `--prompt "continue from where worker X left off"`
-
-### Multi-Model Workflows
-
-Spawn multiple workers with different models for the same task, then compare results:
-
-```bash
-./scripts/spawn-worker.sh --prompt "..." --model claude-opus-4.6 --agent Executor
-./scripts/spawn-worker.sh --prompt "..." --model gpt-5.3-codex --agent Executor
-./scripts/spawn-worker.sh --prompt "..." --model gemini-3-pro-preview --agent Executor
-```
-
-Review each worker's branch to select the best implementation.
+If stuck, clean up and respawn with a clearer prompt.
 
 ---
 
 ## References
 
-- **CLI Flags:** `references/cli-flags.md` — Detailed Copilot CLI flag documentation
-- **Prompt Templates:** `references/prompt-templates.md` — Reusable prompt patterns for common scenarios
+- **CLI Flags:** `references/cli-flags.md` — Copilot CLI flag documentation
+- **Prompt Templates:** `references/prompt-templates.md` — Reusable prompt patterns

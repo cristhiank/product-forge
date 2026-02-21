@@ -1,0 +1,27 @@
+{
+  "name": "@devpartner/workers",
+  "version": "0.1.0",
+  "description": "Worker management for Copilot CLI - spawn, monitor, and cleanup isolated worker processes",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "bundle": "esbuild dist/skill-cli.js --bundle --platform=node --target=node20 --format=esm --outfile=scripts/worker.js --packages=external",
+    "prebundle": "npm run build",
+    "dev": "tsc --watch",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "commander": "^13.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "esbuild": "^0.27.3",
+    "typescript": "^5.7.2"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "license": "MIT"
+}

@@ -1,6 +1,10 @@
 # Worker state directories (created by spawn-worker.sh)
 .copilot-workers/
 
+# Build output
+dist/
+node_modules/
+
 # Temporary investigation files
 temp/
 

@@ -4,6 +4,22 @@
  * @packageDocumentation
  */
 
+// Main API
+export { Hub } from './hub.js';
+export { HubSDK } from './sdk.js';
+
+// SDK types
+export type {
+  SDKOptions,
+  FindingOptions,
+  SnippetOptions,
+  DecisionOptions,
+  RequestOptions,
+  ProgressOptions,
+  TrailOptions,
+  QueryOptions,
+} from './sdk.js';
+
 // Core types
 export type {
   Message,
@@ -25,3 +41,32 @@ export type {
 // Database utilities
 export { openDatabase } from './db/connection.js';
 export { initSchema } from './db/schema.js';
+
+// Core modules
+export {
+  postMessage,
+  replyToMessage,
+  updateMessage,
+  readMessages,
+  readThread,
+} from './core/messages.js';
+
+export {
+  createChannel,
+  listChannels,
+  ensureChannel,
+} from './core/channels.js';
+
+export { searchMessages } from './core/search.js';
+
+// Watch module
+export { watchMessages } from './core/watch.js';
+
+// Maintenance module
+export {
+  getStatus,
+  getStats,
+  exportMessages,
+  importMessages,
+  garbageCollect,
+} from './core/maintenance.js';
