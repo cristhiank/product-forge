@@ -156,22 +156,23 @@ The `hub gc` command removes old messages and runs `VACUUM` to compact. Alternat
 
 ### Database Location
 
-The hub database lives in the **main** working directory (not in worktrees):
+The hub database lives in the **git common directory** (shared by all worktrees):
 
 ```
 project/                          ← main directory
-├── .devpartner/
-│   └── hub.db                    ← shared by all workers
+├── .git/
+│   └── devpartner/
+│       └── hub.db                ← shared by all workers
 ├── src/
 └── ...
 
 ../worktree-B042/                 ← git worktree
-├── .devpartner/ → symlink to main
+├── .git                          ← file pointing to common git dir
 ├── src/
 └── ...
 ```
 
-Workers access the same `hub.db` via the symlink or an absolute path provided at spawn time.
+Workers access the same `hub.db` automatically — the CLI uses `git rev-parse --git-common-dir` to resolve the path.
 
 ## Error Recovery
 

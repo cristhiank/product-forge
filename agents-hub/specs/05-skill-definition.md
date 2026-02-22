@@ -19,7 +19,7 @@ description: >-
   DevPartner agent coordination. Use when you see: status update, finding,
   blocked, need help, share context, search board, check progress, post
   decision, coordinate, what did worker find, channel, hub.
-  ⛔ CRITICAL: Never read .devpartner/ files directly — always use the hub CLI.
+  ⛔ CRITICAL: Never read .git/devpartner/ files directly — always use the hub CLI.
 ---
 ```
 
@@ -46,12 +46,12 @@ The skill must trigger on these phrases (based on agents-board adoption failures
 The SKILL.md must include this section prominently:
 
 ```markdown
-⛔ CRITICAL: Never Browse .devpartner/ Directly
+⛔ CRITICAL: Never Browse .git/devpartner/ Directly
 
 WRONG:
-  cat .devpartner/hub.db
-  ls .devpartner/
-  sqlite3 .devpartner/hub.db "SELECT ..."
+  cat .git/devpartner/hub.db
+  ls .git/devpartner/
+  sqlite3 .git/devpartner/hub.db "SELECT ..."
 
 RIGHT:
   $HUB search "auth"

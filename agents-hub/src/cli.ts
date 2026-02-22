@@ -4,10 +4,61 @@
  */
 
 import { Command } from 'commander';
-import { readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { execSync } from 'node:child_process';
+import { dirname, join, resolve } from 'node:path';
 import { Hub } from './hub.js';
 import { HubSDK } from './sdk.js';
-import type { PostOptions, ReplyOptions, UpdateOptions, ReadOptions, SearchOptions, WatchOptions } from './core/types.js';
+import { detectHealth } from './core/reactor.js';
+import type { PostOptions, ReplyOptions, UpdateOptions, ReadOptions, SearchOptions, WatchOptions, RegisterWorkerOptions, WorkerStatus } from './core/types.js';
+
+/**
+ * Resolve the default database path using .git/devpartner/hub.db
+ * Uses git rev-parse --git-common-dir so all worktrees share the same DB.
+ * Falls back to .devpartner/hub.db if not inside a git repo.
+ */
+function resolveDefaultDbPath(): string {
+  try {
+    const gitCommonDir = execSync('git rev-parse --git-common-dir', {
+      encoding: 'utf8',
+      stdio: ['pipe', 'pipe', 'pipe'],
+    }).trim();
+    const dir = join(resolve(gitCommonDir), 'devpartner');
+    mkdirSync(dir, { recursive: true });
+    return join(dir, 'hub.db');
+  } catch {
+    return '.devpartner/hub.db';
+  }
+}
+
+/**
+ * Migrate legacy .devpartner/hub.db to new .git/devpartner/hub.db location.
+ * Moves db, wal, and shm files atomically and leaves a tombstone.
+ */
+function migrateIfNeeded(newDbPath: string): void {
+  try {
+    const topLevel = execSync('git rev-parse --show-toplevel', {
+      encoding: 'utf8',
+      stdio: ['pipe', 'pipe', 'pipe'],
+    }).trim();
+    const legacyDb = join(topLevel, '.devpartner', 'hub.db');
+
+    if (existsSync(legacyDb) && !existsSync(newDbPath)) {
+      mkdirSync(dirname(newDbPath), { recursive: true });
+      for (const ext of ['', '-wal', '-shm']) {
+        const src = legacyDb + ext;
+        if (existsSync(src)) renameSync(src, newDbPath + ext);
+      }
+      writeFileSync(
+        legacyDb + '.migrated',
+        `Migrated to ${newDbPath} on ${new Date().toISOString()}\n`,
+      );
+      console.error(`[hub] Migrated database to ${newDbPath}`);
+    }
+  } catch {
+    // Migration is best-effort
+  }
+}
 
 /**
  * Output JSON to stdout
@@ -53,8 +104,15 @@ export function runCli(): void {
     .name('hub')
     .description('Agents Hub CLI - Distributed communication for AI agents')
     .version('1.0.0')
-    .option('--db <path>', 'Database path', '.devpartner/hub.db')
-    .option('--pretty', 'Pretty-print JSON output', false);
+    .option('--db <path>', 'Database path (default: .git/devpartner/hub.db)')
+    .option('--pretty', 'Pretty-print JSON output', false)
+    .hook('preAction', () => {
+      if (!program.opts().db) {
+        const resolved = resolveDefaultDbPath();
+        migrateIfNeeded(resolved);
+        program.setOptionValue('db', resolved);
+      }
+    });
 
   // ============ init command ============
   program
@@ -518,6 +576,118 @@ export function runCli(): void {
           output(result, program.opts().pretty);
         }
         hub.close();
+      } catch (err) {
+        hub?.close();
+        handleError(err);
+      }
+    });
+
+  // ============ worker commands ============
+  const worker = program.command('worker').description('Worker management and observability');
+
+  worker
+    .command('register')
+    .description('Register a new worker')
+    .requiredOption('--id <id>', 'Worker ID')
+    .option('--channel <name>', 'Hub channel (default: #worker-{id})')
+    .option('--agent-type <type>', 'Agent type (e.g., scout, executor)')
+    .option('--agent-name <name>', 'Human-readable agent name')
+    .option('--worktree <path>', 'Path to worktree')
+    .option('--pid <n>', 'Process ID', parseInt)
+    .option('--metadata <json>', 'Metadata as JSON object')
+    .action((opts) => {
+      try {
+        const dbPath = program.opts().db;
+        const hub = new Hub(dbPath);
+        const regOpts: RegisterWorkerOptions = {
+          id: opts.id,
+          channel: opts.channel,
+          agentType: opts.agentType,
+          agentName: opts.agentName,
+          worktreePath: opts.worktree,
+          pid: opts.pid,
+        };
+        if (opts.metadata) {
+          regOpts.metadata = parseJson<Record<string, unknown>>(opts.metadata, 'metadata');
+        }
+        const result = hub.workerRegister(regOpts);
+        hub.close();
+        output(result, program.opts().pretty);
+      } catch (err) {
+        handleError(err);
+      }
+    });
+
+  worker
+    .command('list')
+    .description('List workers')
+    .option('--status <status>', 'Filter by status (active, completed, failed, lost)')
+    .action((opts) => {
+      try {
+        const dbPath = program.opts().db;
+        const hub = new Hub(dbPath);
+        const workers = hub.workerList(opts.status ? { status: opts.status as WorkerStatus } : undefined);
+        hub.close();
+        output({ workers }, program.opts().pretty);
+      } catch (err) {
+        handleError(err);
+      }
+    });
+
+  worker
+    .command('status')
+    .description('Get detailed worker status')
+    .argument('<id>', 'Worker ID')
+    .option('--sync', 'Sync events before showing status', true)
+    .action((id, opts) => {
+      try {
+        const dbPath = program.opts().db;
+        const hub = new Hub(dbPath);
+        if (opts.sync) hub.workerSync(id);
+        const w = hub.workerGet(id);
+        hub.close();
+        if (!w) throw new Error(`Worker not found: ${id}`);
+        output({ ...w, health: detectHealth(w.lastEventAt) }, program.opts().pretty);
+      } catch (err) {
+        handleError(err);
+      }
+    });
+
+  worker
+    .command('sync')
+    .description('Sync worker events from events.jsonl')
+    .option('--id <id>', 'Sync specific worker (default: sync all active)')
+    .action((opts) => {
+      try {
+        const dbPath = program.opts().db;
+        const hub = new Hub(dbPath);
+        if (opts.id) {
+          const result = hub.workerSync(opts.id);
+          hub.close();
+          if (!result) throw new Error(`Worker not found or has no events path: ${opts.id}`);
+          output(result, program.opts().pretty);
+        } else {
+          const results = hub.workerSyncAll();
+          hub.close();
+          output({ synced: results }, program.opts().pretty);
+        }
+      } catch (err) {
+        handleError(err);
+      }
+    });
+
+  // ============ serve command ============
+  program
+    .command('serve')
+    .description('Start real-time web dashboard for agent communications')
+    .option('--port <number>', 'Port to listen on', '3000')
+    .action(async (opts) => {
+      let hub: Hub | undefined;
+      try {
+        const dbPath = program.opts().db;
+        hub = new Hub(dbPath);
+        const { startServer } = await import('./serve/server.js');
+        await startServer({ port: parseInt(opts.port, 10), hub });
       } catch (err) {
         hub?.close();
         handleError(err);

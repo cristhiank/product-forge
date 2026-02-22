@@ -8,7 +8,7 @@ The hub provides a single CLI entry point: `hub.js`. All commands return JSON. T
 
 | Flag | Description | Default |
 |------|-------------|---------|
-| `--db <path>` | Path to SQLite database | `.devpartner/hub.db` |
+| `--db <path>` | Path to SQLite database | `.git/devpartner/hub.db` |
 | `--json` | Force JSON output (default) | `true` |
 | `--pretty` | Pretty-print JSON | `false` |
 
@@ -30,7 +30,7 @@ $HUB init [--mode single|multi] [--hub-id <uuid>]
 {
   "hub_id": "uuid",
   "mode": "single",
-  "db_path": ".devpartner/hub.db",
+  "db_path": ".git/devpartner/hub.db",
   "channels": ["#main"]
 }
 ```

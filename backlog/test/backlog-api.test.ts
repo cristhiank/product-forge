@@ -156,4 +156,68 @@ describe("backlog API", () => {
   //     await cleanup();
   //   }
   // });
+
+  test("brief returns composite briefing", async () => {
+    const { root, cleanup } = await makeTempBacklogRootFromFixture();
+    try {
+      const store = singleProjectStore(root);
+      const backlog = createBacklogAPI(store);
+
+      const brief = await backlog.brief();
+      expect(brief.health).toBeDefined();
+      expect(typeof brief.issues).toBe("number");
+      expect(Array.isArray(brief.wip)).toBe(true);
+      expect(Array.isArray(brief.next_unblocked)).toBe(true);
+      expect(Array.isArray(brief.next_blocked)).toBe(true);
+      // Fixture has 1 working item
+      expect(brief.wip.length).toBe(1);
+      // Fixture has items in next
+      expect(brief.next_unblocked.length + brief.next_blocked.length).toBeGreaterThan(0);
+    } finally {
+      await cleanup();
+    }
+  });
+
+  test("pick moves to working and returns full item", async () => {
+    const { root, cleanup } = await makeTempBacklogRootFromFixture();
+    try {
+      const store = singleProjectStore(root);
+      const backlog = createBacklogAPI(store);
+
+      const item = await backlog.pick({ id: "B-001" });
+      expect(item.folder).toBe("working");
+      expect(item.title).toMatch(/First Item/);
+      expect(item.body).toContain("**Status:** In Progress");
+    } finally {
+      await cleanup();
+    }
+  });
+
+  test("list --unblocked filters by resolved dependencies", async () => {
+    const { root, cleanup } = await makeTempBacklogRootFromFixture();
+    try {
+      const store = singleProjectStore(root);
+      const backlog = createBacklogAPI(store);
+
+      // Create items with dependencies
+      await backlog.create({ kind: "task", title: "Base task", priority: "high" });  // B-011
+      await backlog.create({
+        kind: "task", title: "Dependent task", priority: "medium",
+        depends_on: ["B-011"]
+      });  // B-012
+
+      // B-012 depends on B-011 which is in next — should be blocked
+      const unblocked = await backlog.list({ folder: "next", unblocked: true });
+      const ids = unblocked.map(i => i.id);
+      expect(ids).not.toContain("B-012");
+      expect(ids).toContain("B-011");
+
+      // Complete B-011, now B-012 should be unblocked
+      await backlog.complete({ id: "B-011" });
+      const unblocked2 = await backlog.list({ folder: "next", unblocked: true });
+      expect(unblocked2.map(i => i.id)).toContain("B-012");
+    } finally {
+      await cleanup();
+    }
+  });
 });

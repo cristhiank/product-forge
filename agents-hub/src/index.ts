@@ -36,6 +36,11 @@ export type {
   HubMeta,
   HubStatus,
   HubStats,
+  Worker,
+  WorkerStatus,
+  WorkerEvent,
+  RegisterWorkerOptions,
+  WorkerSyncResult,
 } from './core/types.js';
 
 // Database utilities
@@ -70,3 +75,21 @@ export {
   importMessages,
   garbageCollect,
 } from './core/maintenance.js';
+
+// Worker module
+export {
+  registerWorker,
+  getWorker,
+  listWorkers,
+  updateWorker,
+  removeWorker,
+  discoverSession,
+} from './core/workers.js';
+
+// Reactor module
+export {
+  readNewEvents,
+  processEvents,
+  detectHealth,
+  buildSyncResult,
+} from './core/reactor.js';

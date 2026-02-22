@@ -6,7 +6,8 @@
  */
 
 import { Hub } from './hub.js';
-import type { Message } from './core/types.js';
+import { detectHealth } from './core/reactor.js';
+import type { Message, Worker, WorkerStatus, RegisterWorkerOptions, WorkerSyncResult } from './core/types.js';
 
 export interface SDKOptions {
   /** Default channel for all operations (e.g., '#main', '#worker-B042') */
@@ -270,7 +271,10 @@ export class HubSDK {
     const meta: Record<string, unknown> = { marker, ...opts.metadata };
     if (opts.evidence) meta.evidence = opts.evidence;
 
-    const content = opts.details ? `${summary}\n\n${opts.details}` : summary;
+    const details = typeof opts.details === 'string'
+      ? opts.details
+      : opts.details ? JSON.stringify(opts.details, null, 2) : undefined;
+    const content = details ? `${summary}\n\n${details}` : summary;
 
     return this.hub.post({
       channel: this.ch(opts.channel),
@@ -332,6 +336,31 @@ export class HubSDK {
   /** Get hub status overview */
   status() {
     return this.hub.status();
+  }
+
+  // ========== Workers ==========
+
+  /** Register a worker and auto-discover its session */
+  registerWorker(opts: RegisterWorkerOptions): Worker {
+    return this.hub.workerRegister(opts);
+  }
+
+  /** Get detailed worker status including sync */
+  getWorkerStatus(id: string, sync = true): (Worker & { health?: string }) | null {
+    if (sync) this.hub.workerSync(id);
+    const worker = this.hub.workerGet(id);
+    if (!worker) return null;
+    return { ...worker, health: detectHealth(worker.lastEventAt) };
+  }
+
+  /** List all workers with optional status filter */
+  listWorkers(opts?: { status?: WorkerStatus }): Worker[] {
+    return this.hub.workerList(opts);
+  }
+
+  /** Sync all active workers and return results */
+  syncAll(): WorkerSyncResult[] {
+    return this.hub.workerSyncAll();
   }
 }
 

@@ -4,7 +4,7 @@ import { parseBacklogMarkdown } from "./markdown/parser.js";
 import { formatBacklogItemTemplate } from "./markdown/templates.js";
 import { validateBacklogItem } from "./markdown/validate.js";
 import type { MultiRootBacklogStore } from "./storage/multi-root-store.js";
-import type { BacklogHistoryEntry, BacklogItem, BacklogItemSummary, Folder, HygieneResult } from "./types.js";
+import type { BacklogHistoryEntry, BacklogItem, BacklogItemSummary, BriefResult, Folder, HygieneResult } from "./types.js";
 import { folderToStatus, isFolder } from "./types.js";
 
 function slugify(input: string): string {
@@ -102,12 +102,12 @@ export function createBacklogAPI(store: MultiRootBacklogStore) {
       return store.getProjects();
     },
 
-    list: async (opts?: { project?: string; folder?: Folder; limit?: number; offset?: number }): Promise<BacklogItemSummary[]> => {
+    list: async (opts?: { project?: string; folder?: Folder; limit?: number; offset?: number; unblocked?: boolean }): Promise<BacklogItemSummary[]> => {
       const folder = opts?.folder;
       if (folder && !isFolder(folder)) throw new Error(`Invalid folder: ${String(folder)}`);
 
       const items = await store.list(opts?.project, folder);
-      const mapped = items.map((i) => {
+      let mapped = items.map((i) => {
         const parsed = parseBacklogMarkdown(i.body);
         return {
           id: qualifyId(i.project, i.id),
@@ -123,6 +123,19 @@ export function createBacklogAPI(store: MultiRootBacklogStore) {
           related: parsed.related.length ? parsed.related : undefined,
         } satisfies BacklogItemSummary;
       });
+
+      // Filter to unblocked items (all deps in done/archive)
+      if (opts?.unblocked) {
+        const allItems = await store.list(opts?.project);
+        const doneIds = new Set(
+          allItems.filter(i => i.folder === "done" || i.folder === "archive")
+            .map(i => qualifyId(i.project, i.id))
+        );
+        mapped = mapped.filter(item => {
+          if (!item.depends_on || item.depends_on.length === 0) return true;
+          return item.depends_on.every(dep => doneIds.has(dep));
+        });
+      }
 
       const offset = opts?.offset ?? 0;
       const limit = opts?.limit ?? mapped.length;
@@ -351,6 +364,35 @@ export function createBacklogAPI(store: MultiRootBacklogStore) {
           related: parsed.related.length ? parsed.related : undefined,
         };
       });
+    },
+
+    brief: async (opts?: { project?: string }): Promise<BriefResult> => {
+      const hygieneResult = await api.hygiene({ project: opts?.project });
+      const working = await api.list({ project: opts?.project, folder: "working" });
+      const next = await api.list({ project: opts?.project, folder: "next", limit: 10 });
+      const statsResult = await api.stats({ project: opts?.project });
+
+      // Resolve dependency status for next items
+      const allItems = await api.list({ project: opts?.project });
+      const doneIds = new Set(allItems.filter(i => i.folder === "done" || i.folder === "archive").map(i => i.id));
+      const unblocked = next.filter(item => {
+        if (!item.depends_on || item.depends_on.length === 0) return true;
+        return item.depends_on.every(dep => doneIds.has(dep));
+      });
+
+      return {
+        health: hygieneResult.health_score,
+        issues: hygieneResult.stale_in_next.length + hygieneResult.stuck_in_working.length + hygieneResult.old_in_done.length + hygieneResult.status_folder_mismatches.length,
+        wip: working.map(i => ({ id: i.id, title: i.title, priority: i.priority })),
+        next_unblocked: unblocked.map(i => ({ id: i.id, title: i.title, priority: i.priority })),
+        next_blocked: next.filter(i => !unblocked.includes(i)).map(i => ({ id: i.id, title: i.title, priority: i.priority, blocked_by: i.depends_on })),
+        stats: statsResult,
+      };
+    },
+
+    pick: async (req: { id: string }): Promise<BacklogItem> => {
+      await api.move({ id: req.id, to: "working" });
+      return api.get({ id: req.id });
     },
 
     hygiene: async (opts?: { project?: string; staleAfterDays?: number; doneAfterDays?: number; fix?: boolean }): Promise<HygieneResult> => {

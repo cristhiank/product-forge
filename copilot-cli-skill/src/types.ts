@@ -34,7 +34,7 @@ export interface WorkerInfo {
   branchName: string;
   stateDir: string;
   outputLog: string;
-  status: 'running' | 'stopped' | 'unknown';
+  status: 'running' | 'completed' | 'failed' | 'unknown';
 }
 
 /** Detailed worker status */
@@ -46,6 +46,10 @@ export interface WorkerStatus extends WorkerInfo {
   worktreeExists: boolean;
   logSizeBytes: number;
   logLines: number;
+  exitCode: number | null;
+  completedAt: string | null;
+  logTail: string[];
+  errorSummary: string | null;
 }
 
 /** Result of cleaning up a worker */

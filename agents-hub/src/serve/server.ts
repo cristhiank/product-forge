@@ -1,0 +1,265 @@
+/**
+ * Lightweight HTTP server for the agents-hub dashboard.
+ * Uses node:http (zero deps), SSE for real-time message streaming.
+ */
+
+import * as http from 'node:http';
+import type { Hub } from '../hub.js';
+import type { ChannelInfo } from '../core/types.js';
+import { CSS } from './styles.js';
+import {
+  layout,
+  timelinePage,
+  statusPage,
+  searchPage,
+  threadView,
+  notFoundPage,
+} from './renderer.js';
+
+// ── SSE clients ──────────────────────────────────────────────
+
+interface SseClient {
+  res: http.ServerResponse;
+  channel?: string; // undefined = all channels
+}
+
+const sseClients = new Map<http.ServerResponse, SseClient>();
+
+/**
+ * Broadcast a new message to connected SSE clients (filtered by channel)
+ */
+function broadcastMessage(msg: unknown): void {
+  const msgObj = msg as Record<string, unknown>;
+  const data = JSON.stringify(msg);
+  for (const [res, client] of Array.from(sseClients)) {
+    if (client.channel && msgObj.channel && msgObj.channel !== client.channel) continue;
+    try {
+      res.write(`event: message\ndata: ${data}\n\n`);
+    } catch {
+      sseClients.delete(res);
+    }
+  }
+}
+
+// ── Route helpers ────────────────────────────────────────────
+
+function sendHtml(res: http.ServerResponse, html: string, status = 200): void {
+  res.writeHead(status, { 'Content-Type': 'text/html; charset=utf-8' });
+  res.end(html);
+}
+
+function sendJson(res: http.ServerResponse, data: unknown, status = 200): void {
+  res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' });
+  res.end(JSON.stringify(data));
+}
+
+function sendCss(res: http.ServerResponse): void {
+  res.writeHead(200, {
+    'Content-Type': 'text/css; charset=utf-8',
+    'Cache-Control': 'public, max-age=60',
+  });
+  res.end(CSS);
+}
+
+function parseUrl(url: string): { pathname: string; query: URLSearchParams } {
+  const idx = url.indexOf('?');
+  const pathname = idx >= 0 ? url.slice(0, idx) : url;
+  const query = new URLSearchParams(idx >= 0 ? url.slice(idx + 1) : '');
+  return { pathname, query };
+}
+
+// ── Background watcher ───────────────────────────────────────
+
+/**
+ * Start background task to watch for new messages and broadcast via SSE
+ */
+function startMessageWatcher(hub: Hub): void {
+  (async () => {
+    try {
+      // Watch all channels, no timeout (watch forever)
+      for await (const msg of hub.watch({ timeout: 0 })) {
+        broadcastMessage(msg);
+      }
+    } catch (err) {
+      console.error('Message watcher error:', err);
+      // Restart watcher after brief delay
+      setTimeout(() => startMessageWatcher(hub), 5000);
+    }
+  })();
+}
+
+// ── Server ───────────────────────────────────────────────────
+
+export interface ServeOptions {
+  port: number;
+  hub: Hub;
+}
+
+export async function startServer(opts: ServeOptions): Promise<void> {
+  const { hub, port } = opts;
+
+  // Start watching for new messages in background
+  startMessageWatcher(hub);
+
+  const server = http.createServer(async (req, res) => {
+    try {
+      const { pathname, query } = parseUrl(req.url || '/');
+
+      // ── Static ──
+      if (pathname === '/styles.css') return sendCss(res);
+
+      // ── SSE endpoint ──
+      if (pathname === '/events') {
+        res.writeHead(200, {
+          'Content-Type': 'text/event-stream',
+          'Cache-Control': 'no-cache',
+          Connection: 'keep-alive',
+        });
+        res.write(':\n\n'); // comment to keep connection open
+        const channelParam = query.get('channel');
+        const sseChannel = channelParam ? `#${channelParam}` : undefined;
+        sseClients.set(res, { res, channel: sseChannel });
+        req.on('close', () => sseClients.delete(res));
+        return;
+      }
+
+      // ── JSON API for initial messages ──
+      if (pathname === '/api/messages') {
+        const channel = query.get('channel') || undefined;
+        const limit = parseInt(query.get('limit') || '50', 10);
+        const offset = parseInt(query.get('offset') || '0', 10);
+
+        const result = hub.read({
+          channel: channel ? `#${channel}` : undefined,
+          limit,
+          offset,
+        });
+
+        return sendJson(res, result);
+      }
+
+      // Refresh channel list for each request
+      const currentChannels = hub.channelList(true) as ChannelInfo[];
+
+      // ── Timeline (root) ──
+      if (pathname === '/') {
+        const messages = hub.read({ limit: 100 }).messages;
+        const html = layout({
+          title: 'Timeline',
+          channels: currentChannels,
+          activePage: 'timeline',
+          body: timelinePage(messages),
+        });
+        return sendHtml(res, html);
+      }
+
+      // ── Timeline per channel ──
+      const channelMatch = pathname.match(/^\/channel\/(.+)$/);
+      if (channelMatch) {
+        const channelName = decodeURIComponent(channelMatch[1]);
+        const fullChannelName = `#${channelName}`;
+
+        const messages = hub.read({ channel: fullChannelName, limit: 100 }).messages;
+        const html = layout({
+          title: fullChannelName,
+          channels: currentChannels,
+          currentChannel: fullChannelName,
+          activePage: 'timeline',
+          body: timelinePage(messages, channelName),
+        });
+        return sendHtml(res, html);
+      }
+
+      // ── Status page ──
+      if (pathname === '/status') {
+        const status = hub.status();
+        const html = layout({
+          title: 'Status',
+          channels: currentChannels,
+          activePage: 'status',
+          body: statusPage(status),
+        });
+        return sendHtml(res, html);
+      }
+
+      // ── Search ──
+      if (pathname === '/search') {
+        const q = query.get('q') || '';
+        const results = q ? hub.search(q, { limit: 50 }) : [];
+        const html = layout({
+          title: q ? `Search: ${q}` : 'Search',
+          channels: currentChannels,
+          activePage: 'search',
+          body: searchPage(results, q),
+        });
+        return sendHtml(res, html);
+      }
+
+      // ── Thread view ──
+      const threadMatch = pathname.match(/^\/thread\/(.+)$/);
+      if (threadMatch) {
+        const messageId = decodeURIComponent(threadMatch[1]);
+        try {
+          const thread = hub.readThread(messageId);
+          if (thread.length === 0) {
+            return sendHtml(
+              res,
+              layout({
+                title: 'Not Found',
+                channels: currentChannels,
+                activePage: 'thread',
+                body: notFoundPage(),
+              }),
+              404
+            );
+          }
+          const parent = thread[0];
+          const replies = thread.slice(1);
+          const html = layout({
+            title: 'Thread',
+            channels: currentChannels,
+            activePage: 'thread',
+            body: threadView(parent, replies),
+          });
+          return sendHtml(res, html);
+        } catch {
+          return sendHtml(
+            res,
+            layout({
+              title: 'Not Found',
+              channels: currentChannels,
+              activePage: 'thread',
+              body: notFoundPage(),
+            }),
+            404
+          );
+        }
+      }
+
+      // ── 404 ──
+      sendHtml(
+        res,
+        layout({
+          title: 'Not Found',
+          channels: currentChannels,
+          activePage: 'timeline',
+          body: notFoundPage(),
+        }),
+        404
+      );
+    } catch (err) {
+      console.error('Request error:', err);
+      res.writeHead(500, { 'Content-Type': 'text/plain' });
+      res.end('Internal Server Error');
+    }
+  });
+
+  server.listen(port, () => {
+    const status = hub.status();
+    console.log(`\n🚀 Agents Hub dashboard running at http://localhost:${port}`);
+    console.log(`   Hub ID: ${status.hubId}`);
+    console.log(`   Mode: ${status.mode}`);
+    console.log(`   Channels: ${Object.keys(status.channels).join(', ')}`);
+    console.log(`   Total messages: ${status.totalMessages}\n`);
+  });
+}

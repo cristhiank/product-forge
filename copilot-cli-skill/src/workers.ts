@@ -6,7 +6,8 @@
 
 import { execSync, spawn } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync, rmSync, readdirSync, statSync, createWriteStream } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { join, resolve, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
 import type { SpawnOptions, WorkerInfo, WorkerStatus, CleanupResult, WorkerMeta } from './types.js';
 import { applyContext } from './context-providers.js';
@@ -73,13 +74,14 @@ export class WorkerManager {
     if (opts.autopilot) args.push('--autopilot');
     args.push('-p', augmentedPrompt);
 
-    // Spawn detached copilot process
+    // Spawn detached copilot process via wrapper script
     const outputLog = join(stateDir, 'output.log');
-    const child = spawn('copilot', args, {
+    const wrapperPath = join(dirname(fileURLToPath(import.meta.url)), 'worker-wrapper.sh');
+    const child = spawn(wrapperPath, args, {
       cwd: worktreePath,
       detached: true,
       stdio: ['ignore', 'pipe', 'pipe'],
-      env: { ...process.env, ...contextEnv },
+      env: { ...process.env, ...contextEnv, WORKER_STATE_DIR: stateDir },
     });
 
     // Redirect stdout+stderr to log file
@@ -135,24 +137,68 @@ export class WorkerManager {
 
     // Check PID
     let pid = 0;
-    let status: 'running' | 'stopped' | 'unknown' = 'unknown';
+    let status: 'running' | 'completed' | 'failed' | 'unknown' = 'unknown';
     const pidPath = join(stateDir, 'worker.pid');
     if (existsSync(pidPath)) {
       pid = parseInt(readFileSync(pidPath, 'utf-8').trim(), 10);
-      status = isProcessRunning(pid) ? 'running' : 'stopped';
+      const isRunning = isProcessRunning(pid);
+      
+      if (isRunning) {
+        status = 'running';
+      } else {
+        // Process not running, default to unknown (will check exit.json below)
+        status = 'unknown';
+      }
+    }
+
+    // Read exit.json if process is not running
+    let exitCode: number | null = null;
+    let completedAt: string | null = null;
+    let logTail: string[] = [];
+    let errorSummary: string | null = null;
+
+    if (status !== 'running') {
+      const exitPath = join(stateDir, 'exit.json');
+      if (existsSync(exitPath)) {
+        try {
+          const exitData = JSON.parse(readFileSync(exitPath, 'utf-8'));
+          exitCode = exitData.exitCode ?? null;
+          completedAt = exitData.completedAt ?? null;
+          
+          // Set status based on exit code
+          if (exitCode === 0) {
+            status = 'completed';
+          } else if (exitCode !== null) {
+            status = 'failed';
+          }
+        } catch {
+          // Invalid exit.json, keep status as 'unknown'
+        }
+      }
     }
 
     // Check worktree
     const worktreeExists = existsSync(meta.worktree_path);
 
-    // Check log
+    // Check log and read tail
     const logPath = join(stateDir, 'output.log');
     let logSizeBytes = 0;
     let logLines = 0;
     if (existsSync(logPath)) {
       const logStat = statSync(logPath);
       logSizeBytes = logStat.size;
-      logLines = readFileSync(logPath, 'utf-8').split('\n').length;
+      const logContent = readFileSync(logPath, 'utf-8');
+      const allLines = logContent.split('\n');
+      logLines = allLines.length;
+      
+      // Get last 20 non-empty lines
+      const nonEmptyLines = allLines.filter(l => l.trim().length > 0);
+      logTail = nonEmptyLines.slice(-20);
+      
+      // If failed, get error summary (last non-empty line)
+      if (status === 'failed' && logTail.length > 0) {
+        errorSummary = logTail[logTail.length - 1];
+      }
     }
 
     return {
@@ -170,15 +216,19 @@ export class WorkerManager {
       worktreeExists,
       logSizeBytes,
       logLines,
+      exitCode,
+      completedAt,
+      logTail,
+      errorSummary,
     };
   }
 
   /** List all workers with basic info */
-  listWorkers(): Array<{ workerId: string; pid: number; status: 'running' | 'stopped' | 'unknown' }> {
+  listWorkers(): Array<{ workerId: string; pid: number; status: 'running' | 'completed' | 'failed' | 'unknown' }> {
     if (!existsSync(this.workersDir)) return [];
 
     const entries = readdirSync(this.workersDir, { withFileTypes: true });
-    const workers: Array<{ workerId: string; pid: number; status: 'running' | 'stopped' | 'unknown' }> = [];
+    const workers: Array<{ workerId: string; pid: number; status: 'running' | 'completed' | 'failed' | 'unknown' }> = [];
 
     for (const entry of entries) {
       if (!entry.isDirectory()) continue;
@@ -186,11 +236,32 @@ export class WorkerManager {
       const pidPath = join(this.workersDir, workerId, 'worker.pid');
 
       let pid = 0;
-      let status: 'running' | 'stopped' | 'unknown' = 'unknown';
+      let status: 'running' | 'completed' | 'failed' | 'unknown' = 'unknown';
 
       if (existsSync(pidPath)) {
         pid = parseInt(readFileSync(pidPath, 'utf-8').trim(), 10);
-        status = isProcessRunning(pid) ? 'running' : 'stopped';
+        const isRunning = isProcessRunning(pid);
+        
+        if (isRunning) {
+          status = 'running';
+        } else {
+          // Process stopped, check for exit.json
+          const exitPath = join(this.workersDir, workerId, 'exit.json');
+          if (existsSync(exitPath)) {
+            try {
+              const exitData = JSON.parse(readFileSync(exitPath, 'utf-8'));
+              const exitCode = exitData.exitCode ?? null;
+              if (exitCode === 0) {
+                status = 'completed';
+              } else if (exitCode !== null) {
+                status = 'failed';
+              }
+            } catch {
+              // Invalid exit.json
+              status = 'unknown';
+            }
+          }
+        }
       }
 
       workers.push({ workerId, pid, status });

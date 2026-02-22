@@ -25,6 +25,18 @@ import {
   importMessages,
   garbageCollect,
 } from './core/maintenance.js';
+import {
+  registerWorker,
+  getWorker,
+  listWorkers,
+  updateWorker,
+  removeWorker,
+} from './core/workers.js';
+import {
+  readNewEvents,
+  processEvents,
+  buildSyncResult,
+} from './core/reactor.js';
 import { generateId } from './utils/ids.js';
 import { now } from './utils/time.js';
 import type {
@@ -40,6 +52,10 @@ import type {
   WatchOptions,
   HubStatus,
   HubStats,
+  Worker,
+  WorkerStatus,
+  RegisterWorkerOptions,
+  WorkerSyncResult,
 } from './core/types.js';
 
 /**
@@ -257,6 +273,94 @@ export class Hub {
    */
   stats(): HubStats {
     return getStats(this.db, this.dbPath);
+  }
+
+  // ============ Worker Methods ============
+
+  /**
+   * Register a new worker
+   */
+  workerRegister(opts: RegisterWorkerOptions): Worker {
+    return registerWorker(this.db, opts);
+  }
+
+  /**
+   * Get a worker by ID
+   */
+  workerGet(id: string): Worker | null {
+    return getWorker(this.db, id);
+  }
+
+  /**
+   * List workers with optional status filter
+   */
+  workerList(opts?: { status?: WorkerStatus }): Worker[] {
+    return listWorkers(this.db, opts);
+  }
+
+  /**
+   * Sync a worker's events — reads new events from events.jsonl, updates counters and status
+   */
+  workerSync(id: string): WorkerSyncResult | null {
+    const worker = getWorker(this.db, id);
+    if (!worker) return null;
+    if (!worker.eventsPath) return null;
+
+    const { events, newOffset } = readNewEvents(worker.eventsPath, worker.eventsOffset);
+    if (events.length === 0) return buildSyncResult(id, events, processEvents([]), worker.status);
+
+    const processed = processEvents(events);
+    const result = buildSyncResult(id, events, processed, worker.status);
+
+    // Update worker state
+    const updates: Partial<{
+      eventsOffset: number;
+      toolCalls: number;
+      turns: number;
+      errors: number;
+      lastEventAt: string;
+      lastEventType: string;
+      status: WorkerStatus;
+      exitCode: number;
+      completedAt: string;
+    }> = {
+      eventsOffset: newOffset,
+      toolCalls: worker.toolCalls + processed.toolCalls,
+      turns: worker.turns + processed.turns,
+      errors: worker.errors + processed.errors,
+    };
+
+    if (processed.lastEventAt) updates.lastEventAt = processed.lastEventAt;
+    if (processed.lastEventType) updates.lastEventType = processed.lastEventType;
+
+    if (processed.terminalStatus) {
+      updates.status = processed.terminalStatus;
+      if (processed.exitCode !== null && processed.exitCode !== undefined) {
+        updates.exitCode = processed.exitCode;
+      }
+      if (processed.lastEventAt) {
+        updates.completedAt = processed.lastEventAt;
+      }
+    }
+
+    updateWorker(this.db, id, updates);
+
+    return result;
+  }
+
+  /**
+   * Sync all active workers
+   */
+  workerSyncAll(): WorkerSyncResult[] {
+    const workers = listWorkers(this.db, { status: 'active' });
+    return workers.map(w => this.workerSync(w.id)).filter((r): r is WorkerSyncResult => r !== null);
+  }
+
+  /**
+   * Remove a worker
+   */
+  workerRemove(id: string): boolean {
+    return removeWorker(this.db, id);
   }
 
   /**

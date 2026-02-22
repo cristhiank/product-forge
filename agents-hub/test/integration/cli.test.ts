@@ -11,7 +11,7 @@ import { mkdtempSync, rmSync } from 'fs';
 describe('CLI integration', () => {
   let tempDir: string;
   let dbPath: string;
-  const cliPath = join(process.cwd(), 'scripts/hub.js');
+  const cliPath = join(process.cwd(), 'scripts/index.js');
 
   beforeEach(() => {
     tempDir = mkdtempSync(join(tmpdir(), 'hub-cli-test-'));

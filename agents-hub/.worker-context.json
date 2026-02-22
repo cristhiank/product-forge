@@ -1,18 +1,11 @@
 {
   "provider": "agents-hub",
-  "version": "1.0",
+  "version": "1.1",
   "context": {
-    "symlinks": [
-      {
-        "source": "{{repoRoot}}/.devpartner",
-        "target": ".devpartner"
-      }
-    ],
-    "env": {
-      "HUB_DB_PATH": ".devpartner/hub.db"
-    },
+    "symlinks": [],
+    "env": {},
     "prompt_sections": {
-      "hub_communication": "## Hub Communication\n\nThe agents-hub skill is available for inter-agent coordination. The hub database is symlinked at `.devpartner/hub.db`. Use `hub exec` commands to post findings, search context, and coordinate with other agents."
+      "hub_communication": "## Hub Communication\n\nLoad the agents-hub skill for inter-agent coordination. The hub database is stored in `.git/devpartner/hub.db` (shared across worktrees). Use `hub exec` commands to post findings, search context, and coordinate with other agents."
     }
   }
 }

@@ -69,7 +69,7 @@ export class WorkerSDK {
     const results: CleanupResult[] = [];
 
     for (const w of workers) {
-      if (w.status === 'stopped' || force) {
+      if (w.status !== 'running' || force) {
         try {
           results.push(this.manager.cleanup(w.workerId, force));
         } catch {

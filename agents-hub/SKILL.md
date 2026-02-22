@@ -8,19 +8,27 @@ description: >-
   DevPartner agent coordination. Use when you see: status update, finding,
   blocked, need help, share context, search board, check progress, post
   decision, coordinate, what did worker find, channel, hub.
-  ⛔ CRITICAL: Never read .devpartner/ files directly — always use the hub CLI.
+  ⛔ CRITICAL: Never read .git/devpartner/ files directly — always use the hub CLI.
 ---
 
 # agents-hub
 
 A lightweight messaging hub for multi-agent coordination in DevPartner workflows. Provides channels, full-text search, request/response threading, and real-time watching for agent-to-agent communication.
 
+## First Actions
+
+When this skill loads, do these immediately:
+
+1. **Check hub status** — `$HUB exec 'return sdk.status()'` — see if a hub exists and what's been posted
+2. **Search for prior context** — `$HUB exec 'return sdk.search("<your-topic>")'` — find what other agents already discovered
+3. **Post your arrival** — `$HUB exec --author <role> 'return sdk.postProgress(0, 1, "Starting work on <task>")'`
+
 ## Quick Reference — SDK (Preferred)
 
 Use `hub exec` with SDK helpers. The `sdk` and `hub` objects are pre-loaded.
 
 ```bash
-HUB="node <skill-dir>/scripts/hub.js"
+HUB="node <skill-dir>/scripts/index.js"
 
 # Post a finding
 $HUB exec --channel '#main' --author scout \
@@ -55,13 +63,25 @@ The `--channel` and `--author` flags set defaults so you don't repeat them in ev
 
 ---
 
-## ⛔ CRITICAL: Never Browse .devpartner/ Directly
+## ⚡ Communication Rules (Mandatory)
+
+1. **Post progress after every meaningful step.** Don't work silently — your channel is your heartbeat.
+2. **Channel routing:**
+   - Single-worker → `#main`
+   - Multi-worker → `#worker-{id}` for work, `#general` for blockers/completions
+3. **Post immediately when:** you find something (finding), you're blocked (request), you finish a step (progress), or you make a decision (decision).
+4. **Minimum cadence:** At least 1 status message per 3 tool calls. If you've done 3+ tool calls with no hub post, stop and post a progress update.
+5. **Never go dark.** Other agents and the orchestrator monitor your channel. Silence = assumed stuck.
+
+---
+
+## ⛔ CRITICAL: Never Browse .git/devpartner/ Directly
 
 **WRONG:**
 ```bash
-cat .devpartner/hub.db
-ls .devpartner/
-sqlite3 .devpartner/hub.db "SELECT ..."
+cat .git/devpartner/hub.db
+ls .git/devpartner/
+sqlite3 .git/devpartner/hub.db "SELECT ..."
 ```
 
 **RIGHT:**
@@ -123,20 +143,16 @@ The hub database is managed by the CLI. Direct file access bypasses indexing, lo
 | `sdk.search(query, opts?)` | Full-text search. opts: `{ channel?, tags?, limit?, since? }` |
 | `sdk.status()` | Hub status overview |
 
-### Low-Level Hub Access
-
-The `hub` object is also in scope for operations not covered by SDK:
+### Worker Observability
 
 | Method | Description |
 |--------|-------------|
-| `hub.post(opts)` | Raw post: `{ channel, type, author, content, tags?, metadata? }` |
-| `hub.reply(threadId, opts)` | Raw reply: `{ author, content, tags?, metadata? }` |
-| `hub.read(opts?)` | Read with filters: `{ channel?, type?, author?, tags?, since?, limit? }` |
-| `hub.search(query, opts?)` | FTS5 search |
-| `hub.readThread(messageId)` | Full thread |
-| `hub.update(id, opts)` | Update message |
-| `hub.channelCreate(name, opts?)` | Create channel |
-| `hub.channelList(includeStats?)` | List channels |
+| `sdk.registerWorker(opts)` | Register worker. opts: `{ id, channel?, agentType?, agentName?, worktreePath?, pid? }` |
+| `sdk.getWorkerStatus(id, sync?)` | Get worker status + health. sync=true (default) reads latest events first |
+| `sdk.listWorkers(opts?)` | List workers. opts: `{ status?: "active"\|"completed"\|"failed"\|"lost" }` |
+| `sdk.syncAll()` | Sync all active workers — reads events.jsonl, updates counters and status |
+
+> For low-level `hub.*` methods (raw post/reply/read/search/thread/channel ops), see `references/low-level-api.md`.
 
 ---
 
@@ -145,11 +161,35 @@ The `hub` object is also in scope for operations not covered by SDK:
 ### Single-Worker Mode (default)
 - One `#main` channel
 - All agents (Scout, Creative, Planner, Executor, Verifier) share one channel
+- Post **all** findings, progress, decisions, and trails to `#main`
 
 ### Multi-Worker Mode
-- `#general` for cross-worker announcements
+- `#general` for cross-worker announcements, completions, and blockers
 - `#worker-{item-id}` per parallel worker (e.g., `#worker-B042`, `#worker-B043`)
 - Super-Orchestrator monitors all channels
+
+**Channel routing in multi-worker mode:**
+
+| What | Where | Example |
+|------|-------|---------|
+| Findings, snippets | Your `#worker-{id}` channel | Scout posts discovery to `#worker-B042` |
+| Progress updates | Your `#worker-{id}` channel | Executor posts "step 2/4 done" |
+| Blockers / help requests | Your `#worker-{id}` + `#general` | Executor blocked → posts to both |
+| Completion | `#general` | Worker done → announce to all |
+| Cross-worker questions | `#general` | "Has anyone changed SharedTypes?" |
+
+### What to Post (and When)
+
+| Trigger | Post Type | Example |
+|---------|-----------|---------|
+| Found something relevant | `sdk.postFinding(...)` | "Auth uses bcrypt, src/auth.ts:45" |
+| Cached code for reference | `sdk.postSnippet(...)` | Code block with path |
+| Completed a plan step | `sdk.postProgress(step, total, ...)` | "Step 2/4: POST endpoint done" |
+| Blocked / need input | `sdk.requestHelp(...)` | "Type mismatch, need guidance" |
+| Made a design choice | `sdk.proposeDecision(...)` | "Using approach D-1" |
+| Finished a milestone | `sdk.postCheckpoint(...)` | "3/4 steps complete, build passing" |
+| Task fully complete | `sdk.logTrail(...)` | "[IMPL] Feature implemented" |
+| Every 3+ tool calls with no post | `sdk.postProgress(...)` | "Still working on X, exploring Y" |
 
 ```bash
 # Initialize multi-worker hub
@@ -181,80 +221,102 @@ $HUB exec 'hub.channelCreate("#worker-B042", { workerId: "B042" })'
 
 ---
 
-## Common Workflows
+## Error Handling
 
-### 1. Post a Finding
+All `hub exec` commands return JSON. On failure, exit code is non-zero:
+
 ```bash
-$HUB exec --channel '#main' --author scout \
-  'return sdk.postFinding("Auth uses bcrypt for password hashing", {
-    tags: ["auth", "security"],
-    path: "src/auth.ts",
-    lines: [45, 60]
-  })'
-```
+# Check for errors
+result=$($HUB exec 'return sdk.postFinding("test")'); echo $?
+# 0 = success, non-zero = failure
 
-### 2. Search for Context
-```bash
-# Full-text search
-$HUB exec --channel '#main' 'return sdk.search("auth bcrypt")'
-
-# Search specific channel
-$HUB exec 'return sdk.search("auth", { channel: "#worker-B042" })'
-```
-
-### 3. Request Help When Blocked
-```bash
-$HUB exec --channel '#worker-B042' --author executor \
-  'return sdk.requestHelp("Blocked: SharedTypes.AuthResponse type mismatch", "blocker", {
-    target: "super-orchestrator"
-  })'
-```
-
-### 4. Resolve a Request
-```bash
-$HUB exec --author orchestrator \
-  'return sdk.resolveRequest("<thread-id>", "Worker B043 updated SharedTypes in commit abc123. Pull latest.")'
-```
-
-### 5. Log Progress and Trails
-```bash
-# Progress update
-$HUB exec --channel '#main' --author executor \
-  'return sdk.postProgress(3, 4, "Implemented token generation, POST and GET endpoints")'
-
-# Trail entry
-$HUB exec --channel '#main' --author executor \
-  'return sdk.logTrail("[IMPL]", "Implemented magic link auth", {
-    details: "Created token generator + endpoints",
-    evidence: ["src/auth/magic-token.ts", "src/routes/auth.ts"]
-  })'
-```
-
-### 6. Decision Workflow
-```bash
-# Propose
-$HUB exec --channel '#main' --author creative \
-  'return sdk.proposeDecision("Use email magic link with 15-min token expiration", {
-    approachId: "D-1",
-    tags: ["auth", "magic-link"]
-  })'
-
-# Approve (using the returned message id)
-$HUB exec --author orchestrator \
-  'return sdk.approveDecision("<thread-id>", "Approved: proceed with D-1")'
+# Common errors:
+# - "Hub not initialized" → Run from repo root, or check .git/devpartner/ exists
+# - "Channel not found" → Create it first: hub.channelCreate("#worker-X")
+# - "Database locked" → Another process is writing; retry after 1 second
 ```
 
 ---
 
 ## Worktree Usage (Parallel Workers)
 
-When workers run in git worktrees, they need access to the shared hub database. After spawning a worker (via the `copilot-cli` skill), symlink the hub database into the worktree:
+When workers run in git worktrees, they automatically share the hub database. The CLI uses `git rev-parse --git-common-dir` to locate the database at `.git/devpartner/hub.db` in the common git directory. All worktrees resolve to the same location — no symlinks or special configuration needed.
+
+**Legacy migration:** If a `.devpartner/hub.db` exists in the working directory, the CLI auto-migrates it to `.git/devpartner/hub.db` on first run.
+
+---
+
+## Worker Observability (Reactive Hub)
+
+The hub can track worker processes deterministically by reading their Copilot CLI session events. This provides guaranteed visibility even when workers don't post to the hub voluntarily.
+
+### How It Works
+
+1. **Register** — After spawning a worker, register it with the hub
+2. **Auto-discover** — The hub finds the worker's `events.jsonl` (Copilot's structured session log)
+3. **Sync** — Read new events, update tool call/turn/error counts, detect failures
+4. **Health** — Detect stale/lost workers based on activity timestamps
+
+### Quick Start
 
 ```bash
-ln -s "$(pwd)/.devpartner" "<worktree_path>/.devpartner"
+# Register a worker after spawning it
+$HUB worker register --id abc123 --agent-type executor --agent-name "API worker" --worktree /path/to/worktree --pid 12345
+
+# Sync all active workers (reads events.jsonl, updates counters)
+$HUB worker sync
+
+# List workers with status
+$HUB worker list
+$HUB worker list --status active
+
+# Get detailed worker status (auto-syncs first)
+$HUB worker status abc123
 ```
 
-Workers then use `--db` implicitly (the default `.devpartner/hub.db` path resolves via the symlink). No special configuration is needed — just ensure the symlink exists before the worker starts posting.
+### Worker Lifecycle
+
+| Status | Meaning |
+|--------|---------|
+| `active` | Worker is running (or recently registered) |
+| `completed` | Worker finished successfully |
+| `failed` | Worker encountered a session error or was aborted |
+| `lost` | Worker has been inactive beyond the health threshold |
+
+### What Gets Tracked
+
+The reactor reads structured events from Copilot CLI's `events.jsonl`:
+
+| Event | What It Gives |
+|-------|---------------|
+| `tool.execution_complete` | Tool call count, tool errors |
+| `assistant.turn_end` | Turn count (activity pulse) |
+| `session.error` | Error count, failure detection with message |
+| `abort` | Abort detection (user or system) |
+| `subagent.started/completed` | Subagent delegation tracking |
+| `skill.invoked` | Which skills the worker loaded |
+| `session.start` | Model selection, session context |
+
+### SDK Usage
+
+```bash
+# Register + sync in one call
+$HUB exec --channel '#general' --author orchestrator '
+  const w = sdk.registerWorker({ id: "abc123", agentType: "executor", agentName: "API worker" });
+  return w;
+'
+
+# Sync all and check for failures
+$HUB exec '
+  const results = sdk.syncAll();
+  const failed = results.filter(r => r.status === "failed");
+  const errors = results.filter(r => r.errors > 0);
+  return { synced: results.length, failed: failed.length, withErrors: errors.length, details: results };
+'
+
+# Get worker status with health check
+$HUB exec 'return sdk.getWorkerStatus("abc123")'
+```
 
 ---
 
@@ -269,27 +331,9 @@ Workers then use `--db` implicitly (the default `.devpartner/hub.db` path resolv
 - **Trail logging** — Audit trail for MemoryMiner extraction
 
 ### ❌ Never Use For:
-- **Direct file access** — Use hub exec, not `cat .devpartner/hub.db`
+- **Direct file access** — Use hub exec, not `cat .git/devpartner/hub.db`
 - **Source code storage** — Use snippets in board, not full files in hub
 - **Large binary data** — Hub is for text messages only
 - **Secret storage** — Never post tokens, credentials, private keys
 
----
 
-## Trigger Words
-
-This skill should activate when agents mention:
-
-**Must-trigger:**
-- "post to hub", "check hub", "hub status", "search hub"
-- "share finding", "post finding", "add note"
-- "blocked", "need help", "stuck", "can't proceed"
-- "what has been found", "what do we know", "what's the status"
-- "coordinate", "check other workers", "cross-reference"
-- "decision", "propose", "approve"
-- "progress", "checkpoint", "how far along"
-
-**Should-trigger:**
-- "context", "prior findings", "what did scout find"
-- "share", "communicate", "tell other agents"
-- "trail", "log", "audit"

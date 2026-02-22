@@ -162,3 +162,74 @@ export interface HubStats {
     unindexed: number;
   };
 }
+
+// ============ Worker Types ============
+
+export type WorkerStatus = 'active' | 'completed' | 'failed' | 'lost';
+
+/**
+ * A worker process tracked by the hub
+ */
+export interface Worker {
+  id: string;
+  sessionId: string | null;
+  channel: string;
+  agentType: string | null;
+  agentName: string | null;
+  worktreePath: string | null;
+  eventsPath: string | null;
+  pid: number | null;
+  status: WorkerStatus;
+  exitCode: number | null;
+  lastEventAt: string | null;
+  lastEventType: string | null;
+  eventsOffset: number;
+  toolCalls: number;
+  turns: number;
+  errors: number;
+  registeredAt: string;
+  completedAt: string | null;
+  metadata: Record<string, unknown>;
+}
+
+/**
+ * Options for registering a new worker
+ */
+export interface RegisterWorkerOptions {
+  id: string;
+  channel?: string;
+  agentType?: string;
+  agentName?: string;
+  worktreePath?: string;
+  pid?: number;
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * A worker event from the event stream
+ */
+export interface WorkerEvent {
+  type: string;
+  data: Record<string, unknown>;
+  id: string;
+  timestamp: string;
+  parentId: string | null;
+}
+
+/**
+ * Result of syncing worker events
+ */
+export interface WorkerSyncResult {
+  workerId: string;
+  newEvents: number;
+  status: WorkerStatus;
+  toolCalls: number;
+  turns: number;
+  errors: number;
+  lastEventAt: string | null;
+  significantEvents: Array<{
+    type: string;
+    timestamp: string;
+    summary: string;
+  }>;
+}

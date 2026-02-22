@@ -1,23 +1,21 @@
 {
   "name": "@devpartner/workers",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Worker management for Copilot CLI - spawn, monitor, and cleanup isolated worker processes",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
-    "build": "tsc",
-    "bundle": "esbuild dist/skill-cli.js --bundle --platform=node --target=node20 --format=esm --outfile=scripts/worker.js --packages=external",
-    "prebundle": "npm run build",
+    "build": "ncc build src/skill-cli.ts -o scripts --minify --no-source-map-register && find scripts -name '*.d.ts' -o -name '*.d.ts.map' | xargs rm -f 2>/dev/null; find scripts -type d -empty -delete 2>/dev/null; true",
     "dev": "tsc --watch",
-    "clean": "rm -rf dist"
+    "clean": "rm -rf dist scripts/index.js"
   },
   "dependencies": {
     "commander": "^13.1.0"
   },
   "devDependencies": {
     "@types/node": "^22.10.5",
-    "esbuild": "^0.27.3",
+    "@vercel/ncc": "^0.38.4",
     "typescript": "^5.7.2"
   },
   "engines": {

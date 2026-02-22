@@ -59,3 +59,12 @@ export function folderToStatus(folder: Folder): string {
 export function isFolder(value: unknown): value is Folder {
   return value === "next" || value === "working" || value === "done" || value === "archive";
 }
+
+export interface BriefResult {
+  health: HygieneResult["health_score"];
+  issues: number;
+  wip: Array<{ id: string; title: string; priority?: string }>;
+  next_unblocked: Array<{ id: string; title: string; priority?: string }>;
+  next_blocked: Array<{ id: string; title: string; priority?: string; blocked_by?: string[] }>;
+  stats: unknown;
+}
