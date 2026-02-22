@@ -91,7 +91,7 @@ describe('reactor module', () => {
 {"type": "assistant.turn_end", "data": {}, "id": "e2", "timestamp": "2024-01-15T10:01:00Z", "parentId": null}
 malformed line without braces
 {"type": "tool.execution_complete", "data": {}, "id": "e3", "timestamp": "2024-01-15T10:02:00Z", "parentId": null}
-      `.trim();
+`.trim() + '\n';
       
       writeFileSync(eventsFile, ndjson);
 
@@ -101,6 +101,61 @@ malformed line without braces
       expect(result.events[0].type).toBe('session.start');
       expect(result.events[1].type).toBe('assistant.turn_end');
       expect(result.events[2].type).toBe('tool.execution_complete');
+    });
+
+    it('should not skip partial trailing lines — offset stays before them', () => {
+      // Write one complete line + one partial (no trailing newline)
+      const complete = '{"type": "session.start", "data": {}, "id": "e1", "timestamp": "2024-01-15T10:00:00Z", "parentId": null}\n';
+      const partial = '{"type": "assistant.turn_end", "da';
+      writeFileSync(eventsFile, complete + partial);
+
+      const result = readNewEvents(eventsFile, 0);
+      // Should parse only the complete line
+      expect(result.events.length).toBe(1);
+      expect(result.events[0].type).toBe('session.start');
+      // Offset should stop after the complete line, NOT at end of file
+      expect(result.newOffset).toBe(Buffer.byteLength(complete, 'utf-8'));
+
+      // Simulate the partial line being completed on next write
+      const completed = '{"type": "assistant.turn_end", "data": {}, "id": "e2", "timestamp": "2024-01-15T10:01:00Z", "parentId": null}\n';
+      writeFileSync(eventsFile, complete + completed);
+
+      const result2 = readNewEvents(eventsFile, result.newOffset);
+      expect(result2.events.length).toBe(1);
+      expect(result2.events[0].type).toBe('assistant.turn_end');
+    });
+
+    it('should handle file with only partial data (no newlines)', () => {
+      writeFileSync(eventsFile, '{"type": "session.st');
+      const result = readNewEvents(eventsFile, 0);
+      expect(result.events.length).toBe(0);
+      expect(result.newOffset).toBe(0);
+    });
+
+    it('should detect file truncation and reset offset to 0', () => {
+      // Write a large file, get offset
+      const events = [
+        { type: 'session.start', data: {}, id: 'e1', timestamp: '2024-01-15T10:00:00Z', parentId: null },
+        { type: 'assistant.turn_end', data: {}, id: 'e2', timestamp: '2024-01-15T10:01:00Z', parentId: null },
+        { type: 'tool.execution_complete', data: { success: true }, id: 'e3', timestamp: '2024-01-15T10:02:00Z', parentId: null },
+      ];
+      const ndjson = events.map(e => JSON.stringify(e)).join('\n') + '\n';
+      writeFileSync(eventsFile, ndjson);
+
+      const result1 = readNewEvents(eventsFile, 0);
+      expect(result1.events.length).toBe(3);
+      const oldOffset = result1.newOffset;
+
+      // Truncate the file (simulating rotation/replacement)
+      const newEvent = { type: 'session.start', data: {}, id: 'e4', timestamp: '2024-01-15T11:00:00Z', parentId: null };
+      const smallContent = JSON.stringify(newEvent) + '\n';
+      writeFileSync(eventsFile, smallContent);
+
+      // File is now smaller than oldOffset — should reset and read from 0
+      const result2 = readNewEvents(eventsFile, oldOffset);
+      expect(result2.events.length).toBe(1);
+      expect(result2.events[0].id).toBe('e4');
+      expect(result2.newOffset).toBe(Buffer.byteLength(smallContent, 'utf-8'));
     });
 
     it('should return empty if file size has not changed', () => {
