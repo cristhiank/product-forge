@@ -11,6 +11,7 @@
 
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
+import { parseArgs as nodeParseArgs } from "node:util";
 import { createBacklogAPI } from "./backlog-api.js";
 import { executeCode } from "./sandbox/index.js";
 import { startServer } from "./serve/server.js";
@@ -20,34 +21,49 @@ import type { Folder } from "./types.js";
 
 interface CLIOptions {
   command: string;
-  args: Record<string, string | boolean>;
+  args: Record<string, string | boolean | undefined>;
   positional: string[];
 }
 
 function parseArgs(argv: string[]): CLIOptions {
-  const args: Record<string, string | boolean> = {};
-  const positional: string[] = [];
-  let command = "";
+  const { values, positionals } = nodeParseArgs({
+    args: argv.slice(2),
+    allowPositionals: true,
+    strict: false,
+    options: {
+      help: { type: "boolean" },
+      root: { type: "string" },
+      format: { type: "string" },
+      project: { type: "string" },
+      folder: { type: "string" },
+      limit: { type: "string" },
+      unblocked: { type: "boolean" },
+      id: { type: "string" },
+      text: { type: "string" },
+      kind: { type: "string" },
+      title: { type: "string" },
+      description: { type: "string" },
+      priority: { type: "string" },
+      tags: { type: "string" },
+      parent: { type: "string" },
+      "depends-on": { type: "string" },
+      related: { type: "string" },
+      to: { type: "string" },
+      date: { type: "string" },
+      "stale-days": { type: "string" },
+      "done-days": { type: "string" },
+      fix: { type: "boolean" },
+      code: { type: "string" },
+      timeout: { type: "string" },
+      port: { type: "string" },
+      message: { type: "string" },
+    },
+  });
 
-  for (let i = 2; i < argv.length; i++) {
-    const arg = argv[i];
-    if (arg.startsWith("--")) {
-      const key = arg.slice(2);
-      const nextArg = argv[i + 1];
-      if (nextArg && !nextArg.startsWith("--")) {
-        args[key] = nextArg;
-        i++;
-      } else {
-        args[key] = true;
-      }
-    } else if (!command) {
-      command = arg;
-    } else {
-      positional.push(arg);
-    }
-  }
+  const command = positionals[0] ?? "";
+  const positional = positionals.slice(1);
 
-  return { command, args, positional };
+  return { command, args: values, positional };
 }
 
 function showHelp() {
@@ -57,13 +73,15 @@ Backlog CLI - Kanban-lite backlog management
 Usage: backlog <command> [options]
 
 Commands:
-  list [--project X] [--folder next|working|done|archive] [--limit N]
+  brief [--project X]                 One-call briefing: health, WIP, next items, stats
+  list [--project X] [--folder next|working|done|archive] [--limit N] [--unblocked]
   get <id>
   search <text> [--project X] [--folder F] [--limit N]
   create --kind task|epic --title "..." [--project X] [--description "..."] [--priority low|medium|high] [--tags a,b] [--parent B-001] [--depends-on a/B-001,b/B-002] [--related ...]
-  move <id> --to next|working|done|archive
-  complete <id> [--date 2026-01-15]
-  archive <id>
+  pick <id>                           Move to working + return full item
+  move <id>[,id2,...] --to next|working|done|archive
+  complete <id>[,id2,...] [--date 2026-01-15]
+  archive <id>[,id2,...]
   validate <id>
   hygiene [--project X] [--stale-days 30] [--done-days 7] [--fix]
   stats [--project X]
@@ -75,10 +93,10 @@ Commands:
 
 Options:
   --root <path>     Override scan directory (default: cwd)
-  --format <type>   Output format: json (default) | board-context
+  --format <type>   Output format: json (default) | board-context | summary
   --help            Show this help
 
-All output is JSON for easy parsing.
+All output is JSON for easy parsing (unless --format summary).
 `);
 }
 
@@ -88,6 +106,48 @@ async function readStdin(): Promise<string> {
     chunks.push(chunk as Buffer);
   }
   return Buffer.concat(chunks).toString("utf8");
+}
+
+function formatSummary(result: unknown, command: string): string {
+  if (command === "brief" && result && typeof result === "object") {
+    const b = result as any;
+    const lines: string[] = [];
+    lines.push(`Health: ${b.health} (${b.issues} issues)`);
+    lines.push("");
+    if (b.wip.length) {
+      lines.push(`WIP (${b.wip.length}):`);
+      for (const i of b.wip) lines.push(`  ${i.id} [${i.priority || "-"}] ${i.title}`);
+    } else {
+      lines.push("WIP: none");
+    }
+    lines.push("");
+    if (b.next_unblocked.length) {
+      lines.push(`Ready to pick (${b.next_unblocked.length}):`);
+      for (const i of b.next_unblocked) lines.push(`  ${i.id} [${i.priority || "-"}] ${i.title}`);
+    }
+    if (b.next_blocked.length) {
+      lines.push(`Blocked (${b.next_blocked.length}):`);
+      for (const i of b.next_blocked) lines.push(`  ${i.id} [${i.priority || "-"}] ${i.title} (blocked by: ${(i.blocked_by || []).join(", ")})`);
+    }
+    return lines.join("\n");
+  }
+
+  if (Array.isArray(result)) {
+    if (result.length === 0) return "(empty)";
+    return result.map((item: any) =>
+      `${item.id || "-"} [${item.priority || item.folder || "-"}] ${item.title || JSON.stringify(item)}`
+    ).join("\n");
+  }
+
+  if (result && typeof result === "object" && "id" in (result as any)) {
+    const item = result as any;
+    const lines = [`${item.id}: ${item.title}`, `Folder: ${item.folder} | Priority: ${item.priority || "-"} | Status: ${item.status || "-"}`];
+    if (item.tags?.length) lines.push(`Tags: ${item.tags.join(", ")}`);
+    if (item.depends_on?.length) lines.push(`Depends on: ${item.depends_on.join(", ")}`);
+    return lines.join("\n");
+  }
+
+  return JSON.stringify(result, null, 2);
 }
 
 function formatBoardContext(result: unknown): string {
@@ -169,11 +229,18 @@ export async function main() {
     let result: unknown;
 
     switch (command) {
+      case "brief": {
+        const project = args.project as string | undefined;
+        result = await api.brief({ project });
+        break;
+      }
+
       case "list": {
         const folder = args.folder as Folder | undefined;
         const project = args.project as string | undefined;
         const limit = args.limit ? parseInt(args.limit as string, 10) : undefined;
-        result = await api.list({ project, folder, limit });
+        const unblocked = args.unblocked === true;
+        result = await api.list({ project, folder, limit, unblocked });
         break;
       }
 
@@ -217,25 +284,53 @@ export async function main() {
         break;
       }
 
-      case "move": {
+      case "pick": {
         const id = positional[0] || (args.id as string);
+        if (!id) throw new Error("Missing required argument: id");
+        result = await api.pick({ id });
+        break;
+      }
+
+      case "move": {
+        const rawId = positional[0] || (args.id as string);
         const to = args.to as Folder;
-        if (!id || !to) throw new Error("Missing required arguments: id and --to");
-        result = await api.move({ id, to });
+        if (!rawId || !to) throw new Error("Missing required arguments: id and --to");
+        const ids = rawId.split(",").map(s => s.trim()).filter(Boolean);
+        if (ids.length === 1) {
+          result = await api.move({ id: ids[0], to });
+        } else {
+          const results = [];
+          for (const id of ids) results.push(await api.move({ id, to }));
+          result = results;
+        }
         break;
       }
 
       case "complete": {
-        const id = positional[0] || (args.id as string);
-        if (!id) throw new Error("Missing required argument: id");
-        result = await api.complete({ id, completedDate: args.date as string | undefined });
+        const rawId = positional[0] || (args.id as string);
+        if (!rawId) throw new Error("Missing required argument: id");
+        const ids = rawId.split(",").map(s => s.trim()).filter(Boolean);
+        if (ids.length === 1) {
+          result = await api.complete({ id: ids[0], completedDate: args.date as string | undefined });
+        } else {
+          const results = [];
+          for (const id of ids) results.push(await api.complete({ id, completedDate: args.date as string | undefined }));
+          result = results;
+        }
         break;
       }
 
       case "archive": {
-        const id = positional[0] || (args.id as string);
-        if (!id) throw new Error("Missing required argument: id");
-        result = await api.archive({ id });
+        const rawId = positional[0] || (args.id as string);
+        if (!rawId) throw new Error("Missing required argument: id");
+        const ids = rawId.split(",").map(s => s.trim()).filter(Boolean);
+        if (ids.length === 1) {
+          result = await api.archive({ id: ids[0] });
+        } else {
+          const results = [];
+          for (const id of ids) results.push(await api.archive({ id }));
+          result = results;
+        }
         break;
       }
 
@@ -306,7 +401,9 @@ export async function main() {
 
     // Output result based on format
     const format = (args.format as string) || 'json';
-    if (format === 'board-context') {
+    if (format === 'summary') {
+      console.log(formatSummary(result, command));
+    } else if (format === 'board-context') {
       console.log(formatBoardContext(result));
     } else {
       console.log(JSON.stringify(result, null, 2));
