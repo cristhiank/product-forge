@@ -96,8 +96,8 @@ export function processEvents(events: WorkerEvent[]): {
           timestamp: event.timestamp,
           summary: msg.substring(0, 200),
         });
-        terminalStatus = 'failed';
-        exitCode = 1;
+        // Do NOT set terminalStatus here — session.error can be transient.
+        // Only abort events should mark terminal failure.
         break;
       }
 
