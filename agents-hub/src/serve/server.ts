@@ -13,8 +13,10 @@ import {
   statusPage,
   searchPage,
   threadView,
+  workersPage,
   notFoundPage,
 } from './renderer.js';
+import { detectHealth } from '../core/reactor.js';
 
 // ── SSE clients ──────────────────────────────────────────────
 
@@ -138,6 +140,15 @@ export async function startServer(opts: ServeOptions): Promise<void> {
         return sendJson(res, result);
       }
 
+      // ── JSON API for workers ──
+      if (pathname === '/api/workers') {
+        const workers = hub.workerList().map(w => ({
+          ...w,
+          health: detectHealth(w.lastEventAt),
+        }));
+        return sendJson(res, { workers });
+      }
+
       // Refresh channel list for each request
       const currentChannels = hub.channelList(true) as ChannelInfo[];
 
@@ -191,6 +202,21 @@ export async function startServer(opts: ServeOptions): Promise<void> {
           channels: currentChannels,
           activePage: 'search',
           body: searchPage(results, q),
+        });
+        return sendHtml(res, html);
+      }
+
+      // ── Workers page ──
+      if (pathname === '/workers') {
+        const workers = hub.workerList().map(w => ({
+          ...w,
+          health: detectHealth(w.lastEventAt),
+        }));
+        const html = layout({
+          title: 'Workers',
+          channels: currentChannels,
+          activePage: 'workers',
+          body: workersPage(workers),
         });
         return sendHtml(res, html);
       }
