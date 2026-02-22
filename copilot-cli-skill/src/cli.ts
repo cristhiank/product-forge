@@ -41,10 +41,19 @@ export function runCli(): void {
     .option('--allow-all-paths', 'Allow access to all paths')
     .option('--allow-all-urls', 'Allow all URL access')
     .option('--autopilot', 'Enable autopilot mode')
+    .option('--context-providers <json>', 'JSON array of context providers to apply to the worktree')
     .action((opts) => {
       try {
         const repoRoot = resolve(program.opts().repoRoot);
         const manager = new WorkerManager(repoRoot);
+        let contextProviders;
+        if (opts.contextProviders) {
+          try {
+            contextProviders = JSON.parse(opts.contextProviders);
+          } catch {
+            throw new Error('Invalid JSON for --context-providers');
+          }
+        }
         const result = manager.spawn({
           prompt: opts.prompt,
           agent: opts.agent,
@@ -55,6 +64,7 @@ export function runCli(): void {
           allowAllPaths: opts.allowAllPaths,
           allowAllUrls: opts.allowAllUrls,
           autopilot: opts.autopilot,
+          contextProviders,
         });
         output(result, program.opts().pretty);
       } catch (err) {

@@ -22,6 +22,8 @@ export interface SpawnOptions {
   allowAllUrls?: boolean;
   /** Enable autopilot mode */
   autopilot?: boolean;
+  /** Context providers to apply to the worker worktree (symlinks, env, files, prompt sections) */
+  contextProviders?: WorkerContextProvider[];
 }
 
 /** Information about a spawned worker */
@@ -66,4 +68,48 @@ export interface WorkerMeta {
   model: string;
   started_at: string;
   status: string;
+  context_providers?: ContextProviderResult;
+}
+
+/** Specification for a symlink in a worker context */
+export interface SymlinkSpec {
+  /** Source path (supports {{repoRoot}}, {{worktreePath}}, {{workerId}} templates) */
+  source: string;
+  /** Target path relative to worktree root */
+  target: string;
+}
+
+/** A context provider declared by a skill */
+export interface WorkerContextProvider {
+  /** Skill name that provides this context */
+  provider: string;
+  /** Schema version */
+  version: string;
+  /** Context configuration */
+  context: {
+    /** Symlinks to create in the worktree */
+    symlinks?: SymlinkSpec[];
+    /** Environment variables to set for the worker process */
+    env?: Record<string, string>;
+    /** Files to write in the worktree (relative path → content) */
+    files?: Record<string, string>;
+    /** Prompt sections to append (key → text) */
+    prompt_sections?: Record<string, string>;
+  };
+}
+
+/** Result of applying context providers */
+export interface ContextProviderResult {
+  /** Providers that were discovered and applied */
+  providers: string[];
+  /** Number of symlinks created */
+  symlinksCreated: number;
+  /** Number of env vars added */
+  envVarsAdded: number;
+  /** Number of files written */
+  filesWritten: number;
+  /** Number of prompt sections injected */
+  promptSectionsInjected: number;
+  /** Warnings encountered during application */
+  warnings: string[];
 }

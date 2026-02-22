@@ -9,6 +9,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync, rmSync, readdirSync
 import { join, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import type { SpawnOptions, WorkerInfo, WorkerStatus, CleanupResult, WorkerMeta } from './types.js';
+import { applyContext } from './context-providers.js';
 
 export class WorkerManager {
   private workersDir: string;
@@ -48,6 +49,15 @@ export class WorkerManager {
       throw new Error('Failed to create git worktree');
     }
 
+    // Apply context providers (symlinks, env, files, prompt sections)
+    const { env: contextEnv, prompt: augmentedPrompt, result: contextResult } = applyContext(
+      opts.contextProviders ?? [],
+      this.repoRoot,
+      worktreePath,
+      workerId,
+      opts.prompt
+    );
+
     // Build copilot command
     const args = ['--allow-all-tools'];
     if (opts.agent) args.push('--agent', opts.agent);
@@ -61,7 +71,7 @@ export class WorkerManager {
     }
     if (opts.allowAllUrls) args.push('--allow-all-urls');
     if (opts.autopilot) args.push('--autopilot');
-    args.push('-p', opts.prompt);
+    args.push('-p', augmentedPrompt);
 
     // Spawn detached copilot process
     const outputLog = join(stateDir, 'output.log');
@@ -69,6 +79,7 @@ export class WorkerManager {
       cwd: worktreePath,
       detached: true,
       stdio: ['ignore', 'pipe', 'pipe'],
+      env: { ...process.env, ...contextEnv },
     });
 
     // Redirect stdout+stderr to log file
@@ -93,6 +104,7 @@ export class WorkerManager {
       model: opts.model ?? '',
       started_at: new Date().toISOString(),
       status: 'running',
+      context_providers: contextResult,
     };
     writeFileSync(join(stateDir, 'meta.json'), JSON.stringify(meta, null, 2));
 

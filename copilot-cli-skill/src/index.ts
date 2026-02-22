@@ -15,6 +15,9 @@ export type {
   WorkerStatus,
   CleanupResult,
   WorkerMeta,
+  SymlinkSpec,
+  WorkerContextProvider,
+  ContextProviderResult,
 } from './types.js';
 
 // SDK options

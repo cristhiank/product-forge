@@ -44,6 +44,7 @@ export class WorkerSDK {
       addDirs: opts.addDirs,
       allowAllPaths: opts.allowAllPaths,
       allowAllUrls: opts.allowAllUrls,
+      contextProviders: opts.contextProviders,
     });
   }
 

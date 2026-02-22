@@ -26,6 +26,7 @@ mkdir -p "$TARGET/scripts" "$TARGET/references"
 # Copy skill files
 echo "→ Copying skill files..."
 cp "$SCRIPT_DIR/SKILL.md" "$TARGET/"
+cp "$SCRIPT_DIR/.worker-context.json" "$TARGET/scripts/"
 cp "$SCRIPT_DIR/scripts/hub.js" "$TARGET/scripts/"
 cp "$SCRIPT_DIR/references/"*.md "$TARGET/references/"
 
