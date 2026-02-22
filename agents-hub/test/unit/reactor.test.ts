@@ -160,14 +160,32 @@ malformed line without braces
       expect(result.errors).toBe(1);
     });
 
-    it('should detect terminal status from session.error', () => {
+    it('should NOT set terminal status from session.error (transient errors)', () => {
       const events: WorkerEvent[] = [
-        { type: 'session.error', data: { message: 'Fatal error occurred' }, id: 'e1', timestamp: '2024-01-15T10:00:00Z', parentId: null },
+        { type: 'session.error', data: { message: 'Transient error occurred' }, id: 'e1', timestamp: '2024-01-15T10:00:00Z', parentId: null },
       ];
 
       const result = processEvents(events);
-      expect(result.terminalStatus).toBe('failed');
-      expect(result.exitCode).toBe(1);
+      expect(result.errors).toBe(1);
+      expect(result.terminalStatus).toBeNull();
+      expect(result.exitCode).toBeNull();
+    });
+
+    it('should keep worker active after transient error followed by successful events', () => {
+      const events: WorkerEvent[] = [
+        { type: 'session.start', data: { selectedModel: 'claude' }, id: 'e1', timestamp: '2024-01-15T10:00:00Z', parentId: null },
+        { type: 'session.error', data: { message: 'Transient network error' }, id: 'e2', timestamp: '2024-01-15T10:01:00Z', parentId: null },
+        { type: 'tool.execution_complete', data: { toolName: 'bash', success: true }, id: 'e3', timestamp: '2024-01-15T10:02:00Z', parentId: null },
+        { type: 'assistant.turn_end', data: {}, id: 'e4', timestamp: '2024-01-15T10:03:00Z', parentId: null },
+        { type: 'tool.execution_complete', data: { toolName: 'view', success: true }, id: 'e5', timestamp: '2024-01-15T10:04:00Z', parentId: null },
+      ];
+
+      const result = processEvents(events);
+      expect(result.errors).toBe(1);
+      expect(result.toolCalls).toBe(2);
+      expect(result.turns).toBe(1);
+      expect(result.terminalStatus).toBeNull();
+      expect(result.exitCode).toBeNull();
     });
 
     it('should detect abort with exit code 130', () => {
@@ -349,15 +367,15 @@ malformed line without braces
       expect(result.significantEvents).toBeDefined();
     });
 
-    it('should use terminal status from processed events if present', () => {
+    it('should keep active status when session.error occurs (not terminal)', () => {
       const events: WorkerEvent[] = [
-        { type: 'session.error', data: { message: 'Fatal error' }, id: 'e1', timestamp: '2024-01-15T10:00:00Z', parentId: null },
+        { type: 'session.error', data: { message: 'Transient error' }, id: 'e1', timestamp: '2024-01-15T10:00:00Z', parentId: null },
       ];
       
       const processed = processEvents(events);
       const result = buildSyncResult('worker-1', events, processed, 'active');
 
-      expect(result.status).toBe('failed'); // Terminal status overrides current
+      expect(result.status).toBe('active'); // session.error no longer terminal
       expect(result.errors).toBe(1);
     });
 
