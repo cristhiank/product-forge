@@ -11,6 +11,9 @@ echo "   Target: $TARGET"
 
 cd "$SCRIPT_DIR"
 
+echo "→ Building with ncc..."
+npm run build --silent
+
 rm -rf "$TARGET"
 mkdir -p "$TARGET"
 
