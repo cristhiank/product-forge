@@ -31,6 +31,7 @@ import {
   listWorkers,
   updateWorker,
   removeWorker,
+  discoverSession,
 } from './core/workers.js';
 import {
   readNewEvents,
@@ -304,7 +305,15 @@ export class Hub {
   workerSync(id: string): WorkerSyncResult | null {
     const worker = getWorker(this.db, id);
     if (!worker) return null;
-    if (!worker.eventsPath) return null;
+
+    // Lazy re-discovery: if eventsPath is missing, retry discoverSession
+    if (!worker.eventsPath) {
+      const session = discoverSession(id);
+      if (!session) return null;
+      updateWorker(this.db, id, { sessionId: session.sessionId, eventsPath: session.eventsPath });
+      worker.eventsPath = session.eventsPath;
+      worker.sessionId = session.sessionId;
+    }
 
     const { events, newOffset } = readNewEvents(worker.eventsPath, worker.eventsOffset);
     if (events.length === 0) return buildSyncResult(id, events, processEvents([]), worker.status);
