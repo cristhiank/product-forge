@@ -228,7 +228,7 @@ malformed line without braces
 
     it('should keep worker active after transient error followed by successful events', () => {
       const events: WorkerEvent[] = [
-        { type: 'session.start', data: { selectedModel: 'claude' }, id: 'e1', timestamp: '2024-01-15T10:00:00Z', parentId: null },
+        { type: 'session.start', data: {}, id: 'e1', timestamp: '2024-01-15T10:00:00Z', parentId: null },
         { type: 'session.error', data: { message: 'Transient network error' }, id: 'e2', timestamp: '2024-01-15T10:01:00Z', parentId: null },
         { type: 'tool.execution_complete', data: { toolName: 'bash', success: true }, id: 'e3', timestamp: '2024-01-15T10:02:00Z', parentId: null },
         { type: 'assistant.turn_end', data: {}, id: 'e4', timestamp: '2024-01-15T10:03:00Z', parentId: null },
@@ -288,15 +288,37 @@ malformed line without braces
       expect(result.significantEvents[0].summary).toContain('agents-hub');
     });
 
-    it('should extract significant events - session start', () => {
+    it('should extract significant events - session start (no model)', () => {
       const events: WorkerEvent[] = [
-        { type: 'session.start', data: { selectedModel: 'claude-sonnet-4' }, id: 'e1', timestamp: '2024-01-15T10:00:00Z', parentId: null },
+        { type: 'session.start', data: {}, id: 'e1', timestamp: '2024-01-15T10:00:00Z', parentId: null },
       ];
 
       const result = processEvents(events);
       expect(result.significantEvents.length).toBe(1);
       expect(result.significantEvents[0].type).toBe('start');
-      expect(result.significantEvents[0].summary).toContain('claude-sonnet-4');
+      expect(result.significantEvents[0].summary).toBe('Session started');
+    });
+
+    it('should extract significant events - session.model_change', () => {
+      const events: WorkerEvent[] = [
+        { type: 'session.model_change', data: { newModel: 'claude-sonnet-4' }, id: 'e1', timestamp: '2024-01-15T10:00:00Z', parentId: null },
+      ];
+
+      const result = processEvents(events);
+      expect(result.significantEvents.length).toBe(1);
+      expect(result.significantEvents[0].type).toBe('model_change');
+      expect(result.significantEvents[0].summary).toBe('Model: claude-sonnet-4');
+    });
+
+    it('should handle session.model_change with missing newModel', () => {
+      const events: WorkerEvent[] = [
+        { type: 'session.model_change', data: {}, id: 'e1', timestamp: '2024-01-15T10:00:00Z', parentId: null },
+      ];
+
+      const result = processEvents(events);
+      expect(result.significantEvents.length).toBe(1);
+      expect(result.significantEvents[0].type).toBe('model_change');
+      expect(result.significantEvents[0].summary).toBe('Model: unknown');
     });
 
     it('should extract significant events - tool error', () => {
@@ -336,7 +358,8 @@ malformed line without braces
 
     it('should handle mixed event types correctly', () => {
       const events: WorkerEvent[] = [
-        { type: 'session.start', data: { selectedModel: 'claude' }, id: 'e1', timestamp: '2024-01-15T10:00:00Z', parentId: null },
+        { type: 'session.start', data: {}, id: 'e1', timestamp: '2024-01-15T10:00:00Z', parentId: null },
+        { type: 'session.model_change', data: { newModel: 'claude-sonnet-4' }, id: 'e1b', timestamp: '2024-01-15T10:00:01Z', parentId: null },
         { type: 'tool.execution_complete', data: { toolName: 'view', success: true }, id: 'e2', timestamp: '2024-01-15T10:01:00Z', parentId: null },
         { type: 'tool.execution_complete', data: { toolName: 'bash', success: false }, id: 'e3', timestamp: '2024-01-15T10:02:00Z', parentId: null },
         { type: 'assistant.turn_end', data: {}, id: 'e4', timestamp: '2024-01-15T10:03:00Z', parentId: null },
@@ -348,7 +371,7 @@ malformed line without braces
       expect(result.toolCalls).toBe(2);
       expect(result.turns).toBe(1);
       expect(result.errors).toBe(1);
-      expect(result.significantEvents.length).toBe(4); // start, tool_error, skill, subagent
+      expect(result.significantEvents.length).toBe(5); // start, model_change, tool_error, skill, subagent
       expect(result.lastEventAt).toBe('2024-01-15T10:05:00Z');
     });
   });
@@ -462,7 +485,7 @@ malformed line without braces
 
     it('should include significant events in result', () => {
       const events: WorkerEvent[] = [
-        { type: 'session.start', data: { selectedModel: 'claude' }, id: 'e1', timestamp: '2024-01-15T10:00:00Z', parentId: null },
+        { type: 'session.start', data: {}, id: 'e1', timestamp: '2024-01-15T10:00:00Z', parentId: null },
         { type: 'skill.invoked', data: { name: 'agents-hub' }, id: 'e2', timestamp: '2024-01-15T10:01:00Z', parentId: null },
       ];
       

@@ -151,7 +151,15 @@ export function processEvents(events: WorkerEvent[]): {
         significantEvents.push({
           type: 'start',
           timestamp: event.timestamp,
-          summary: `Session started (model: ${(event.data.selectedModel as string) ?? 'unknown'})`,
+          summary: 'Session started',
+        });
+        break;
+
+      case 'session.model_change':
+        significantEvents.push({
+          type: 'model_change',
+          timestamp: event.timestamp,
+          summary: `Model: ${(event.data.newModel as string) ?? 'unknown'}`,
         });
         break;
     }
