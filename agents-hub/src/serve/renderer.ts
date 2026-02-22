@@ -3,7 +3,7 @@
  * Pure functions — each returns an HTML string.
  */
 
-import type { Message, SearchResult, ChannelInfo, HubStatus } from '../core/types.js';
+import type { Message, SearchResult, ChannelInfo, HubStatus, Worker } from '../core/types.js';
 
 // ── Helpers ──────────────────────────────────────────────────
 
@@ -225,7 +225,7 @@ interface LayoutOpts {
   title: string;
   channels: ChannelInfo[];
   currentChannel?: string;
-  activePage: 'timeline' | 'status' | 'search' | 'thread';
+  activePage: 'timeline' | 'status' | 'search' | 'thread' | 'workers';
   body: string;
 }
 
@@ -274,6 +274,7 @@ export function layout(opts: LayoutOpts): string {
           <li><a href="/" class="${opts.activePage === 'timeline' ? 'active' : ''}">📡 Timeline</a></li>
           <li><a href="/status" class="${opts.activePage === 'status' ? 'active' : ''}">📊 Status</a></li>
           <li><a href="/search" class="${opts.activePage === 'search' ? 'active' : ''}">🔍 Search</a></li>
+          <li><a href="/workers" class="${opts.activePage === 'workers' ? 'active' : ''}">🤖 Workers</a></li>
         </ul>
       </div>
 
@@ -493,6 +494,132 @@ export function threadView(parent: Message, replies: Message[]): string {
         ${repliesHtml}
       </div>` : `<div class="empty-state"><div class="empty-state-icon">💬</div><div class="empty-state-text">No replies yet</div></div>`}
     </div>`;
+}
+
+// ── Workers Page ─────────────────────────────────────────────
+
+export interface WorkerWithHealth extends Worker {
+  health: 'healthy' | 'stale' | 'lost';
+}
+
+function agentTypeEmoji(agentType: string | null): string {
+  if (!agentType) return '🤖';
+  const lower = agentType.toLowerCase();
+  if (lower.includes('scout')) return '🔍';
+  if (lower.includes('creative')) return '💡';
+  if (lower.includes('planner')) return '📋';
+  if (lower.includes('verifier')) return '✅';
+  if (lower.includes('executor')) return '⚙️';
+  if (lower.includes('orchestrator')) return '🎯';
+  if (lower.includes('super')) return '👑';
+  if (lower.includes('memory')) return '🧠';
+  return '🤖';
+}
+
+function healthBadge(health: string): string {
+  return `<span class="worker-health-badge health-${esc(health)}">${esc(health)}</span>`;
+}
+
+function statusBadge(status: string): string {
+  return `<span class="worker-status-badge wstatus-${esc(status)}">${esc(status)}</span>`;
+}
+
+function formatDuration(startIso: string): string {
+  const elapsed = Date.now() - new Date(startIso).getTime();
+  const seconds = Math.floor(elapsed / 1000);
+  const minutes = Math.floor(seconds / 60);
+  const hours = Math.floor(minutes / 60);
+  if (hours > 0) return `${hours}h ${minutes % 60}m`;
+  if (minutes > 0) return `${minutes}m`;
+  return `${seconds}s`;
+}
+
+export function workersPage(workers: WorkerWithHealth[]): string {
+  const total = workers.length;
+  const healthy = workers.filter(w => w.health === 'healthy').length;
+  const stale = workers.filter(w => w.health === 'stale').length;
+  const lost = workers.filter(w => w.health === 'lost').length;
+  const failed = workers.filter(w => w.status === 'failed').length;
+  const completed = workers.filter(w => w.status === 'completed').length;
+
+  const summaryBar = `
+    <div class="workers-summary">
+      <div class="workers-summary-item">
+        <span class="workers-summary-count">${total}</span>
+        <span class="workers-summary-label">Total</span>
+      </div>
+      <div class="workers-summary-item summary-healthy">
+        <span class="workers-summary-count">${healthy}</span>
+        <span class="workers-summary-label">Healthy</span>
+      </div>
+      <div class="workers-summary-item summary-stale">
+        <span class="workers-summary-count">${stale}</span>
+        <span class="workers-summary-label">Stale</span>
+      </div>
+      <div class="workers-summary-item summary-lost">
+        <span class="workers-summary-count">${lost}</span>
+        <span class="workers-summary-label">Lost</span>
+      </div>
+      <div class="workers-summary-item summary-failed">
+        <span class="workers-summary-count">${failed}</span>
+        <span class="workers-summary-label">Failed</span>
+      </div>
+      <div class="workers-summary-item summary-completed">
+        <span class="workers-summary-count">${completed}</span>
+        <span class="workers-summary-label">Completed</span>
+      </div>
+    </div>`;
+
+  const tableRows = workers.length
+    ? workers.map(w => {
+        const emoji = agentTypeEmoji(w.agentType);
+        const duration = formatDuration(w.registeredAt);
+        const lastActivity = w.lastEventAt ? formatTimestamp(w.lastEventAt) : 'never';
+        return `<tr class="worker-row" onclick="window.location='/worker/${esc(w.id)}'">
+          <td class="worker-id-cell"><a href="/worker/${esc(w.id)}">${esc(w.id)}</a></td>
+          <td>${emoji} ${esc(w.agentType || 'unknown')}</td>
+          <td>${statusBadge(w.status)} ${healthBadge(w.health)}</td>
+          <td><code>${esc(w.channel)}</code></td>
+          <td class="worker-counter">${w.toolCalls}</td>
+          <td class="worker-counter">${w.turns}</td>
+          <td class="worker-counter ${w.errors > 0 ? 'worker-counter-error' : ''}">${w.errors}</td>
+          <td class="worker-time">${lastActivity}</td>
+          <td class="worker-time">${duration}</td>
+        </tr>`;
+      }).join('\n')
+    : `<tr><td colspan="9" class="worker-empty">No workers registered yet</td></tr>`;
+
+  const table = `
+    <div class="workers-table-wrap">
+      <table class="workers-table">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Agent Type</th>
+            <th>Status</th>
+            <th>Channel</th>
+            <th>Tool Calls</th>
+            <th>Turns</th>
+            <th>Errors</th>
+            <th>Last Activity</th>
+            <th>Duration</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${tableRows}
+        </tbody>
+      </table>
+    </div>`;
+
+  return `
+    <div class="page-header">
+      <div>
+        <div class="page-title">Workers</div>
+        <div class="page-subtitle">${total} workers registered</div>
+      </div>
+    </div>
+    ${summaryBar}
+    ${table}`;
 }
 
 // ── 404 ──────────────────────────────────────────────────────
