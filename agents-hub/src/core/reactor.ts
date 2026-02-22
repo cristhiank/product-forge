@@ -4,10 +4,13 @@ import type { WorkerEvent, WorkerSyncResult, WorkerStatus } from './types.js';
 /** Read new events from an events.jsonl file starting from byte offset.
  *  Returns parsed events and the new byte offset for next read.
  */
-export function readNewEvents(eventsPath: string, fromOffset: number = 0): { events: WorkerEvent[]; newOffset: number } {
+export function readNewEvents(eventsPath: string, fromOffset_: number = 0): { events: WorkerEvent[]; newOffset: number } {
+  let fromOffset = fromOffset_;
   if (!existsSync(eventsPath)) return { events: [], newOffset: fromOffset };
   
   const stat = statSync(eventsPath);
+  // File truncated (e.g., rotated/replaced) — reset to beginning
+  if (stat.size < fromOffset) fromOffset = 0;
   if (stat.size <= fromOffset) return { events: [], newOffset: fromOffset };
   
   // Read only the new bytes
@@ -21,7 +24,16 @@ export function readNewEvents(eventsPath: string, fromOffset: number = 0): { eve
   }
   
   const text = buffer.toString('utf-8');
-  const lines = text.split('\n').filter(l => l.trim().length > 0);
+  // Only process up to the last complete newline to avoid losing partial writes
+  const lastNewline = text.lastIndexOf('\n');
+  if (lastNewline === -1) {
+    // No complete lines yet — don't advance offset
+    return { events: [], newOffset: fromOffset };
+  }
+  const completeText = text.substring(0, lastNewline + 1);
+  const newOffset = fromOffset + Buffer.byteLength(completeText, 'utf-8');
+
+  const lines = completeText.split('\n').filter(l => l.trim().length > 0);
   const events: WorkerEvent[] = [];
   
   for (const line of lines) {
@@ -39,7 +51,7 @@ export function readNewEvents(eventsPath: string, fromOffset: number = 0): { eve
     }
   }
   
-  return { events, newOffset: stat.size };
+  return { events, newOffset };
 }
 
 /** Process events and extract counters and significant events */
