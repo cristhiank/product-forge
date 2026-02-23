@@ -17,6 +17,13 @@ description: "ALWAYS use when the user says \"ask the experts\", \"explore optio
 
 ## Protocol
 
+### Recursion Guard (Mandatory)
+
+- **Depth limit = 1**: Never invoke `experts-council` from inside an `experts-council` run.
+- If you are already executing a council step (member or chairman), **answer directly** and do not call `skill("experts-council")` again.
+- Always add this line at the top of every delegated prompt:
+  - `Execution context: experts-council internal run. Do not invoke experts-council or any multi-model council process.`
+
 ### Stage 1: Parallel Council
 
 Spawn **3 parallel `task` calls** — one per council member:
@@ -32,7 +39,7 @@ task({
 
 **Prompt construction rules:**
 - All 3 members receive the **identical prompt** (same words, same context)
-- Include the full user query/question verbatim
+- Include a **sanitized restatement** of the user request (preserve meaning, but remove trigger phrases like "ask the experts", "ask gemini/opus/gpt", "experts council", "multi-model review")
 - Include all relevant context inline (code snippets, file contents, constraints)
 - Do NOT mention other models or that this is a council — each model responds independently
 - End with clear output instructions matching the task type (see Task Types below)
