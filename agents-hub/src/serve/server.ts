@@ -14,6 +14,7 @@ import {
   searchPage,
   threadView,
   workersPage,
+  workerDetailPage,
   notFoundPage,
 } from './renderer.js';
 import { detectHealth } from '../core/reactor.js';
@@ -141,6 +142,24 @@ export async function startServer(opts: ServeOptions): Promise<void> {
       }
 
       // ── JSON API for workers ──
+      const workerApiMatch = pathname.match(/^\/api\/workers\/(.+)$/);
+      if (workerApiMatch) {
+        const workerId = decodeURIComponent(workerApiMatch[1]);
+        const sync = hub.workerSync(workerId);
+        const worker = hub.workerGet(workerId);
+        if (!worker) return sendJson(res, { error: 'Worker not found' }, 404);
+
+        const messages = hub.read({ workerId, limit: 100 }).messages;
+        return sendJson(res, {
+          worker: {
+            ...worker,
+            health: detectHealth(worker.lastEventAt),
+          },
+          sync,
+          messages,
+        });
+      }
+
       if (pathname === '/api/workers') {
         const workers = hub.workerList().map(w => ({
           ...w,
@@ -217,6 +236,42 @@ export async function startServer(opts: ServeOptions): Promise<void> {
           channels: currentChannels,
           activePage: 'workers',
           body: workersPage(workers),
+        });
+        return sendHtml(res, html);
+      }
+
+      // ── Worker detail page ──
+      const workerMatch = pathname.match(/^\/worker\/(.+)$/);
+      if (workerMatch) {
+        const workerId = decodeURIComponent(workerMatch[1]);
+        const sync = hub.workerSync(workerId);
+        const worker = hub.workerGet(workerId);
+        if (!worker) {
+          return sendHtml(
+            res,
+            layout({
+              title: 'Not Found',
+              channels: currentChannels,
+              activePage: 'workers',
+              body: notFoundPage(),
+            }),
+            404
+          );
+        }
+
+        const messages = hub.read({ workerId, limit: 100 }).messages;
+        const html = layout({
+          title: `Worker ${workerId}`,
+          channels: currentChannels,
+          activePage: 'workers',
+          body: workerDetailPage(
+            {
+              ...worker,
+              health: detectHealth(worker.lastEventAt),
+            },
+            messages,
+            sync
+          ),
         });
         return sendHtml(res, html);
       }

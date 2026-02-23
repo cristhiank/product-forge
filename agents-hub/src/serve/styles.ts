@@ -722,6 +722,113 @@ a:hover { text-decoration: underline; }
 .wstatus-failed { background: rgba(248, 81, 73, 0.15); color: var(--color-danger); border-color: #da3633; }
 .wstatus-lost { background: rgba(110, 118, 129, 0.15); color: var(--color-text-muted); border-color: #484f58; }
 
+/* Worker detail page */
+.worker-detail-back-link {
+  align-self: flex-start;
+  padding: 8px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-bg-elevated);
+  color: var(--color-link);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.worker-detail-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.worker-detail-metric {
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 12px;
+}
+
+.worker-detail-metric-label {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  color: var(--color-text-muted);
+  margin-bottom: 6px;
+}
+
+.worker-detail-metric-value {
+  font-family: var(--font-mono);
+  font-size: 16px;
+  color: var(--color-text);
+}
+
+.worker-detail-grid {
+  display: grid;
+  gap: 16px;
+}
+
+.worker-detail-section {
+  background: var(--color-bg-subtle);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 16px;
+}
+
+.worker-detail-section h2 {
+  margin: 0 0 12px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.worker-detail-timeline {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.worker-detail-event {
+  border-left: 2px solid var(--color-border);
+  padding: 6px 0 6px 12px;
+  margin-left: 4px;
+}
+
+.worker-detail-event + .worker-detail-event {
+  margin-top: 8px;
+}
+
+.worker-detail-event-type {
+  font-size: 11px;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.worker-detail-event-summary {
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  margin-top: 2px;
+}
+
+.worker-detail-event-time {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  margin-top: 2px;
+  font-family: var(--font-mono);
+}
+
+.worker-detail-messages .message {
+  margin-bottom: 8px;
+}
+
+.worker-detail-empty {
+  color: var(--color-text-muted);
+  font-size: 13px;
+  padding: 8px 0;
+}
+
 /* Scrollbar styling for dark theme */
 .timeline::-webkit-scrollbar,
 .sidebar::-webkit-scrollbar {
