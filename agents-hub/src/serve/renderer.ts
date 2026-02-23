@@ -50,6 +50,21 @@ function typeBadge(type: string): string {
   return `<span class="message-type-badge badge-${esc(type)}">${esc(type)}</span>`;
 }
 
+function workerHue(workerId: string): number {
+  let hash = 0;
+  for (let i = 0; i < workerId.length; i++) {
+    hash = (hash * 31 + workerId.charCodeAt(i)) >>> 0;
+  }
+  return hash % 360;
+}
+
+function workerBadge(workerId: string | null): string {
+  if (!workerId) return '';
+  const hue = workerHue(workerId);
+  const encodedWorkerId = encodeURIComponent(workerId);
+  return `<a class="worker-attribution-badge" href="/worker/${esc(encodedWorkerId)}" style="--worker-hue:${hue}" title="View worker ${esc(workerId)}">${esc(workerId)}</a>`;
+}
+
 function tagPills(tags: string[]): string {
   if (!tags.length) return '';
   return tags.map((t) => {
@@ -106,6 +121,7 @@ function progressBar(metadata: Record<string, unknown>): string {
 export function renderMessage(msg: Message): string {
   const avatar = authorEmoji(msg.author);
   const timestamp = formatTimestamp(msg.createdAt);
+  const worker = workerBadge(msg.workerId);
   const threadIndicator = msg.threadId ? `<div class="message-thread">💬 Reply in thread</div>` : '';
   const tags = tagPills(msg.tags);
   const badges = metadataBadges(msg.metadata);
@@ -130,6 +146,7 @@ export function renderMessage(msg: Message): string {
     <div class="message-content">
       <div class="message-header">
         <span class="message-author">${esc(msg.author)}</span>
+        ${worker}
         ${typeBadge(msg.type)}
         <span class="message-timestamp">${timestamp}</span>
       </div>
@@ -165,6 +182,22 @@ function createMessageElement(msg) {
 
   const timestamp = formatTimestamp(msg.createdAt);
 
+  function hashWorkerId(workerId) {
+    let hash = 0;
+    for (let i = 0; i < workerId.length; i++) {
+      hash = (hash * 31 + workerId.charCodeAt(i)) >>> 0;
+    }
+    return hash % 360;
+  }
+
+  function renderWorkerBadge(workerId) {
+    if (!workerId) return '';
+    const id = String(workerId);
+    const hue = hashWorkerId(id);
+    const safeId = escapeHtml(id);
+    return '<a class="worker-attribution-badge" href="/worker/' + encodeURIComponent(id) + '" style="--worker-hue:' + hue + '" title="View worker ' + safeId + '">' + safeId + '</a>';
+  }
+
   const tags = msg.tags.map(t => {
     const cls = ['snippet','finding','trail','constraint','checkpoint'].includes(t) ? ' tag-'+t : '';
     return '<span class="tag' + cls + '">' + escapeHtml(t) + '</span>';
@@ -191,7 +224,7 @@ function createMessageElement(msg) {
     codeBlock = '<div class="message-code"><div class="message-code-header"><span class="message-code-path">'+escapeHtml(msg.metadata.path)+lines+'</span><button class="message-code-toggle" onclick="this.parentElement.nextElementSibling.style.display=this.parentElement.nextElementSibling.style.display===\\'none\\'?\\'block\\':\\'none\\';this.textContent=this.textContent===\\'Show\\'?\\'Hide\\':\\'Show\\'">Hide</button></div><pre>'+escapeHtml(msg.content)+'</pre></div>';
   }
 
-  div.innerHTML = '<div class="message-avatar">'+avatar+'</div><div class="message-content"><div class="message-header"><span class="message-author">'+escapeHtml(msg.author)+'</span><span class="message-type-badge badge-'+msg.type+'">'+msg.type+'</span><span class="message-timestamp">'+timestamp+'</span></div>'+(codeBlock?'':'<div class="message-body">'+escapeHtml(msg.content)+'</div>')+codeBlock+(tags?'<div class="message-tags">'+tags+'</div>':'')+(badges.length?'<div class="message-metadata">'+badges.join(' ')+'</div>':'')+ progress + threadIndicator + '</div>';
+  div.innerHTML = '<div class="message-avatar">'+avatar+'</div><div class="message-content"><div class="message-header"><span class="message-author">'+escapeHtml(msg.author)+'</span>'+renderWorkerBadge(msg.workerId)+'<span class="message-type-badge badge-'+msg.type+'">'+msg.type+'</span><span class="message-timestamp">'+timestamp+'</span></div>'+(codeBlock?'':'<div class="message-body">'+escapeHtml(msg.content)+'</div>')+codeBlock+(tags?'<div class="message-tags">'+tags+'</div>':'')+(badges.length?'<div class="message-metadata">'+badges.join(' ')+'</div>':'')+ progress + threadIndicator + '</div>';
 
   return div;
 }
