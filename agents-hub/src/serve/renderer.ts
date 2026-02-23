@@ -518,7 +518,18 @@ export function timelinePage(messages: Message[], channel?: string): string {
 
 // ── Status Page ──────────────────────────────────────────────
 
-export function statusPage(status: HubStatus): string {
+interface WorkerHealthSummary {
+  active: number;
+  stale: number;
+  lost: number;
+  failed: number;
+}
+
+export function statusPage(
+  status: HubStatus,
+  workerSummary: WorkerHealthSummary = { active: 0, stale: 0, lost: 0, failed: 0 }
+): string {
+  const summary = workerSummary;
   const channelStats = Object.entries(status.channels)
     .sort(([a], [b]) => {
       if (a === '#main') return -1;
@@ -565,6 +576,22 @@ export function statusPage(status: HubStatus): string {
       <div class="stat-card">
         <div class="stat-card-label">Unresolved Requests</div>
         <div class="stat-card-value" style="color:${status.totalUnresolved > 0 ? 'var(--color-warning)' : 'var(--color-success)'}">${status.totalUnresolved}</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-card-label">Workers Active</div>
+        <div class="stat-card-value" style="color:${summary.active > 0 ? 'var(--color-success)' : 'var(--color-text)'}">${summary.active}</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-card-label">Workers Stale</div>
+        <div class="stat-card-value" style="color:${summary.stale > 0 ? 'var(--color-warning)' : 'var(--color-text)'}">${summary.stale}</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-card-label">Workers Lost</div>
+        <div class="stat-card-value" style="color:${summary.lost > 0 ? 'var(--color-text-muted)' : 'var(--color-text)'}">${summary.lost}</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-card-label">Workers Failed</div>
+        <div class="stat-card-value" style="color:${summary.failed > 0 ? 'var(--color-danger)' : 'var(--color-text)'}">${summary.failed}</div>
       </div>
     </div>
 

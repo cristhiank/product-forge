@@ -1153,7 +1153,113 @@ function layout(opts) {
       const es = new EventSource(eventUrl);
 
       const timeline = document.getElementById('timeline');
+      const workersTableBody = document.getElementById('workers-table-body');
+      const workersSubtitle = document.getElementById('workers-page-subtitle');
       let autoScroll = true;
+
+      function workerEmoji(agentType) {
+        if (!agentType) return '🤖';
+        const lower = String(agentType).toLowerCase();
+        if (lower.includes('scout')) return '🔍';
+        if (lower.includes('creative')) return '💡';
+        if (lower.includes('planner')) return '📋';
+        if (lower.includes('verifier')) return '✅';
+        if (lower.includes('executor')) return '⚙️';
+        if (lower.includes('orchestrator')) return '🎯';
+        if (lower.includes('super')) return '👑';
+        if (lower.includes('memory')) return '🧠';
+        return '🤖';
+      }
+
+      function workerStatusBadge(status) {
+        return '<span class="worker-status-badge wstatus-' + escapeHtml(status) + '">' + escapeHtml(status) + '</span>';
+      }
+
+      function workerHealthBadge(health) {
+        return '<span class="worker-health-badge health-' + escapeHtml(health) + '">' + escapeHtml(health) + '</span>';
+      }
+
+      function formatDurationSince(registeredAt) {
+        const elapsed = Date.now() - new Date(registeredAt).getTime();
+        const seconds = Math.floor(elapsed / 1000);
+        const minutes = Math.floor(seconds / 60);
+        const hours = Math.floor(minutes / 60);
+        if (hours > 0) return hours + 'h ' + (minutes % 60) + 'm';
+        if (minutes > 0) return minutes + 'm';
+        return seconds + 's';
+      }
+
+      function setWorkerSummaryValue(id, value) {
+        const el = document.getElementById(id);
+        if (el) el.textContent = String(value);
+      }
+
+      function renderWorkers(workers) {
+        if (!workersTableBody) return;
+        if (!Array.isArray(workers) || workers.length === 0) {
+          workersTableBody.innerHTML = '<tr><td colspan="9" class="worker-empty">No workers registered yet</td></tr>';
+          if (workersSubtitle) workersSubtitle.textContent = '0 workers registered';
+          setWorkerSummaryValue('workers-summary-total', 0);
+          setWorkerSummaryValue('workers-summary-healthy', 0);
+          setWorkerSummaryValue('workers-summary-stale', 0);
+          setWorkerSummaryValue('workers-summary-lost', 0);
+          setWorkerSummaryValue('workers-summary-failed', 0);
+          setWorkerSummaryValue('workers-summary-completed', 0);
+          return;
+        }
+
+        const healthy = workers.filter((w) => w.health === 'healthy').length;
+        const stale = workers.filter((w) => w.health === 'stale').length;
+        const lost = workers.filter((w) => w.health === 'lost').length;
+        const failed = workers.filter((w) => w.status === 'failed').length;
+        const completed = workers.filter((w) => w.status === 'completed').length;
+
+        workersTableBody.innerHTML = workers.map((w) => {
+          const id = escapeHtml(String(w.id || ''));
+          const encodedId = encodeURIComponent(String(w.id || ''));
+          const agentType = escapeHtml(String(w.agentType || 'unknown'));
+          const channelLabel = escapeHtml(String(w.channel || ''));
+          const status = String(w.status || 'active');
+          const health = String(w.health || 'healthy');
+          const errors = Number(w.errors || 0);
+          const lastActivity = w.lastEventAt ? formatTimestamp(w.lastEventAt) : 'never';
+          const duration = formatDurationSince(w.registeredAt);
+          return '<tr class="worker-row" onclick="window.location=\\'/worker/' + encodedId + '\\'">' +
+            '<td class="worker-id-cell"><a href="/worker/' + encodedId + '">' + id + '</a></td>' +
+            '<td>' + workerEmoji(agentType) + ' ' + agentType + '</td>' +
+            '<td>' + workerStatusBadge(status) + ' ' + workerHealthBadge(health) + '</td>' +
+            '<td><code>' + channelLabel + '</code></td>' +
+            '<td class="worker-counter">' + Number(w.toolCalls || 0) + '</td>' +
+            '<td class="worker-counter">' + Number(w.turns || 0) + '</td>' +
+            '<td class="worker-counter' + (errors > 0 ? ' worker-counter-error' : '') + '">' + errors + '</td>' +
+            '<td class="worker-time">' + lastActivity + '</td>' +
+            '<td class="worker-time">' + duration + '</td>' +
+          '</tr>';
+        }).join('');
+
+        if (workersSubtitle) workersSubtitle.textContent = workers.length + ' workers registered';
+        setWorkerSummaryValue('workers-summary-total', workers.length);
+        setWorkerSummaryValue('workers-summary-healthy', healthy);
+        setWorkerSummaryValue('workers-summary-stale', stale);
+        setWorkerSummaryValue('workers-summary-lost', lost);
+        setWorkerSummaryValue('workers-summary-failed', failed);
+        setWorkerSummaryValue('workers-summary-completed', completed);
+      }
+
+      function refreshWorkers() {
+        if (!workersTableBody) return;
+        fetch('/api/workers')
+          .then((response) => {
+            if (!response.ok) throw new Error('Failed to fetch workers');
+            return response.json();
+          })
+          .then((payload) => {
+            renderWorkers(payload.workers || []);
+          })
+          .catch((err) => {
+            console.error('Failed to refresh workers UI:', err);
+          });
+      }
 
       if (timeline) {
         timeline.addEventListener('scroll', () => {
@@ -1187,7 +1293,15 @@ function layout(opts) {
             console.error('Failed to parse SSE message:', err);
           }
         });
+      }
 
+      if (workersTableBody) {
+        es.addEventListener('worker_sync', () => {
+          refreshWorkers();
+        });
+      }
+
+      if (timeline || workersTableBody) {
         es.onerror = () => {
           es.close();
           setTimeout(() => location.reload(), 5000);
@@ -1217,8 +1331,8 @@ function timelinePage(messages, channel) {
       </div>
     </div>`;
 }
-// ── Status Page ──────────────────────────────────────────────
-function statusPage(status) {
+function statusPage(status, workerSummary = { active: 0, stale: 0, lost: 0, failed: 0 }) {
+    const summary = workerSummary;
     const channelStats = Object.entries(status.channels)
         .sort(([a], [b]) => {
         if (a === '#main')
@@ -1267,6 +1381,22 @@ function statusPage(status) {
       <div class="stat-card">
         <div class="stat-card-label">Unresolved Requests</div>
         <div class="stat-card-value" style="color:${status.totalUnresolved > 0 ? 'var(--color-warning)' : 'var(--color-success)'}">${status.totalUnresolved}</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-card-label">Workers Active</div>
+        <div class="stat-card-value" style="color:${summary.active > 0 ? 'var(--color-success)' : 'var(--color-text)'}">${summary.active}</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-card-label">Workers Stale</div>
+        <div class="stat-card-value" style="color:${summary.stale > 0 ? 'var(--color-warning)' : 'var(--color-text)'}">${summary.stale}</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-card-label">Workers Lost</div>
+        <div class="stat-card-value" style="color:${summary.lost > 0 ? 'var(--color-text-muted)' : 'var(--color-text)'}">${summary.lost}</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-card-label">Workers Failed</div>
+        <div class="stat-card-value" style="color:${summary.failed > 0 ? 'var(--color-danger)' : 'var(--color-text)'}">${summary.failed}</div>
       </div>
     </div>
 
@@ -1377,6 +1507,29 @@ function formatDuration(startIso) {
         return `${minutes}m`;
     return `${seconds}s`;
 }
+function formatDurationMs(durationMs) {
+    if (durationMs >= 1000) {
+        const seconds = durationMs / 1000;
+        return `${seconds >= 10 ? seconds.toFixed(0) : seconds.toFixed(1)}s`;
+    }
+    return `${Math.round(durationMs)}ms`;
+}
+function renderWorkerRow(w) {
+    const emoji = agentTypeEmoji(w.agentType);
+    const duration = formatDuration(w.registeredAt);
+    const lastActivity = w.lastEventAt ? formatTimestamp(w.lastEventAt) : 'never';
+    return `<tr class="worker-row" onclick="window.location='/worker/${esc(w.id)}'">
+    <td class="worker-id-cell"><a href="/worker/${esc(w.id)}">${esc(w.id)}</a></td>
+    <td>${emoji} ${esc(w.agentType || 'unknown')}</td>
+    <td>${statusBadge(w.status)} ${healthBadge(w.health)}</td>
+    <td><code>${esc(w.channel)}</code></td>
+    <td class="worker-counter">${w.toolCalls}</td>
+    <td class="worker-counter">${w.turns}</td>
+    <td class="worker-counter ${w.errors > 0 ? 'worker-counter-error' : ''}">${w.errors}</td>
+    <td class="worker-time">${lastActivity}</td>
+    <td class="worker-time">${duration}</td>
+  </tr>`;
+}
 function workersPage(workers) {
     const total = workers.length;
     const healthy = workers.filter(w => w.health === 'healthy').length;
@@ -1387,47 +1540,32 @@ function workersPage(workers) {
     const summaryBar = `
     <div class="workers-summary">
       <div class="workers-summary-item">
-        <span class="workers-summary-count">${total}</span>
+        <span class="workers-summary-count" id="workers-summary-total">${total}</span>
         <span class="workers-summary-label">Total</span>
       </div>
       <div class="workers-summary-item summary-healthy">
-        <span class="workers-summary-count">${healthy}</span>
+        <span class="workers-summary-count" id="workers-summary-healthy">${healthy}</span>
         <span class="workers-summary-label">Healthy</span>
       </div>
       <div class="workers-summary-item summary-stale">
-        <span class="workers-summary-count">${stale}</span>
+        <span class="workers-summary-count" id="workers-summary-stale">${stale}</span>
         <span class="workers-summary-label">Stale</span>
       </div>
       <div class="workers-summary-item summary-lost">
-        <span class="workers-summary-count">${lost}</span>
+        <span class="workers-summary-count" id="workers-summary-lost">${lost}</span>
         <span class="workers-summary-label">Lost</span>
       </div>
       <div class="workers-summary-item summary-failed">
-        <span class="workers-summary-count">${failed}</span>
+        <span class="workers-summary-count" id="workers-summary-failed">${failed}</span>
         <span class="workers-summary-label">Failed</span>
       </div>
       <div class="workers-summary-item summary-completed">
-        <span class="workers-summary-count">${completed}</span>
+        <span class="workers-summary-count" id="workers-summary-completed">${completed}</span>
         <span class="workers-summary-label">Completed</span>
       </div>
     </div>`;
     const tableRows = workers.length
-        ? workers.map(w => {
-            const emoji = agentTypeEmoji(w.agentType);
-            const duration = formatDuration(w.registeredAt);
-            const lastActivity = w.lastEventAt ? formatTimestamp(w.lastEventAt) : 'never';
-            return `<tr class="worker-row" onclick="window.location='/worker/${esc(w.id)}'">
-          <td class="worker-id-cell"><a href="/worker/${esc(w.id)}">${esc(w.id)}</a></td>
-          <td>${emoji} ${esc(w.agentType || 'unknown')}</td>
-          <td>${statusBadge(w.status)} ${healthBadge(w.health)}</td>
-          <td><code>${esc(w.channel)}</code></td>
-          <td class="worker-counter">${w.toolCalls}</td>
-          <td class="worker-counter">${w.turns}</td>
-          <td class="worker-counter ${w.errors > 0 ? 'worker-counter-error' : ''}">${w.errors}</td>
-          <td class="worker-time">${lastActivity}</td>
-          <td class="worker-time">${duration}</td>
-        </tr>`;
-        }).join('\n')
+        ? workers.map(renderWorkerRow).join('\n')
         : `<tr><td colspan="9" class="worker-empty">No workers registered yet</td></tr>`;
     const table = `
     <div class="workers-table-wrap">
@@ -1445,7 +1583,7 @@ function workersPage(workers) {
             <th>Duration</th>
           </tr>
         </thead>
-        <tbody>
+        <tbody id="workers-table-body">
           ${tableRows}
         </tbody>
       </table>
@@ -1454,7 +1592,7 @@ function workersPage(workers) {
     <div class="page-header">
       <div>
         <div class="page-title">Workers</div>
-        <div class="page-subtitle">${total} workers registered</div>
+        <div class="page-subtitle" id="workers-page-subtitle">${total} workers registered</div>
       </div>
     </div>
     ${summaryBar}
@@ -1463,6 +1601,8 @@ function workersPage(workers) {
 function workerDetailPage(worker, relatedMessages, sync) {
     const emoji = agentTypeEmoji(worker.agentType);
     const significantEvents = sync?.significantEvents ?? [];
+    const toolDurationStats = sync?.toolDurationStats ?? [];
+    const slowTools = sync?.slowTools ?? [];
     const timelineHtml = significantEvents.length
         ? `<ul class="worker-detail-timeline">
         ${significantEvents.map((event) => `
@@ -1474,6 +1614,45 @@ function workerDetailPage(worker, relatedMessages, sync) {
         `).join('\n')}
       </ul>`
         : `<div class="worker-detail-empty">No significant events from the latest sync.</div>`;
+    const toolStatsHtml = toolDurationStats.length
+        ? `<div class="workers-table-wrap">
+        <table class="workers-table">
+          <thead>
+            <tr>
+              <th>Tool</th>
+              <th>Calls</th>
+              <th>Avg</th>
+              <th>Max</th>
+              <th>Slow (&gt;5s)</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${toolDurationStats.map((stat) => `
+              <tr>
+                <td><code>${esc(stat.toolName)}</code></td>
+                <td class="worker-counter">${stat.count}</td>
+                <td class="worker-time">${formatDurationMs(stat.avgMs)}</td>
+                <td class="worker-time">${formatDurationMs(stat.maxMs)}</td>
+                <td class="worker-counter ${stat.slowCount > 0 ? 'worker-counter-error' : ''}">${stat.slowCount}</td>
+              </tr>
+            `).join('\n')}
+          </tbody>
+        </table>
+      </div>`
+        : `<div class="worker-detail-empty">No completed start→complete tool pairs yet.</div>`;
+    const slowToolsHtml = slowTools.length
+        ? `<ul class="worker-detail-timeline">
+        ${slowTools.map((entry) => `
+          <li class="worker-detail-event">
+            <div class="worker-detail-event-type">${esc(entry.toolName)}</div>
+            <div class="worker-detail-event-summary">
+              ${formatDurationMs(entry.durationMs)}${entry.success ? '' : ' (failed)'}${entry.toolCallId ? ` · ${esc(entry.toolCallId)}` : ''}
+            </div>
+            <div class="worker-detail-event-time">${formatTimestamp(entry.completedAt)}</div>
+          </li>
+        `).join('\n')}
+      </ul>`
+        : `<div class="worker-detail-empty">No slow tools detected (threshold: 5s).</div>`;
     const messagesHtml = relatedMessages.length
         ? relatedMessages.map(renderMessage).join('\n')
         : `<div class="worker-detail-empty">No related hub messages for this worker yet.</div>`;
@@ -1513,12 +1692,24 @@ function workerDetailPage(worker, relatedMessages, sync) {
         <span class="worker-detail-metric-label">Last Event</span>
         <span class="worker-detail-metric-value worker-time">${esc(worker.lastEventType || 'none')}</span>
       </div>
+      <div class="worker-detail-metric">
+        <span class="worker-detail-metric-label">Slow Tools</span>
+        <span class="worker-detail-metric-value ${slowTools.length > 0 ? 'worker-counter-error' : ''}">${slowTools.length}</span>
+      </div>
     </div>
 
     <div class="worker-detail-grid">
       <section class="worker-detail-section">
         <h2>Timeline</h2>
         ${timelineHtml}
+      </section>
+      <section class="worker-detail-section">
+        <h2>Tool Duration Stats</h2>
+        ${toolStatsHtml}
+      </section>
+      <section class="worker-detail-section">
+        <h2>Slow Tools (&gt;5s)</h2>
+        ${slowToolsHtml}
       </section>
       <section class="worker-detail-section">
         <h2>Related Messages (${relatedMessages.length})</h2>
@@ -1550,6 +1741,7 @@ var reactor = __webpack_require__(553);
 
 
 const sseClients = new Map();
+const WORKER_SYNC_INTERVAL_MS = 30_000;
 /**
  * Broadcast a new message to connected SSE clients (filtered by channel)
  */
@@ -1561,6 +1753,20 @@ function broadcastMessage(msg) {
             continue;
         try {
             res.write(`event: message\ndata: ${data}\n\n`);
+        }
+        catch {
+            sseClients.delete(res);
+        }
+    }
+}
+/**
+ * Broadcast worker sync updates to all SSE clients
+ */
+function broadcastWorkerSync(sync) {
+    const data = JSON.stringify(sync);
+    for (const [res] of Array.from(sseClients)) {
+        try {
+            res.write(`event: worker_sync\ndata: ${data}\n\n`);
         }
         catch {
             sseClients.delete(res);
@@ -1608,10 +1814,31 @@ function startMessageWatcher(hub) {
         }
     })();
 }
+/**
+ * Start periodic worker sync and broadcast updates via SSE
+ */
+function startWorkerSyncPoller(hub) {
+    return setInterval(() => {
+        try {
+            const sync = hub.workerSyncAll();
+            if (sync.length === 0)
+                return;
+            broadcastWorkerSync({
+                type: 'worker_sync',
+                timestamp: new Date().toISOString(),
+                sync,
+            });
+        }
+        catch (err) {
+            console.error('Worker sync poller error:', err);
+        }
+    }, WORKER_SYNC_INTERVAL_MS);
+}
 async function startServer(opts) {
     const { hub, port } = opts;
     // Start watching for new messages in background
     startMessageWatcher(hub);
+    const workerSyncTimer = startWorkerSyncPoller(hub);
     const server = external_node_http_.createServer(async (req, res) => {
         try {
             const { pathname, query } = parseUrl(req.url || '/');
@@ -1700,11 +1927,24 @@ async function startServer(opts) {
             // ── Status page ──
             if (pathname === '/status') {
                 const status = hub.status();
+                const workers = hub.workerList();
+                const workerSummary = { active: 0, stale: 0, lost: 0, failed: 0 };
+                for (const worker of workers) {
+                    const health = (0,reactor/* detectHealth */._2)(worker.lastEventAt);
+                    if (worker.status === 'active')
+                        workerSummary.active += 1;
+                    if (health === 'stale')
+                        workerSummary.stale += 1;
+                    if (health === 'lost')
+                        workerSummary.lost += 1;
+                    if (worker.status === 'failed')
+                        workerSummary.failed += 1;
+                }
                 const html = layout({
                     title: 'Status',
                     channels: currentChannels,
                     activePage: 'status',
-                    body: statusPage(status),
+                    body: statusPage(status, workerSummary),
                 });
                 return sendHtml(res, html);
             }
@@ -1814,6 +2054,9 @@ async function startServer(opts) {
         console.log(`   Mode: ${status.mode}`);
         console.log(`   Channels: ${Object.keys(status.channels).join(', ')}`);
         console.log(`   Total messages: ${status.totalMessages}\n`);
+    });
+    server.on('close', () => {
+        clearInterval(workerSyncTimer);
     });
 }
 
