@@ -218,6 +218,24 @@ export interface WorkerEvent {
 
 export type WorkerSyncStatus = 'ok' | 'no_worker' | 'no_events_path' | 'events_missing' | 'parse_error';
 
+export interface SlowToolExecution {
+  toolName: string;
+  toolCallId: string | null;
+  startedAt: string | null;
+  completedAt: string;
+  durationMs: number;
+  success: boolean;
+}
+
+export interface ToolDurationStat {
+  toolName: string;
+  count: number;
+  totalMs: number;
+  avgMs: number;
+  maxMs: number;
+  slowCount: number;
+}
+
 /**
  * Result of syncing worker events
  */
@@ -232,6 +250,8 @@ export interface WorkerSyncResult {
   errors: number;
   lastEventAt: string | null;
   error: string | null;
+  slowTools: SlowToolExecution[];
+  toolDurationStats: ToolDurationStat[];
   significantEvents: Array<{
     type: string;
     timestamp: string;
