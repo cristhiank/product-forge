@@ -4,8 +4,12 @@
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import type Database from 'better-sqlite3';
+import { mkdtempSync, mkdirSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { createTestDb } from '../fixtures/seed.js';
 import {
+  discoverSession,
   registerWorker,
   getWorker,
   listWorkers,
@@ -309,6 +313,70 @@ describe('workers module', () => {
       
       expect(newWorker.id).toBe('worker-1');
       expect(newWorker.agentType).toBe('NewType');
+    });
+  });
+
+  describe('discoverSession', () => {
+    it('should handle quoted/indented branch values and prefer newest workspace mtime', () => {
+      const sessionStateDir = mkdtempSync(join(tmpdir(), 'hub-session-state-'));
+      try {
+        const olderSession = join(sessionStateDir, 'session-older');
+        const newerSession = join(sessionStateDir, 'session-newer');
+        mkdirSync(olderSession, { recursive: true });
+        mkdirSync(newerSession, { recursive: true });
+
+        const olderWorkspace = join(olderSession, 'workspace.yaml');
+        const newerWorkspace = join(newerSession, 'workspace.yaml');
+        writeFileSync(olderWorkspace, '  branch: "worker/B-032"\n');
+        writeFileSync(newerWorkspace, "    branch: 'refs/heads/worker/b032'\n");
+        writeFileSync(join(olderSession, 'events.jsonl'), '');
+        writeFileSync(join(newerSession, 'events.jsonl'), '');
+
+        utimesSync(olderWorkspace, new Date('2026-01-15T10:00:00Z'), new Date('2026-01-15T10:00:00Z'));
+        utimesSync(newerWorkspace, new Date('2026-01-15T11:00:00Z'), new Date('2026-01-15T11:00:00Z'));
+
+        const discovered = discoverSession('B032', sessionStateDir);
+        expect(discovered).not.toBeNull();
+        expect(discovered!.sessionId).toBe('session-newer');
+      } finally {
+        rmSync(sessionStateDir, { recursive: true, force: true });
+      }
+    });
+
+    it('should fallback to session.start branch from events.jsonl when workspace parse is unavailable', () => {
+      const sessionStateDir = mkdtempSync(join(tmpdir(), 'hub-session-state-'));
+      try {
+        const olderSession = join(sessionStateDir, 'session-events-old');
+        const newerSession = join(sessionStateDir, 'session-events-new');
+        mkdirSync(olderSession, { recursive: true });
+        mkdirSync(newerSession, { recursive: true });
+
+        writeFileSync(join(olderSession, 'workspace.yaml'), 'cwd: /tmp\n');
+        writeFileSync(join(newerSession, 'workspace.yaml'), 'cwd: /tmp\n');
+
+        const oldEvent = JSON.stringify({
+          type: 'session.start',
+          data: { context: { branch: 'worker/B032' } },
+        });
+        const newEvent = JSON.stringify({
+          type: 'session.start',
+          data: { context: { branch: 'refs/heads/worker/b-032' } },
+        });
+
+        const olderEvents = join(olderSession, 'events.jsonl');
+        const newerEvents = join(newerSession, 'events.jsonl');
+        writeFileSync(olderEvents, `${oldEvent}\n`);
+        writeFileSync(newerEvents, `${newEvent}\n`);
+
+        utimesSync(olderEvents, new Date('2026-01-15T10:00:00Z'), new Date('2026-01-15T10:00:00Z'));
+        utimesSync(newerEvents, new Date('2026-01-15T12:00:00Z'), new Date('2026-01-15T12:00:00Z'));
+
+        const discovered = discoverSession('b032', sessionStateDir);
+        expect(discovered).not.toBeNull();
+        expect(discovered!.sessionId).toBe('session-events-new');
+      } finally {
+        rmSync(sessionStateDir, { recursive: true, force: true });
+      }
     });
   });
 });

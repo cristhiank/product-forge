@@ -738,6 +738,113 @@ a:hover { text-decoration: underline; }
 .wstatus-failed { background: rgba(248, 81, 73, 0.15); color: var(--color-danger); border-color: #da3633; }
 .wstatus-lost { background: rgba(110, 118, 129, 0.15); color: var(--color-text-muted); border-color: #484f58; }
 
+/* Worker detail page */
+.worker-detail-back-link {
+  align-self: flex-start;
+  padding: 8px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-bg-elevated);
+  color: var(--color-link);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.worker-detail-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.worker-detail-metric {
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 12px;
+}
+
+.worker-detail-metric-label {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  color: var(--color-text-muted);
+  margin-bottom: 6px;
+}
+
+.worker-detail-metric-value {
+  font-family: var(--font-mono);
+  font-size: 16px;
+  color: var(--color-text);
+}
+
+.worker-detail-grid {
+  display: grid;
+  gap: 16px;
+}
+
+.worker-detail-section {
+  background: var(--color-bg-subtle);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 16px;
+}
+
+.worker-detail-section h2 {
+  margin: 0 0 12px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.worker-detail-timeline {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.worker-detail-event {
+  border-left: 2px solid var(--color-border);
+  padding: 6px 0 6px 12px;
+  margin-left: 4px;
+}
+
+.worker-detail-event + .worker-detail-event {
+  margin-top: 8px;
+}
+
+.worker-detail-event-type {
+  font-size: 11px;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.worker-detail-event-summary {
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  margin-top: 2px;
+}
+
+.worker-detail-event-time {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  margin-top: 2px;
+  font-family: var(--font-mono);
+}
+
+.worker-detail-messages .message {
+  margin-bottom: 8px;
+}
+
+.worker-detail-empty {
+  color: var(--color-text-muted);
+  font-size: 13px;
+  padding: 8px 0;
+}
+
 /* Scrollbar styling for dark theme */
 .timeline::-webkit-scrollbar,
 .sidebar::-webkit-scrollbar {
@@ -1353,6 +1460,75 @@ function workersPage(workers) {
     ${summaryBar}
     ${table}`;
 }
+function workerDetailPage(worker, relatedMessages, sync) {
+    const emoji = agentTypeEmoji(worker.agentType);
+    const significantEvents = sync?.significantEvents ?? [];
+    const timelineHtml = significantEvents.length
+        ? `<ul class="worker-detail-timeline">
+        ${significantEvents.map((event) => `
+          <li class="worker-detail-event">
+            <div class="worker-detail-event-type">${esc(event.type)}</div>
+            <div class="worker-detail-event-summary">${esc(event.summary)}</div>
+            <div class="worker-detail-event-time">${formatTimestamp(event.timestamp)}</div>
+          </li>
+        `).join('\n')}
+      </ul>`
+        : `<div class="worker-detail-empty">No significant events from the latest sync.</div>`;
+    const messagesHtml = relatedMessages.length
+        ? relatedMessages.map(renderMessage).join('\n')
+        : `<div class="worker-detail-empty">No related hub messages for this worker yet.</div>`;
+    return `
+    <div class="page-header">
+      <div>
+        <div class="page-title">${emoji} Worker ${esc(worker.id)}</div>
+        <div class="page-subtitle">
+          ${statusBadge(worker.status)} ${healthBadge(worker.health)} · <code>${esc(worker.channel)}</code>
+        </div>
+      </div>
+      <a href="/workers" class="worker-detail-back-link">← Back to workers</a>
+    </div>
+
+    <div class="worker-detail-metrics">
+      <div class="worker-detail-metric">
+        <span class="worker-detail-metric-label">Tool Calls</span>
+        <span class="worker-detail-metric-value">${worker.toolCalls}</span>
+      </div>
+      <div class="worker-detail-metric">
+        <span class="worker-detail-metric-label">Turns</span>
+        <span class="worker-detail-metric-value">${worker.turns}</span>
+      </div>
+      <div class="worker-detail-metric">
+        <span class="worker-detail-metric-label">Errors</span>
+        <span class="worker-detail-metric-value ${worker.errors > 0 ? 'worker-counter-error' : ''}">${worker.errors}</span>
+      </div>
+      <div class="worker-detail-metric">
+        <span class="worker-detail-metric-label">Registered</span>
+        <span class="worker-detail-metric-value worker-time">${formatTimestamp(worker.registeredAt)}</span>
+      </div>
+      <div class="worker-detail-metric">
+        <span class="worker-detail-metric-label">Last Activity</span>
+        <span class="worker-detail-metric-value worker-time">${worker.lastEventAt ? formatTimestamp(worker.lastEventAt) : 'never'}</span>
+      </div>
+      <div class="worker-detail-metric">
+        <span class="worker-detail-metric-label">Last Event</span>
+        <span class="worker-detail-metric-value worker-time">${esc(worker.lastEventType || 'none')}</span>
+      </div>
+    </div>
+
+    <div class="worker-detail-grid">
+      <section class="worker-detail-section">
+        <h2>Timeline</h2>
+        ${timelineHtml}
+      </section>
+      <section class="worker-detail-section">
+        <h2>Related Messages (${relatedMessages.length})</h2>
+        <div class="worker-detail-messages">
+          ${messagesHtml}
+        </div>
+      </section>
+    </div>
+  `;
+}
 // ── 404 ──────────────────────────────────────────────────────
 function notFoundPage() {
     return `<div class="not-found">
@@ -1469,6 +1645,23 @@ async function startServer(opts) {
                 return sendJson(res, result);
             }
             // ── JSON API for workers ──
+            const workerApiMatch = pathname.match(/^\/api\/workers\/(.+)$/);
+            if (workerApiMatch) {
+                const workerId = decodeURIComponent(workerApiMatch[1]);
+                const sync = hub.workerSync(workerId);
+                const worker = hub.workerGet(workerId);
+                if (!worker)
+                    return sendJson(res, { error: 'Worker not found' }, 404);
+                const messages = hub.read({ workerId, limit: 100 }).messages;
+                return sendJson(res, {
+                    worker: {
+                        ...worker,
+                        health: (0,reactor/* detectHealth */._2)(worker.lastEventAt),
+                    },
+                    sync,
+                    messages,
+                });
+            }
             if (pathname === '/api/workers') {
                 const workers = hub.workerList().map(w => ({
                     ...w,
@@ -1538,6 +1731,32 @@ async function startServer(opts) {
                     channels: currentChannels,
                     activePage: 'workers',
                     body: workersPage(workers),
+                });
+                return sendHtml(res, html);
+            }
+            // ── Worker detail page ──
+            const workerMatch = pathname.match(/^\/worker\/(.+)$/);
+            if (workerMatch) {
+                const workerId = decodeURIComponent(workerMatch[1]);
+                const sync = hub.workerSync(workerId);
+                const worker = hub.workerGet(workerId);
+                if (!worker) {
+                    return sendHtml(res, layout({
+                        title: 'Not Found',
+                        channels: currentChannels,
+                        activePage: 'workers',
+                        body: notFoundPage(),
+                    }), 404);
+                }
+                const messages = hub.read({ workerId, limit: 100 }).messages;
+                const html = layout({
+                    title: `Worker ${workerId}`,
+                    channels: currentChannels,
+                    activePage: 'workers',
+                    body: workerDetailPage({
+                        ...worker,
+                        health: (0,reactor/* detectHealth */._2)(worker.lastEventAt),
+                    }, messages, sync),
                 });
                 return sendHtml(res, html);
             }
