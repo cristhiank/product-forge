@@ -1,5 +1,18 @@
 import { existsSync, statSync, openSync, readSync, closeSync } from 'node:fs';
-import type { WorkerEvent, WorkerSyncResult, WorkerStatus } from './types.js';
+import type { WorkerEvent, WorkerSyncResult, WorkerStatus, SlowToolExecution, ToolDurationStat } from './types.js';
+
+const SLOW_TOOL_THRESHOLD_MS = 5_000;
+
+interface PendingToolStart {
+  toolName: string;
+  startedAt: string;
+}
+
+function toTimestampMillis(iso: string | null): number | null {
+  if (!iso) return null;
+  const millis = Date.parse(iso);
+  return Number.isNaN(millis) ? null : millis;
+}
 
 /** Read new events from an events.jsonl file starting from byte offset.
  *  Returns parsed events and the new byte offset for next read.
@@ -60,7 +73,10 @@ export function readNewEvents(
 }
 
 /** Process events and extract counters and significant events */
-export function processEvents(events: WorkerEvent[]): {
+export function processEvents(
+  events: WorkerEvent[],
+  existingStarts: Record<string, PendingToolStart> = {},
+): {
   toolCalls: number;
   turns: number;
   errors: number;
@@ -69,6 +85,9 @@ export function processEvents(events: WorkerEvent[]): {
   /** Session ended? If so, what status? */
   terminalStatus: WorkerStatus | null;
   exitCode: number | null;
+  slowTools: SlowToolExecution[];
+  toolDurationStats: ToolDurationStat[];
+  pendingStarts: Record<string, PendingToolStart>;
   significantEvents: Array<{ type: string; timestamp: string; summary: string }>;
 } {
   let toolCalls = 0;
@@ -78,13 +97,53 @@ export function processEvents(events: WorkerEvent[]): {
   let lastEventType: string | null = null;
   let terminalStatus: WorkerStatus | null = null;
   let exitCode: number | null = null;
-  const significantEvents: Array<{ type: string; timestamp: string; summary: string }> = [];
   const asNonEmptyString = (value: unknown): string | null =>
     typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
+  const pendingStarts = new Map<string, PendingToolStart>();
+  for (const [toolCallId, pendingStart] of Object.entries(existingStarts)) {
+    if (!toolCallId || !pendingStart) continue;
+    const toolName = asNonEmptyString(pendingStart.toolName) ?? 'unknown';
+    const startedAt = asNonEmptyString(pendingStart.startedAt);
+    if (!startedAt) continue;
+    pendingStarts.set(toolCallId, { toolName, startedAt });
+  }
+  const durationTotals = new Map<string, { count: number; totalMs: number; maxMs: number; slowCount: number }>();
+  const slowTools: SlowToolExecution[] = [];
+  const significantEvents: Array<{ type: string; timestamp: string; summary: string }> = [];
   const summarizeMessage = (value: unknown): string => {
     const content = asNonEmptyString(value);
     if (!content) return 'no content';
     return content.length > 80 ? `${content.substring(0, 80)}...` : content;
+  };
+  const trackDuration = (
+    toolName: string,
+    toolCallId: string | null,
+    startedAt: string,
+    completedAt: string,
+    durationMs: number,
+    success: boolean,
+  ): void => {
+    const stats = durationTotals.get(toolName) ?? { count: 0, totalMs: 0, maxMs: 0, slowCount: 0 };
+    stats.count += 1;
+    stats.totalMs += durationMs;
+    stats.maxMs = Math.max(stats.maxMs, durationMs);
+    if (durationMs > SLOW_TOOL_THRESHOLD_MS) {
+      stats.slowCount += 1;
+      slowTools.push({
+        toolName,
+        toolCallId,
+        startedAt,
+        completedAt,
+        durationMs,
+        success,
+      });
+      significantEvents.push({
+        type: 'tool_slow',
+        timestamp: completedAt,
+        summary: `Slow tool ${toolName}: ${(durationMs / 1000).toFixed(1)}s`,
+      });
+    }
+    durationTotals.set(toolName, stats);
   };
 
   for (const event of events) {
@@ -96,7 +155,11 @@ export function processEvents(events: WorkerEvent[]): {
 
     switch (event.type) {
       case 'tool.execution_start': {
+        const toolCallId = asNonEmptyString(event.data.toolCallId);
         const toolName = asNonEmptyString(event.data.toolName) ?? 'unknown';
+        if (toolCallId && event.timestamp) {
+          pendingStarts.set(toolCallId, { toolName, startedAt: event.timestamp });
+        }
         significantEvents.push({
           type: 'tool_start',
           timestamp: event.timestamp,
@@ -107,14 +170,36 @@ export function processEvents(events: WorkerEvent[]): {
 
       case 'tool.execution_complete':
         toolCalls++;
+        {
+          const toolCallId = asNonEmptyString(event.data.toolCallId);
+          const pendingStart = toolCallId ? pendingStarts.get(toolCallId) : undefined;
+          const toolName = asNonEmptyString(event.data.toolName) ?? pendingStart?.toolName ?? 'unknown';
+          const success = event.data.success !== false;
+          if (pendingStart && toolCallId) {
+            pendingStarts.delete(toolCallId);
+          }
+          if (pendingStart) {
+            const startedAtMillis = toTimestampMillis(pendingStart.startedAt);
+            const completedAtMillis = toTimestampMillis(event.timestamp);
+            if (startedAtMillis !== null && completedAtMillis !== null && completedAtMillis >= startedAtMillis) {
+              trackDuration(
+                toolName,
+                toolCallId,
+                pendingStart.startedAt,
+                event.timestamp,
+                completedAtMillis - startedAtMillis,
+                success,
+              );
+            }
+          }
         if (event.data.success === false) {
           errors++;
-          const toolName = (event.data.toolName as string) ?? 'unknown';
           significantEvents.push({
             type: 'tool_error',
             timestamp: event.timestamp,
             summary: `Tool ${toolName} failed`,
           });
+        }
         }
         break;
 
@@ -253,7 +338,31 @@ export function processEvents(events: WorkerEvent[]): {
     }
   }
 
-  return { toolCalls, turns, errors, lastEventAt, lastEventType, terminalStatus, exitCode, significantEvents };
+  const toolDurationStats: ToolDurationStat[] = Array.from(durationTotals.entries())
+    .map(([toolName, stats]) => ({
+      toolName,
+      count: stats.count,
+      totalMs: stats.totalMs,
+      avgMs: Math.round(stats.totalMs / stats.count),
+      maxMs: stats.maxMs,
+      slowCount: stats.slowCount,
+    }))
+    .sort((a, b) => b.totalMs - a.totalMs || a.toolName.localeCompare(b.toolName));
+  const nextPendingStarts = Object.fromEntries(pendingStarts.entries());
+
+  return {
+    toolCalls,
+    turns,
+    errors,
+    lastEventAt,
+    lastEventType,
+    terminalStatus,
+    exitCode,
+    slowTools,
+    toolDurationStats,
+    pendingStarts: nextPendingStarts,
+    significantEvents,
+  };
 }
 
 /** Detect if a worker is stale/lost based on last activity timestamp.
@@ -290,6 +399,8 @@ export function buildSyncResult(
     errors: processed.errors,
     lastEventAt: processed.lastEventAt,
     error: null,
+    slowTools: processed.slowTools,
+    toolDurationStats: processed.toolDurationStats,
     significantEvents: processed.significantEvents,
   };
 }

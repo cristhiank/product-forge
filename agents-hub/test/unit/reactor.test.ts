@@ -364,6 +364,56 @@ malformed line without braces
       expect(result.significantEvents[2].summary).toBe('Session compaction completed');
     });
 
+    it('should pair tool start/complete events and aggregate duration stats', () => {
+      const events: WorkerEvent[] = [
+        { type: 'tool.execution_start', data: { toolCallId: 'call-1', toolName: 'view' }, id: 'e1', timestamp: '2024-01-15T10:00:00Z', parentId: null },
+        { type: 'tool.execution_complete', data: { toolCallId: 'call-1', success: true }, id: 'e2', timestamp: '2024-01-15T10:00:02Z', parentId: null },
+        { type: 'tool.execution_start', data: { toolCallId: 'call-2', toolName: 'view' }, id: 'e3', timestamp: '2024-01-15T10:00:03Z', parentId: null },
+        { type: 'tool.execution_complete', data: { toolCallId: 'call-2', success: true }, id: 'e4', timestamp: '2024-01-15T10:00:06Z', parentId: null },
+      ];
+
+      const result = processEvents(events);
+      expect(result.pendingStarts).toEqual({});
+      expect(result.toolDurationStats).toEqual([
+        {
+          toolName: 'view',
+          count: 2,
+          totalMs: 5000,
+          avgMs: 2500,
+          maxMs: 3000,
+          slowCount: 0,
+        },
+      ]);
+      expect(result.slowTools).toEqual([]);
+    });
+
+    it('should carry pending starts across sync boundaries and flag slow tools', () => {
+      const existingStarts = {
+        'call-1': { toolName: 'bash', startedAt: '2024-01-15T10:00:00Z' },
+      };
+      const events: WorkerEvent[] = [
+        { type: 'tool.execution_complete', data: { toolCallId: 'call-1', success: false }, id: 'e1', timestamp: '2024-01-15T10:00:08Z', parentId: null },
+      ];
+
+      const result = processEvents(events, existingStarts);
+      expect(result.pendingStarts).toEqual({});
+      expect(result.toolDurationStats[0]).toMatchObject({
+        toolName: 'bash',
+        count: 1,
+        totalMs: 8000,
+        avgMs: 8000,
+        maxMs: 8000,
+        slowCount: 1,
+      });
+      expect(result.slowTools).toHaveLength(1);
+      expect(result.slowTools[0]).toMatchObject({
+        toolName: 'bash',
+        durationMs: 8000,
+        success: false,
+      });
+      expect(result.significantEvents.some((event) => event.type === 'tool_slow')).toBe(true);
+    });
+
     it('should extract significant events - tool error', () => {
       const events: WorkerEvent[] = [
         { type: 'tool.execution_complete', data: { toolName: 'bash', success: false }, id: 'e1', timestamp: '2024-01-15T10:00:00Z', parentId: null },
@@ -486,6 +536,8 @@ malformed line without braces
       expect(result.errors).toBe(0);
       expect(result.lastEventAt).toBe('2024-01-15T10:01:00Z');
       expect(result.significantEvents).toBeDefined();
+      expect(result.slowTools).toEqual([]);
+      expect(result.toolDurationStats).toEqual([]);
     });
 
     it('should keep active status when session.error occurs (not terminal)', () => {
@@ -523,6 +575,8 @@ malformed line without braces
       expect(result.turns).toBe(0);
       expect(result.errors).toBe(0);
       expect(result.lastEventAt).toBeNull();
+      expect(result.slowTools).toEqual([]);
+      expect(result.toolDurationStats).toEqual([]);
       expect(result.significantEvents).toEqual([]);
     });
 

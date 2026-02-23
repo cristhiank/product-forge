@@ -58,6 +58,8 @@ import type {
   WorkerSyncStatus,
   RegisterWorkerOptions,
   WorkerSyncResult,
+  SlowToolExecution,
+  ToolDurationStat,
 } from './core/types.js';
 
 function buildWorkerSyncFailure(
@@ -77,8 +79,88 @@ function buildWorkerSyncFailure(
     errors: 0,
     lastEventAt: null,
     error,
+    slowTools: [],
+    toolDurationStats: [],
     significantEvents: [],
   };
+}
+
+interface ToolTimingMetadata {
+  pendingStarts: Record<string, { toolName: string; startedAt: string }>;
+  toolStats: Record<string, { count: number; totalMs: number; maxMs: number; slowCount: number }>;
+  slowTools: SlowToolExecution[];
+}
+
+function parseToolTimingMetadata(workerMetadata: Record<string, unknown>): ToolTimingMetadata {
+  const raw = workerMetadata.toolTiming as Record<string, unknown> | undefined;
+  const pendingStarts: Record<string, { toolName: string; startedAt: string }> = {};
+  const toolStats: Record<string, { count: number; totalMs: number; maxMs: number; slowCount: number }> = {};
+  const slowTools: SlowToolExecution[] = [];
+
+  if (raw && typeof raw === 'object') {
+    const rawPending = raw.pendingStarts as Record<string, unknown> | undefined;
+    if (rawPending && typeof rawPending === 'object') {
+      for (const [toolCallId, value] of Object.entries(rawPending)) {
+        if (!toolCallId || !value || typeof value !== 'object') continue;
+        const toolName = typeof (value as Record<string, unknown>).toolName === 'string'
+          ? ((value as Record<string, unknown>).toolName as string)
+          : 'unknown';
+        const startedAt = typeof (value as Record<string, unknown>).startedAt === 'string'
+          ? ((value as Record<string, unknown>).startedAt as string)
+          : '';
+        if (!startedAt) continue;
+        pendingStarts[toolCallId] = { toolName, startedAt };
+      }
+    }
+
+    const rawToolStats = raw.toolStats as Record<string, unknown> | undefined;
+    if (rawToolStats && typeof rawToolStats === 'object') {
+      for (const [toolName, value] of Object.entries(rawToolStats)) {
+        if (!toolName || !value || typeof value !== 'object') continue;
+        const v = value as Record<string, unknown>;
+        const count = typeof v.count === 'number' ? v.count : 0;
+        const totalMs = typeof v.totalMs === 'number' ? v.totalMs : 0;
+        const maxMs = typeof v.maxMs === 'number' ? v.maxMs : 0;
+        const slowCount = typeof v.slowCount === 'number' ? v.slowCount : 0;
+        if (count <= 0) continue;
+        toolStats[toolName] = { count, totalMs, maxMs, slowCount };
+      }
+    }
+
+    const rawSlowTools = raw.slowTools;
+    if (Array.isArray(rawSlowTools)) {
+      for (const item of rawSlowTools) {
+        if (!item || typeof item !== 'object') continue;
+        const v = item as Record<string, unknown>;
+        if (typeof v.toolName !== 'string' || typeof v.completedAt !== 'string' || typeof v.durationMs !== 'number') continue;
+        slowTools.push({
+          toolName: v.toolName,
+          toolCallId: typeof v.toolCallId === 'string' ? v.toolCallId : null,
+          startedAt: typeof v.startedAt === 'string' ? v.startedAt : null,
+          completedAt: v.completedAt,
+          durationMs: v.durationMs,
+          success: v.success !== false,
+        });
+      }
+    }
+  }
+
+  return { pendingStarts, toolStats, slowTools };
+}
+
+function toolStatsRecordToArray(
+  toolStats: Record<string, { count: number; totalMs: number; maxMs: number; slowCount: number }>
+): ToolDurationStat[] {
+  return Object.entries(toolStats)
+    .map(([toolName, stats]) => ({
+      toolName,
+      count: stats.count,
+      totalMs: stats.totalMs,
+      avgMs: Math.round(stats.totalMs / stats.count),
+      maxMs: stats.maxMs,
+      slowCount: stats.slowCount,
+    }))
+    .sort((a, b) => b.totalMs - a.totalMs || a.toolName.localeCompare(b.toolName));
 }
 
 /**
@@ -327,6 +409,8 @@ export class Hub {
   workerSync(id: string): WorkerSyncResult {
     const worker = getWorker(this.db, id);
     if (!worker) return buildWorkerSyncFailure(id, 'no_worker', null, `Worker not found: ${id}`);
+    const workerMetadata = (worker.metadata ?? {}) as Record<string, unknown>;
+    const toolTiming = parseToolTimingMetadata(workerMetadata);
 
     // Lazy re-discovery: if eventsPath is missing, retry discoverSession
     if (!worker.eventsPath) {
@@ -361,10 +445,31 @@ export class Hub {
         `Failed to parse ${parseErrors} event line(s) for worker: ${id}`,
       );
     }
-    if (events.length === 0) return buildSyncResult(id, events, processEvents([]), worker.status);
+    if (events.length === 0) {
+      const result = buildSyncResult(id, events, processEvents([], toolTiming.pendingStarts), worker.status);
+      result.slowTools = toolTiming.slowTools;
+      result.toolDurationStats = toolStatsRecordToArray(toolTiming.toolStats);
+      return result;
+    }
 
-    const processed = processEvents(events);
+    const processed = processEvents(events, toolTiming.pendingStarts);
     const result = buildSyncResult(id, events, processed, worker.status);
+
+    const mergedToolStats = { ...toolTiming.toolStats };
+    for (const stat of processed.toolDurationStats) {
+      const existing = mergedToolStats[stat.toolName] ?? { count: 0, totalMs: 0, maxMs: 0, slowCount: 0 };
+      existing.count += stat.count;
+      existing.totalMs += stat.totalMs;
+      existing.maxMs = Math.max(existing.maxMs, stat.maxMs);
+      existing.slowCount += stat.slowCount;
+      mergedToolStats[stat.toolName] = existing;
+    }
+    const mergedSlowTools = [...toolTiming.slowTools, ...processed.slowTools]
+      .sort((a, b) => b.completedAt.localeCompare(a.completedAt))
+      .slice(0, 20);
+
+    result.slowTools = mergedSlowTools;
+    result.toolDurationStats = toolStatsRecordToArray(mergedToolStats);
 
     // Update worker state
     const updates: Partial<{
@@ -377,11 +482,20 @@ export class Hub {
       status: WorkerStatus;
       exitCode: number;
       completedAt: string;
+      metadata: Record<string, unknown>;
     }> = {
       eventsOffset: newOffset,
       toolCalls: worker.toolCalls + processed.toolCalls,
       turns: worker.turns + processed.turns,
       errors: worker.errors + processed.errors,
+      metadata: {
+        ...workerMetadata,
+        toolTiming: {
+          pendingStarts: processed.pendingStarts,
+          toolStats: mergedToolStats,
+          slowTools: mergedSlowTools,
+        },
+      },
     };
 
     if (processed.lastEventAt) updates.lastEventAt = processed.lastEventAt;

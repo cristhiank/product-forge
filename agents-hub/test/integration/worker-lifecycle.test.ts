@@ -166,6 +166,44 @@ describe('worker lifecycle integration', () => {
       expect(r2!.toolCalls).toBe(0);
       expect(r2!.turns).toBe(0);
     });
+
+    it('should pair tool.execution_start and tool.execution_complete across syncs', () => {
+      const eventsPath = join(tempDir, 'events-duration-pairs.jsonl');
+      writeEvents(eventsPath, [
+        evt('tool.execution_start', { toolCallId: 'call-1', toolName: 'bash' }, '2026-01-15T10:00:00Z'),
+      ]);
+
+      mockDiscoverSession.mockReturnValue({ sessionId: 'session-duration-pairs', eventsPath });
+      hub.workerRegister({ id: 'duration-worker', agentType: 'Executor' });
+
+      const r1 = hub.workerSync('duration-worker');
+      expect(r1!.toolDurationStats).toEqual([]);
+      expect(r1!.slowTools).toEqual([]);
+
+      appendEvents(eventsPath, [
+        evt('tool.execution_complete', { toolCallId: 'call-1', success: true }, '2026-01-15T10:00:02Z'),
+        evt('tool.execution_start', { toolCallId: 'call-2', toolName: 'bash' }, '2026-01-15T10:00:03Z'),
+        evt('tool.execution_complete', { toolCallId: 'call-2', success: false }, '2026-01-15T10:00:10Z'),
+      ]);
+
+      const r2 = hub.workerSync('duration-worker');
+      expect(r2!.toolDurationStats).toEqual([
+        {
+          toolName: 'bash',
+          count: 2,
+          totalMs: 9000,
+          avgMs: 4500,
+          maxMs: 7000,
+          slowCount: 1,
+        },
+      ]);
+      expect(r2!.slowTools).toHaveLength(1);
+      expect(r2!.slowTools[0]).toMatchObject({
+        toolName: 'bash',
+        durationMs: 7000,
+        success: false,
+      });
+    });
   });
 
   // ── 2. All event types ────────────────────────────────────────────

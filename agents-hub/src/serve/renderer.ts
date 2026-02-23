@@ -648,6 +648,14 @@ function formatDuration(startIso: string): string {
   return `${seconds}s`;
 }
 
+function formatDurationMs(durationMs: number): string {
+  if (durationMs >= 1000) {
+    const seconds = durationMs / 1000;
+    return `${seconds >= 10 ? seconds.toFixed(0) : seconds.toFixed(1)}s`;
+  }
+  return `${Math.round(durationMs)}ms`;
+}
+
 function renderWorkerRow(w: WorkerWithHealth): string {
   const emoji = agentTypeEmoji(w.agentType);
   const duration = formatDuration(w.registeredAt);
@@ -745,6 +753,8 @@ export function workerDetailPage(
 ): string {
   const emoji = agentTypeEmoji(worker.agentType);
   const significantEvents = sync?.significantEvents ?? [];
+  const toolDurationStats = sync?.toolDurationStats ?? [];
+  const slowTools = sync?.slowTools ?? [];
   const timelineHtml = significantEvents.length
     ? `<ul class="worker-detail-timeline">
         ${significantEvents.map((event) => `
@@ -756,6 +766,45 @@ export function workerDetailPage(
         `).join('\n')}
       </ul>`
     : `<div class="worker-detail-empty">No significant events from the latest sync.</div>`;
+  const toolStatsHtml = toolDurationStats.length
+    ? `<div class="workers-table-wrap">
+        <table class="workers-table">
+          <thead>
+            <tr>
+              <th>Tool</th>
+              <th>Calls</th>
+              <th>Avg</th>
+              <th>Max</th>
+              <th>Slow (&gt;5s)</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${toolDurationStats.map((stat) => `
+              <tr>
+                <td><code>${esc(stat.toolName)}</code></td>
+                <td class="worker-counter">${stat.count}</td>
+                <td class="worker-time">${formatDurationMs(stat.avgMs)}</td>
+                <td class="worker-time">${formatDurationMs(stat.maxMs)}</td>
+                <td class="worker-counter ${stat.slowCount > 0 ? 'worker-counter-error' : ''}">${stat.slowCount}</td>
+              </tr>
+            `).join('\n')}
+          </tbody>
+        </table>
+      </div>`
+    : `<div class="worker-detail-empty">No completed start→complete tool pairs yet.</div>`;
+  const slowToolsHtml = slowTools.length
+    ? `<ul class="worker-detail-timeline">
+        ${slowTools.map((entry) => `
+          <li class="worker-detail-event">
+            <div class="worker-detail-event-type">${esc(entry.toolName)}</div>
+            <div class="worker-detail-event-summary">
+              ${formatDurationMs(entry.durationMs)}${entry.success ? '' : ' (failed)'}${entry.toolCallId ? ` · ${esc(entry.toolCallId)}` : ''}
+            </div>
+            <div class="worker-detail-event-time">${formatTimestamp(entry.completedAt)}</div>
+          </li>
+        `).join('\n')}
+      </ul>`
+    : `<div class="worker-detail-empty">No slow tools detected (threshold: 5s).</div>`;
 
   const messagesHtml = relatedMessages.length
     ? relatedMessages.map(renderMessage).join('\n')
@@ -797,12 +846,24 @@ export function workerDetailPage(
         <span class="worker-detail-metric-label">Last Event</span>
         <span class="worker-detail-metric-value worker-time">${esc(worker.lastEventType || 'none')}</span>
       </div>
+      <div class="worker-detail-metric">
+        <span class="worker-detail-metric-label">Slow Tools</span>
+        <span class="worker-detail-metric-value ${slowTools.length > 0 ? 'worker-counter-error' : ''}">${slowTools.length}</span>
+      </div>
     </div>
 
     <div class="worker-detail-grid">
       <section class="worker-detail-section">
         <h2>Timeline</h2>
         ${timelineHtml}
+      </section>
+      <section class="worker-detail-section">
+        <h2>Tool Duration Stats</h2>
+        ${toolStatsHtml}
+      </section>
+      <section class="worker-detail-section">
+        <h2>Slow Tools (&gt;5s)</h2>
+        ${slowToolsHtml}
       </section>
       <section class="worker-detail-section">
         <h2>Related Messages (${relatedMessages.length})</h2>
