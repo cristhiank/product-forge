@@ -4,14 +4,17 @@ import type { WorkerEvent, WorkerSyncResult, WorkerStatus } from './types.js';
 /** Read new events from an events.jsonl file starting from byte offset.
  *  Returns parsed events and the new byte offset for next read.
  */
-export function readNewEvents(eventsPath: string, fromOffset_: number = 0): { events: WorkerEvent[]; newOffset: number } {
+export function readNewEvents(
+  eventsPath: string,
+  fromOffset_: number = 0,
+): { events: WorkerEvent[]; newOffset: number; parseErrors: number; fileMissing: boolean } {
   let fromOffset = fromOffset_;
-  if (!existsSync(eventsPath)) return { events: [], newOffset: fromOffset };
+  if (!existsSync(eventsPath)) return { events: [], newOffset: fromOffset, parseErrors: 0, fileMissing: true };
   
   const stat = statSync(eventsPath);
   // File truncated (e.g., rotated/replaced) — reset to beginning
   if (stat.size < fromOffset) fromOffset = 0;
-  if (stat.size <= fromOffset) return { events: [], newOffset: fromOffset };
+  if (stat.size <= fromOffset) return { events: [], newOffset: fromOffset, parseErrors: 0, fileMissing: false };
   
   // Read only the new bytes
   const bytesToRead = stat.size - fromOffset;
@@ -28,13 +31,14 @@ export function readNewEvents(eventsPath: string, fromOffset_: number = 0): { ev
   const lastNewline = text.lastIndexOf('\n');
   if (lastNewline === -1) {
     // No complete lines yet — don't advance offset
-    return { events: [], newOffset: fromOffset };
+    return { events: [], newOffset: fromOffset, parseErrors: 0, fileMissing: false };
   }
   const completeText = text.substring(0, lastNewline + 1);
   const newOffset = fromOffset + Buffer.byteLength(completeText, 'utf-8');
 
   const lines = completeText.split('\n').filter(l => l.trim().length > 0);
   const events: WorkerEvent[] = [];
+  let parseErrors = 0;
   
   for (const line of lines) {
     try {
@@ -48,10 +52,11 @@ export function readNewEvents(eventsPath: string, fromOffset_: number = 0): { ev
       });
     } catch {
       // Skip malformed lines (could be partial writes)
+      parseErrors++;
     }
   }
   
-  return { events, newOffset };
+  return { events, newOffset, parseErrors, fileMissing: false };
 }
 
 /** Process events and extract counters and significant events */
@@ -193,12 +198,15 @@ export function buildSyncResult(
   const status = processed.terminalStatus ?? currentStatus;
   return {
     workerId,
+    ok: true,
+    syncStatus: 'ok',
     newEvents: events.length,
     status,
     toolCalls: processed.toolCalls,
     turns: processed.turns,
     errors: processed.errors,
     lastEventAt: processed.lastEventAt,
+    error: null,
     significantEvents: processed.significantEvents,
   };
 }

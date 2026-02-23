@@ -216,17 +216,22 @@ export interface WorkerEvent {
   parentId: string | null;
 }
 
+export type WorkerSyncStatus = 'ok' | 'no_worker' | 'no_events_path' | 'events_missing' | 'parse_error';
+
 /**
  * Result of syncing worker events
  */
 export interface WorkerSyncResult {
   workerId: string;
+  ok: boolean;
+  syncStatus: WorkerSyncStatus;
   newEvents: number;
-  status: WorkerStatus;
+  status: WorkerStatus | null;
   toolCalls: number;
   turns: number;
   errors: number;
   lastEventAt: string | null;
+  error: string | null;
   significantEvents: Array<{
     type: string;
     timestamp: string;

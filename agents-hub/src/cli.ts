@@ -10,7 +10,7 @@ import { dirname, join, resolve } from 'node:path';
 import { Hub } from './hub.js';
 import { HubSDK } from './sdk.js';
 import { detectHealth } from './core/reactor.js';
-import type { PostOptions, ReplyOptions, UpdateOptions, ReadOptions, SearchOptions, WatchOptions, RegisterWorkerOptions, WorkerStatus } from './core/types.js';
+import type { PostOptions, ReplyOptions, UpdateOptions, ReadOptions, SearchOptions, WatchOptions, RegisterWorkerOptions, WorkerStatus, WorkerSyncResult } from './core/types.js';
 
 /**
  * Resolve the default database path using .git/devpartner/hub.db
@@ -92,6 +92,22 @@ function parseJson<T>(str: string, field: string): T {
  */
 function parseTags(str: string): string[] {
   return str.split(',').map(t => t.trim()).filter(Boolean);
+}
+
+function describeWorkerSyncResult(result: WorkerSyncResult): string {
+  if (result.ok) return 'Worker synced successfully';
+  switch (result.syncStatus) {
+    case 'no_worker':
+      return `Worker not found: ${result.workerId}`;
+    case 'no_events_path':
+      return `No events path available for worker: ${result.workerId}`;
+    case 'events_missing':
+      return `Events file missing for worker: ${result.workerId}`;
+    case 'parse_error':
+      return `Unable to parse events for worker: ${result.workerId}`;
+    default:
+      return result.error ?? `Worker sync failed: ${result.workerId}`;
+  }
 }
 
 /**
@@ -643,11 +659,22 @@ export function runCli(): void {
       try {
         const dbPath = program.opts().db;
         const hub = new Hub(dbPath);
-        if (opts.sync) hub.workerSync(id);
+        const syncResult = opts.sync ? hub.workerSync(id) : null;
         const w = hub.workerGet(id);
         hub.close();
+        if (syncResult && syncResult.syncStatus === 'no_worker') {
+          throw new Error(describeWorkerSyncResult(syncResult));
+        }
         if (!w) throw new Error(`Worker not found: ${id}`);
-        output({ ...w, health: detectHealth(w.lastEventAt) }, program.opts().pretty);
+        output({
+          ...w,
+          health: detectHealth(w.lastEventAt),
+          sync: syncResult ? {
+            ok: syncResult.ok,
+            status: syncResult.syncStatus,
+            message: describeWorkerSyncResult(syncResult),
+          } : undefined,
+        }, program.opts().pretty);
       } catch (err) {
         handleError(err);
       }
@@ -664,12 +691,19 @@ export function runCli(): void {
         if (opts.id) {
           const result = hub.workerSync(opts.id);
           hub.close();
-          if (!result) throw new Error(`Worker not found or has no events path: ${opts.id}`);
-          output(result, program.opts().pretty);
+          output({
+            ...result,
+            message: describeWorkerSyncResult(result),
+          }, program.opts().pretty);
         } else {
           const results = hub.workerSyncAll();
           hub.close();
-          output({ synced: results }, program.opts().pretty);
+          output({
+            synced: results.map(result => ({
+              ...result,
+              message: describeWorkerSyncResult(result),
+            })),
+          }, program.opts().pretty);
         }
       } catch (err) {
         handleError(err);

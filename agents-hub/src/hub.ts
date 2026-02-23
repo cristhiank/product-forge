@@ -55,9 +55,31 @@ import type {
   HubStats,
   Worker,
   WorkerStatus,
+  WorkerSyncStatus,
   RegisterWorkerOptions,
   WorkerSyncResult,
 } from './core/types.js';
+
+function buildWorkerSyncFailure(
+  workerId: string,
+  syncStatus: Exclude<WorkerSyncStatus, 'ok'>,
+  status: WorkerStatus | null,
+  error: string,
+): WorkerSyncResult {
+  return {
+    workerId,
+    ok: false,
+    syncStatus,
+    newEvents: 0,
+    status,
+    toolCalls: 0,
+    turns: 0,
+    errors: 0,
+    lastEventAt: null,
+    error,
+    significantEvents: [],
+  };
+}
 
 /**
  * Hub class - main entry point for Agents Hub
@@ -302,20 +324,43 @@ export class Hub {
   /**
    * Sync a worker's events — reads new events from events.jsonl, updates counters and status
    */
-  workerSync(id: string): WorkerSyncResult | null {
+  workerSync(id: string): WorkerSyncResult {
     const worker = getWorker(this.db, id);
-    if (!worker) return null;
+    if (!worker) return buildWorkerSyncFailure(id, 'no_worker', null, `Worker not found: ${id}`);
 
     // Lazy re-discovery: if eventsPath is missing, retry discoverSession
     if (!worker.eventsPath) {
       const session = discoverSession(id);
-      if (!session) return null;
+      if (!session) {
+        return buildWorkerSyncFailure(
+          id,
+          'no_events_path',
+          worker.status,
+          `No events path available for worker: ${id}`,
+        );
+      }
       updateWorker(this.db, id, { sessionId: session.sessionId, eventsPath: session.eventsPath });
       worker.eventsPath = session.eventsPath;
       worker.sessionId = session.sessionId;
     }
 
-    const { events, newOffset } = readNewEvents(worker.eventsPath, worker.eventsOffset);
+    const { events, newOffset, parseErrors, fileMissing } = readNewEvents(worker.eventsPath, worker.eventsOffset);
+    if (fileMissing) {
+      return buildWorkerSyncFailure(
+        id,
+        'events_missing',
+        worker.status,
+        `Events file not found at path: ${worker.eventsPath}`,
+      );
+    }
+    if (parseErrors > 0 && events.length === 0) {
+      return buildWorkerSyncFailure(
+        id,
+        'parse_error',
+        worker.status,
+        `Failed to parse ${parseErrors} event line(s) for worker: ${id}`,
+      );
+    }
     if (events.length === 0) return buildSyncResult(id, events, processEvents([]), worker.status);
 
     const processed = processEvents(events);
@@ -362,7 +407,7 @@ export class Hub {
    */
   workerSyncAll(): WorkerSyncResult[] {
     const workers = listWorkers(this.db, { status: 'active' });
-    return workers.map(w => this.workerSync(w.id)).filter((r): r is WorkerSyncResult => r !== null);
+    return workers.map(w => this.workerSync(w.id));
   }
 
   /**

@@ -607,7 +607,136 @@ a:hover { text-decoration: underline; }
   .sidebar { width: 100%; height: auto; position: static; border-right: none; border-bottom: 1px solid var(--color-border); }
   .timeline-container { height: calc(100vh - 200px); }
   .new-message-indicator { bottom: 20px; right: 20px; }
+  .workers-table-wrap { overflow-x: auto; }
 }
+
+/* Workers page */
+.workers-summary {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+}
+
+.workers-summary-item {
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 16px 24px;
+  text-align: center;
+  min-width: 100px;
+  flex: 1;
+}
+
+.workers-summary-count {
+  display: block;
+  font-size: 28px;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.workers-summary-label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  color: var(--color-text-secondary);
+  margin-top: 2px;
+}
+
+.summary-healthy .workers-summary-count { color: var(--color-success); }
+.summary-stale .workers-summary-count { color: var(--color-warning); }
+.summary-lost .workers-summary-count { color: var(--color-text-muted); }
+.summary-failed .workers-summary-count { color: var(--color-danger); }
+.summary-completed .workers-summary-count { color: var(--color-accent); }
+
+.workers-table-wrap {
+  background: var(--color-bg-subtle);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.workers-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.workers-table thead th {
+  background: var(--color-bg-inset);
+  padding: 10px 14px;
+  text-align: left;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  color: var(--color-text-secondary);
+  border-bottom: 1px solid var(--color-border);
+  white-space: nowrap;
+}
+
+.workers-table tbody tr {
+  border-bottom: 1px solid var(--color-border-subtle);
+  cursor: pointer;
+  transition: background 0.1s;
+}
+
+.workers-table tbody tr:hover { background: var(--color-bg-elevated); }
+.workers-table tbody tr:last-child { border-bottom: none; }
+
+.workers-table td {
+  padding: 10px 14px;
+  color: var(--color-text);
+  white-space: nowrap;
+}
+
+.worker-id-cell a {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--color-link);
+}
+
+.worker-counter {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  text-align: center;
+}
+
+.worker-counter-error { color: var(--color-danger); font-weight: 600; }
+
+.worker-time {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+}
+
+.worker-empty {
+  text-align: center;
+  padding: 48px 24px !important;
+  color: var(--color-text-muted);
+  font-size: 16px;
+}
+
+.worker-health-badge, .worker-status-badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  border: 1px solid;
+}
+
+.health-healthy { background: rgba(63, 185, 80, 0.15); color: var(--color-success); border-color: #238636; }
+.health-stale { background: rgba(210, 153, 34, 0.15); color: var(--color-warning); border-color: #9e6a03; }
+.health-lost { background: rgba(110, 118, 129, 0.15); color: var(--color-text-muted); border-color: #484f58; }
+
+.wstatus-active { background: rgba(63, 185, 80, 0.15); color: var(--color-success); border-color: #238636; }
+.wstatus-completed { background: rgba(88, 166, 255, 0.15); color: var(--color-accent); border-color: #1f6feb; }
+.wstatus-failed { background: rgba(248, 81, 73, 0.15); color: var(--color-danger); border-color: #da3633; }
+.wstatus-lost { background: rgba(110, 118, 129, 0.15); color: var(--color-text-muted); border-color: #484f58; }
 
 /* Scrollbar styling for dark theme */
 .timeline::-webkit-scrollbar,
@@ -890,6 +1019,7 @@ function layout(opts) {
           <li><a href="/" class="${opts.activePage === 'timeline' ? 'active' : ''}">📡 Timeline</a></li>
           <li><a href="/status" class="${opts.activePage === 'status' ? 'active' : ''}">📊 Status</a></li>
           <li><a href="/search" class="${opts.activePage === 'search' ? 'active' : ''}">🔍 Search</a></li>
+          <li><a href="/workers" class="${opts.activePage === 'workers' ? 'active' : ''}">🤖 Workers</a></li>
         </ul>
       </div>
 
@@ -1101,6 +1231,128 @@ function threadView(parent, replies) {
       </div>` : `<div class="empty-state"><div class="empty-state-icon">💬</div><div class="empty-state-text">No replies yet</div></div>`}
     </div>`;
 }
+function agentTypeEmoji(agentType) {
+    if (!agentType)
+        return '🤖';
+    const lower = agentType.toLowerCase();
+    if (lower.includes('scout'))
+        return '🔍';
+    if (lower.includes('creative'))
+        return '💡';
+    if (lower.includes('planner'))
+        return '📋';
+    if (lower.includes('verifier'))
+        return '✅';
+    if (lower.includes('executor'))
+        return '⚙️';
+    if (lower.includes('orchestrator'))
+        return '🎯';
+    if (lower.includes('super'))
+        return '👑';
+    if (lower.includes('memory'))
+        return '🧠';
+    return '🤖';
+}
+function healthBadge(health) {
+    return `<span class="worker-health-badge health-${esc(health)}">${esc(health)}</span>`;
+}
+function statusBadge(status) {
+    return `<span class="worker-status-badge wstatus-${esc(status)}">${esc(status)}</span>`;
+}
+function formatDuration(startIso) {
+    const elapsed = Date.now() - new Date(startIso).getTime();
+    const seconds = Math.floor(elapsed / 1000);
+    const minutes = Math.floor(seconds / 60);
+    const hours = Math.floor(minutes / 60);
+    if (hours > 0)
+        return `${hours}h ${minutes % 60}m`;
+    if (minutes > 0)
+        return `${minutes}m`;
+    return `${seconds}s`;
+}
+function workersPage(workers) {
+    const total = workers.length;
+    const healthy = workers.filter(w => w.health === 'healthy').length;
+    const stale = workers.filter(w => w.health === 'stale').length;
+    const lost = workers.filter(w => w.health === 'lost').length;
+    const failed = workers.filter(w => w.status === 'failed').length;
+    const completed = workers.filter(w => w.status === 'completed').length;
+    const summaryBar = `
+    <div class="workers-summary">
+      <div class="workers-summary-item">
+        <span class="workers-summary-count">${total}</span>
+        <span class="workers-summary-label">Total</span>
+      </div>
+      <div class="workers-summary-item summary-healthy">
+        <span class="workers-summary-count">${healthy}</span>
+        <span class="workers-summary-label">Healthy</span>
+      </div>
+      <div class="workers-summary-item summary-stale">
+        <span class="workers-summary-count">${stale}</span>
+        <span class="workers-summary-label">Stale</span>
+      </div>
+      <div class="workers-summary-item summary-lost">
+        <span class="workers-summary-count">${lost}</span>
+        <span class="workers-summary-label">Lost</span>
+      </div>
+      <div class="workers-summary-item summary-failed">
+        <span class="workers-summary-count">${failed}</span>
+        <span class="workers-summary-label">Failed</span>
+      </div>
+      <div class="workers-summary-item summary-completed">
+        <span class="workers-summary-count">${completed}</span>
+        <span class="workers-summary-label">Completed</span>
+      </div>
+    </div>`;
+    const tableRows = workers.length
+        ? workers.map(w => {
+            const emoji = agentTypeEmoji(w.agentType);
+            const duration = formatDuration(w.registeredAt);
+            const lastActivity = w.lastEventAt ? formatTimestamp(w.lastEventAt) : 'never';
+            return `<tr class="worker-row" onclick="window.location='/worker/${esc(w.id)}'">
+          <td class="worker-id-cell"><a href="/worker/${esc(w.id)}">${esc(w.id)}</a></td>
+          <td>${emoji} ${esc(w.agentType || 'unknown')}</td>
+          <td>${statusBadge(w.status)} ${healthBadge(w.health)}</td>
+          <td><code>${esc(w.channel)}</code></td>
+          <td class="worker-counter">${w.toolCalls}</td>
+          <td class="worker-counter">${w.turns}</td>
+          <td class="worker-counter ${w.errors > 0 ? 'worker-counter-error' : ''}">${w.errors}</td>
+          <td class="worker-time">${lastActivity}</td>
+          <td class="worker-time">${duration}</td>
+        </tr>`;
+        }).join('\n')
+        : `<tr><td colspan="9" class="worker-empty">No workers registered yet</td></tr>`;
+    const table = `
+    <div class="workers-table-wrap">
+      <table class="workers-table">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Agent Type</th>
+            <th>Status</th>
+            <th>Channel</th>
+            <th>Tool Calls</th>
+            <th>Turns</th>
+            <th>Errors</th>
+            <th>Last Activity</th>
+            <th>Duration</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${tableRows}
+        </tbody>
+      </table>
+    </div>`;
+    return `
+    <div class="page-header">
+      <div>
+        <div class="page-title">Workers</div>
+        <div class="page-subtitle">${total} workers registered</div>
+      </div>
+    </div>
+    ${summaryBar}
+    ${table}`;
+}
 // ── 404 ──────────────────────────────────────────────────────
 function notFoundPage() {
     return `<div class="not-found">
@@ -1110,11 +1362,14 @@ function notFoundPage() {
   </div>`;
 }
 
+// EXTERNAL MODULE: ./src/core/reactor.ts
+var reactor = __webpack_require__(553);
 ;// CONCATENATED MODULE: ./src/serve/server.ts
 /**
  * Lightweight HTTP server for the agents-hub dashboard.
  * Uses node:http (zero deps), SSE for real-time message streaming.
  */
+
 
 
 
@@ -1213,6 +1468,14 @@ async function startServer(opts) {
                 });
                 return sendJson(res, result);
             }
+            // ── JSON API for workers ──
+            if (pathname === '/api/workers') {
+                const workers = hub.workerList().map(w => ({
+                    ...w,
+                    health: (0,reactor/* detectHealth */._2)(w.lastEventAt),
+                }));
+                return sendJson(res, { workers });
+            }
             // Refresh channel list for each request
             const currentChannels = hub.channelList(true);
             // ── Timeline (root) ──
@@ -1261,6 +1524,20 @@ async function startServer(opts) {
                     channels: currentChannels,
                     activePage: 'search',
                     body: searchPage(results, q),
+                });
+                return sendHtml(res, html);
+            }
+            // ── Workers page ──
+            if (pathname === '/workers') {
+                const workers = hub.workerList().map(w => ({
+                    ...w,
+                    health: (0,reactor/* detectHealth */._2)(w.lastEventAt),
+                }));
+                const html = layout({
+                    title: 'Workers',
+                    channels: currentChannels,
+                    activePage: 'workers',
+                    body: workersPage(workers),
                 });
                 return sendHtml(res, html);
             }

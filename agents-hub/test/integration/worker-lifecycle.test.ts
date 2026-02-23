@@ -96,13 +96,14 @@ describe('worker lifecycle integration', () => {
 
       // Sync
       const result = hub.workerSync('happy-worker');
-      expect(result).not.toBeNull();
-      expect(result!.workerId).toBe('happy-worker');
-      expect(result!.newEvents).toBe(6);
-      expect(result!.toolCalls).toBe(3);
-      expect(result!.turns).toBe(2);
-      expect(result!.errors).toBe(0);
-      expect(result!.status).toBe('active');
+      expect(result.ok).toBe(true);
+      expect(result.syncStatus).toBe('ok');
+      expect(result.workerId).toBe('happy-worker');
+      expect(result.newEvents).toBe(6);
+      expect(result.toolCalls).toBe(3);
+      expect(result.turns).toBe(2);
+      expect(result.errors).toBe(0);
+      expect(result.status).toBe('active');
 
       // Verify persisted state
       const updated = hub.workerGet('happy-worker');
@@ -544,9 +545,10 @@ describe('worker lifecycle integration', () => {
   // ── 9. Nonexistent worker ─────────────────────────────────────────
 
   describe('edge cases', () => {
-    it('should return null when syncing a nonexistent worker', () => {
+    it('should return no_worker when syncing a nonexistent worker', () => {
       const result = hub.workerSync('ghost-worker');
-      expect(result).toBeNull();
+      expect(result.ok).toBe(false);
+      expect(result.syncStatus).toBe('no_worker');
     });
 
     it('should handle worker removal', () => {
@@ -567,8 +569,9 @@ describe('worker lifecycle integration', () => {
       hub.workerRegister({ id: 'empty-file-worker', agentType: 'Executor' });
 
       const result = hub.workerSync('empty-file-worker');
-      expect(result).not.toBeNull();
-      expect(result!.newEvents).toBe(0);
+      expect(result.ok).toBe(true);
+      expect(result.syncStatus).toBe('ok');
+      expect(result.newEvents).toBe(0);
     });
 
     it('should handle events with missing fields gracefully', () => {
@@ -584,10 +587,33 @@ describe('worker lifecycle integration', () => {
       hub.workerRegister({ id: 'sparse-worker', agentType: 'Executor' });
 
       const result = hub.workerSync('sparse-worker');
-      expect(result).not.toBeNull();
-      expect(result!.newEvents).toBe(3);
-      expect(result!.turns).toBe(1);
-      expect(result!.toolCalls).toBe(1);
+      expect(result.ok).toBe(true);
+      expect(result.syncStatus).toBe('ok');
+      expect(result.newEvents).toBe(3);
+      expect(result.turns).toBe(1);
+      expect(result.toolCalls).toBe(1);
+    });
+
+    it('should return events_missing when events file path no longer exists', () => {
+      const missingEventsPath = join(tempDir, 'events-missing.jsonl');
+      mockDiscoverSession.mockReturnValue({ sessionId: 'session-missing', eventsPath: missingEventsPath });
+      hub.workerRegister({ id: 'missing-events-worker', agentType: 'Executor' });
+
+      const result = hub.workerSync('missing-events-worker');
+      expect(result.ok).toBe(false);
+      expect(result.syncStatus).toBe('events_missing');
+    });
+
+    it('should return parse_error when events file has malformed JSON lines', () => {
+      const eventsPath = join(tempDir, 'events-parse-error.jsonl');
+      writeFileSync(eventsPath, '{not-json}\n');
+
+      mockDiscoverSession.mockReturnValue({ sessionId: 'session-parse', eventsPath });
+      hub.workerRegister({ id: 'parse-error-worker', agentType: 'Executor' });
+
+      const result = hub.workerSync('parse-error-worker');
+      expect(result.ok).toBe(false);
+      expect(result.syncStatus).toBe('parse_error');
     });
   });
 });
