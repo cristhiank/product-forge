@@ -243,6 +243,24 @@ a:hover { text-decoration: underline; }
   font-size: 14px;
 }
 
+.worker-attribution-badge {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  padding: 1px 8px;
+  border-radius: 999px;
+  border: 1px solid hsl(var(--worker-hue) 60% 55% / 0.35);
+  background: hsl(var(--worker-hue) 70% 50% / 0.12);
+  color: hsl(var(--worker-hue) 75% 72%);
+  text-decoration: none;
+  line-height: 1.4;
+}
+.worker-attribution-badge:hover {
+  background: hsl(var(--worker-hue) 70% 50% / 0.2);
+  color: hsl(var(--worker-hue) 80% 78%);
+  text-decoration: none;
+}
+
 .message-type-badge {
   font-size: 11px;
   font-weight: 600;
