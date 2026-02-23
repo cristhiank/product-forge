@@ -829,6 +829,119 @@ a:hover { text-decoration: underline; }
   padding: 8px 0;
 }
 
+/* Incidents page */
+.incidents-grid {
+  display: grid;
+  gap: 16px;
+}
+
+.incidents-section {
+  background: var(--color-bg-subtle);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 16px;
+}
+
+.incidents-section h2 {
+  margin: 0 0 12px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.incidents-table td {
+  vertical-align: middle;
+  max-width: 420px;
+  white-space: normal;
+}
+
+.incident-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.incident-action-form {
+  margin: 0;
+}
+
+.incident-action-link,
+.incident-action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 5px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--color-border);
+  background: var(--color-bg-elevated);
+  color: var(--color-link);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.incident-action-btn:hover,
+.incident-action-link:hover {
+  background: var(--color-bg-inset);
+  text-decoration: none;
+}
+
+.incident-action-btn-danger {
+  color: var(--color-danger);
+  border-color: #da3633;
+}
+
+.incident-action-btn:disabled {
+  cursor: not-allowed;
+  color: var(--color-text-muted);
+  border-color: var(--color-border-subtle);
+  background: var(--color-bg-subtle);
+}
+
+.incident-cluster-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.incident-cluster-item {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  background: var(--color-bg-elevated);
+}
+
+.incident-cluster-main {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+}
+
+.incident-cluster-count {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  color: var(--color-danger);
+}
+
+.incident-cluster-label {
+  color: var(--color-text-secondary);
+  font-size: 13px;
+}
+
+.incident-cluster-meta {
+  margin-top: 6px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
 /* Scrollbar styling for dark theme */
 .timeline::-webkit-scrollbar,
 .sidebar::-webkit-scrollbar {

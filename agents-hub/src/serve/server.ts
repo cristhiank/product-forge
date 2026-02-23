@@ -14,6 +14,7 @@ import {
   searchPage,
   threadView,
   workersPage,
+  incidentsPage,
   workerDetailPage,
   notFoundPage,
 } from './renderer.js';
@@ -71,6 +72,11 @@ function sendJson(res: http.ServerResponse, data: unknown, status = 200): void {
   res.end(JSON.stringify(data));
 }
 
+function sendRedirect(res: http.ServerResponse, location: string, status = 303): void {
+  res.writeHead(status, { Location: location });
+  res.end();
+}
+
 function sendCss(res: http.ServerResponse): void {
   res.writeHead(200, {
     'Content-Type': 'text/css; charset=utf-8',
@@ -84,6 +90,20 @@ function parseUrl(url: string): { pathname: string; query: URLSearchParams } {
   const pathname = idx >= 0 ? url.slice(0, idx) : url;
   const query = new URLSearchParams(idx >= 0 ? url.slice(idx + 1) : '');
   return { pathname, query };
+}
+
+function workerIncidentTimestamp(worker: { lastEventAt: string | null; completedAt: string | null; registeredAt: string }): number {
+  const iso = worker.lastEventAt ?? worker.completedAt ?? worker.registeredAt;
+  return new Date(iso).getTime();
+}
+
+function sortNewestFirst<T extends { createdAt: string }>(items: T[]): T[] {
+  return items.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+}
+
+function sanitizeRedirectPath(path: string | null): string {
+  if (!path || !path.startsWith('/')) return '/incidents';
+  return path;
 }
 
 // ── Background watcher ───────────────────────────────────────
@@ -203,6 +223,40 @@ export async function startServer(opts: ServeOptions): Promise<void> {
         return sendJson(res, { workers });
       }
 
+      if (pathname === '/api/incidents') {
+        const workers = hub.workerList()
+          .map(w => ({ ...w, health: detectHealth(w.lastEventAt) }))
+          .filter(w => w.health !== 'healthy' || w.status === 'failed' || w.status === 'lost' || w.errors > 0)
+          .sort((a, b) => workerIncidentTimestamp(b) - workerIncidentTimestamp(a) || b.errors - a.errors || a.id.localeCompare(b.id));
+        const unresolvedRequests = sortNewestFirst(hub.read({ type: 'request', unresolved: true, limit: 200 }).messages);
+        return sendJson(res, { workers, unresolvedRequests });
+      }
+
+      if (req.method === 'POST') {
+        const redirectPath = sanitizeRedirectPath(query.get('redirect'));
+        const stopMatch = pathname.match(/^\/workers\/(.+)\/stop$/);
+        if (stopMatch) {
+          const workerId = decodeURIComponent(stopMatch[1]);
+          const worker = hub.workerGet(workerId);
+          if (!worker) return sendJson(res, { error: `Worker not found: ${workerId}` }, 404);
+          if (worker.pid === null || worker.status !== 'active') {
+            return sendJson(res, { error: 'Stop action requires an active worker with a PID' }, 409);
+          }
+          process.kill(worker.pid, 'SIGTERM');
+          hub.workerSync(workerId);
+          return sendRedirect(res, redirectPath);
+        }
+
+        const syncMatch = pathname.match(/^\/workers\/(.+)\/sync$/);
+        if (syncMatch) {
+          const workerId = decodeURIComponent(syncMatch[1]);
+          const worker = hub.workerGet(workerId);
+          if (!worker) return sendJson(res, { error: `Worker not found: ${workerId}` }, 404);
+          hub.workerSync(workerId);
+          return sendRedirect(res, redirectPath);
+        }
+      }
+
       // Refresh channel list for each request
       const currentChannels = hub.channelList(true) as ChannelInfo[];
 
@@ -271,6 +325,21 @@ export async function startServer(opts: ServeOptions): Promise<void> {
           channels: currentChannels,
           activePage: 'workers',
           body: workersPage(workers),
+        });
+        return sendHtml(res, html);
+      }
+
+      // ── Incidents page ──
+      if (pathname === '/incidents') {
+        const workers = hub.workerList()
+          .map(w => ({ ...w, health: detectHealth(w.lastEventAt) }))
+          .sort((a, b) => workerIncidentTimestamp(b) - workerIncidentTimestamp(a) || b.errors - a.errors || a.id.localeCompare(b.id));
+        const unresolvedRequests = sortNewestFirst(hub.read({ type: 'request', unresolved: true, limit: 200 }).messages);
+        const html = layout({
+          title: 'Incidents',
+          channels: currentChannels,
+          activePage: 'incidents',
+          body: incidentsPage(workers, unresolvedRequests),
         });
         return sendHtml(res, html);
       }
