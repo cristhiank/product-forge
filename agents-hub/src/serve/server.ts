@@ -238,11 +238,20 @@ export async function startServer(opts: ServeOptions): Promise<void> {
       // ── Status page ──
       if (pathname === '/status') {
         const status = hub.status();
+        const workers = hub.workerList();
+        const workerSummary = { active: 0, stale: 0, lost: 0, failed: 0 };
+        for (const worker of workers) {
+          const health = detectHealth(worker.lastEventAt);
+          if (worker.status === 'active') workerSummary.active += 1;
+          if (health === 'stale') workerSummary.stale += 1;
+          if (health === 'lost') workerSummary.lost += 1;
+          if (worker.status === 'failed') workerSummary.failed += 1;
+        }
         const html = layout({
           title: 'Status',
           channels: currentChannels,
           activePage: 'status',
-          body: statusPage(status),
+          body: statusPage(status, workerSummary),
         });
         return sendHtml(res, html);
       }
