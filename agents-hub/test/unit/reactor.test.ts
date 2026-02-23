@@ -321,6 +321,49 @@ malformed line without braces
       expect(result.significantEvents[0].summary).toBe('Model: unknown');
     });
 
+    it('should handle real Copilot CLI interaction events deterministically', () => {
+      const events: WorkerEvent[] = [
+        { type: 'tool.execution_start', data: { toolCallId: 'call-1', toolName: 'view', arguments: { path: 'src/core/reactor.ts' } }, id: 'e1', timestamp: '2024-01-15T10:00:00Z', parentId: null },
+        { type: 'tool.execution_complete', data: { toolCallId: 'call-1', success: true, result: {} }, id: 'e2', timestamp: '2024-01-15T10:00:01Z', parentId: null },
+        { type: 'assistant.turn_start', data: { turnId: '0' }, id: 'e3', timestamp: '2024-01-15T10:00:02Z', parentId: null },
+        { type: 'assistant.message', data: { messageId: 'm1', content: '', toolRequests: [{}] }, id: 'e4', timestamp: '2024-01-15T10:00:03Z', parentId: null },
+        { type: 'user.message', data: { content: 'Expand reactor event handling', agentMode: 'autopilot' }, id: 'e5', timestamp: '2024-01-15T10:00:04Z', parentId: null },
+        { type: 'session.mode_changed', data: { previousMode: 'interactive', newMode: 'autopilot' }, id: 'e6', timestamp: '2024-01-15T10:00:05Z', parentId: null },
+      ];
+
+      const result = processEvents(events);
+      expect(result.toolCalls).toBe(1);
+      expect(result.turns).toBe(0);
+      expect(result.errors).toBe(0);
+      expect(result.lastEventType).toBe('session.mode_changed');
+      expect(result.significantEvents.map(event => event.type)).toEqual([
+        'tool_start',
+        'turn_start',
+        'assistant_message',
+        'user_message',
+        'mode_change',
+      ]);
+      expect(result.significantEvents[0].summary).toBe('Tool view started');
+      expect(result.significantEvents[4].summary).toBe('Mode: interactive -> autopilot');
+    });
+
+    it('should extract significant events - compaction and plan changes', () => {
+      const events: WorkerEvent[] = [
+        { type: 'session.compaction_start', data: {}, id: 'e1', timestamp: '2024-01-15T10:00:00Z', parentId: null },
+        { type: 'session.plan_changed', data: {}, id: 'e2', timestamp: '2024-01-15T10:00:01Z', parentId: null },
+        { type: 'session.compaction_complete', data: {}, id: 'e3', timestamp: '2024-01-15T10:00:02Z', parentId: null },
+      ];
+
+      const result = processEvents(events);
+      expect(result.significantEvents.map(event => event.type)).toEqual([
+        'compaction',
+        'plan_change',
+        'compaction',
+      ]);
+      expect(result.significantEvents[0].summary).toBe('Session compaction started');
+      expect(result.significantEvents[2].summary).toBe('Session compaction completed');
+    });
+
     it('should extract significant events - tool error', () => {
       const events: WorkerEvent[] = [
         { type: 'tool.execution_complete', data: { toolName: 'bash', success: false }, id: 'e1', timestamp: '2024-01-15T10:00:00Z', parentId: null },
