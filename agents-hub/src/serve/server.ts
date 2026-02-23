@@ -28,7 +28,7 @@ interface SseClient {
 }
 
 const sseClients = new Map<http.ServerResponse, SseClient>();
-const WORKER_SYNC_INTERVAL_MS = 30_000;
+const DEFAULT_WORKER_SYNC_INTERVAL_MS = 30_000;
 
 /**
  * Broadcast a new message to connected SSE clients (filtered by channel)
@@ -129,7 +129,8 @@ function startMessageWatcher(hub: Hub): void {
 /**
  * Start periodic worker sync and broadcast updates via SSE
  */
-function startWorkerSyncPoller(hub: Hub): NodeJS.Timeout {
+function startWorkerSyncPoller(hub: Hub, intervalMs: number): NodeJS.Timeout | null {
+  if (intervalMs <= 0) return null;
   return setInterval(() => {
     try {
       const sync = hub.workerSyncAll();
@@ -137,12 +138,13 @@ function startWorkerSyncPoller(hub: Hub): NodeJS.Timeout {
       broadcastWorkerSync({
         type: 'worker_sync',
         timestamp: new Date().toISOString(),
+        intervalMs,
         sync,
       });
     } catch (err) {
       console.error('Worker sync poller error:', err);
     }
-  }, WORKER_SYNC_INTERVAL_MS);
+  }, intervalMs);
 }
 
 // ── Server ───────────────────────────────────────────────────
@@ -150,14 +152,19 @@ function startWorkerSyncPoller(hub: Hub): NodeJS.Timeout {
 export interface ServeOptions {
   port: number;
   hub: Hub;
+  workerSyncIntervalMs?: number;
 }
 
 export async function startServer(opts: ServeOptions): Promise<void> {
-  const { hub, port } = opts;
+  const {
+    hub,
+    port,
+    workerSyncIntervalMs = DEFAULT_WORKER_SYNC_INTERVAL_MS,
+  } = opts;
 
   // Start watching for new messages in background
   startMessageWatcher(hub);
-  const workerSyncTimer = startWorkerSyncPoller(hub);
+  const workerSyncTimer = startWorkerSyncPoller(hub, workerSyncIntervalMs);
 
   const server = http.createServer(async (req, res) => {
     try {
@@ -458,6 +465,6 @@ export async function startServer(opts: ServeOptions): Promise<void> {
   });
 
   server.on('close', () => {
-    clearInterval(workerSyncTimer);
+    if (workerSyncTimer) clearInterval(workerSyncTimer);
   });
 }
