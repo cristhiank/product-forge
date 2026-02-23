@@ -1,5 +1,5 @@
 import type { Database } from 'better-sqlite3';
-import { readdirSync, readFileSync, existsSync } from 'node:fs';
+import { readdirSync, readFileSync, existsSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { now } from '../utils/time.js';
@@ -30,31 +30,123 @@ function rowToWorker(row: Record<string, unknown>): Worker {
   };
 }
 
+function normalizeBranchValue(value: string): string {
+  let branch = value.trim();
+  if (
+    (branch.startsWith('"') && branch.endsWith('"')) ||
+    (branch.startsWith("'") && branch.endsWith("'"))
+  ) {
+    branch = branch.slice(1, -1).trim();
+  }
+  branch = branch.replace(/^refs\/heads\//i, '').replace(/^origin\//i, '');
+  return branch;
+}
+
+function normalizeWorkerToken(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+function branchMatchesWorker(branchValue: string, workerId: string): boolean {
+  const workerToken = normalizeWorkerToken(workerId);
+  if (!workerToken) return false;
+
+  const normalizedBranch = normalizeBranchValue(branchValue).toLowerCase();
+  const workerPattern = normalizedBranch.match(/^worker[-_/](.+)$/i);
+  if (!workerPattern) return false;
+
+  return normalizeWorkerToken(workerPattern[1]) === workerToken;
+}
+
+function parseBranchFromWorkspaceYaml(content: string): string | null {
+  const match = content.match(/^\s*branch\s*:\s*(.+)\s*$/m);
+  return match ? normalizeBranchValue(match[1]) : null;
+}
+
+function parseBranchFromSessionStart(eventsPath: string): string | null {
+  try {
+    const content = readFileSync(eventsPath, 'utf-8');
+    for (const line of content.split('\n')) {
+      if (!line.trim()) continue;
+      try {
+        const event = JSON.parse(line) as { type?: string; data?: Record<string, unknown> };
+        if (event.type !== 'session.start' || !event.data) continue;
+
+        const context = event.data.context as Record<string, unknown> | undefined;
+        if (typeof context?.branch === 'string') return normalizeBranchValue(context.branch);
+        if (typeof event.data.branch === 'string') return normalizeBranchValue(event.data.branch);
+      } catch {
+        // Skip malformed lines and keep scanning.
+      }
+    }
+  } catch {
+    // Skip unreadable events files.
+  }
+  return null;
+}
+
 /** Discover the Copilot CLI session ID for a worker by scanning session-state directories */
-export function discoverSession(workerId: string): { sessionId: string; eventsPath: string } | null {
-  const sessionStateDir = join(homedir(), '.copilot', 'session-state');
+export function discoverSession(
+  workerId: string,
+  sessionStateDir = join(homedir(), '.copilot', 'session-state'),
+): { sessionId: string; eventsPath: string } | null {
   if (!existsSync(sessionStateDir)) return null;
   
   try {
     const entries = readdirSync(sessionStateDir, { withFileTypes: true });
+    const workspaceCandidates: Array<{ sessionId: string; eventsPath: string; mtimeMs: number }> = [];
+    const fallbackEntries: Array<{ sessionId: string; eventsPath: string; mtimeMs: number }> = [];
+
     for (const entry of entries) {
       if (!entry.isDirectory()) continue;
+
       const wsPath = join(sessionStateDir, entry.name, 'workspace.yaml');
+      const eventsPath = join(sessionStateDir, entry.name, 'events.jsonl');
+
+      if (existsSync(eventsPath)) {
+        try {
+          fallbackEntries.push({
+            sessionId: entry.name,
+            eventsPath,
+            mtimeMs: statSync(eventsPath).mtimeMs,
+          });
+        } catch {
+          // Skip files we cannot stat.
+        }
+      }
+
       if (!existsSync(wsPath)) continue;
       try {
-        const content = readFileSync(wsPath, 'utf-8');
-        // Simple YAML parse for branch field
-        const branchMatch = content.match(/^branch:\s*(.+)$/m);
-        if (branchMatch) {
-          const branch = branchMatch[1].trim();
-          if (branch === `worker/${workerId}`) {
-            const eventsPath = join(sessionStateDir, entry.name, 'events.jsonl');
-            return { sessionId: entry.name, eventsPath };
-          }
+        const branch = parseBranchFromWorkspaceYaml(readFileSync(wsPath, 'utf-8'));
+        if (branch && branchMatchesWorker(branch, workerId)) {
+          workspaceCandidates.push({
+            sessionId: entry.name,
+            eventsPath,
+            mtimeMs: statSync(wsPath).mtimeMs,
+          });
         }
-      } catch { /* skip unreadable */ }
+      } catch {
+        // Skip unreadable/unstattable workspace files.
+      }
     }
-  } catch { /* session-state dir not scannable */ }
+
+    if (workspaceCandidates.length > 0) {
+      workspaceCandidates.sort((a, b) => b.mtimeMs - a.mtimeMs || b.sessionId.localeCompare(a.sessionId));
+      return {
+        sessionId: workspaceCandidates[0].sessionId,
+        eventsPath: workspaceCandidates[0].eventsPath,
+      };
+    }
+
+    fallbackEntries.sort((a, b) => b.mtimeMs - a.mtimeMs || b.sessionId.localeCompare(a.sessionId));
+    for (const entry of fallbackEntries) {
+      const branch = parseBranchFromSessionStart(entry.eventsPath);
+      if (branch && branchMatchesWorker(branch, workerId)) {
+        return { sessionId: entry.sessionId, eventsPath: entry.eventsPath };
+      }
+    }
+  } catch {
+    // session-state dir not scannable
+  }
   
   return null;
 }
