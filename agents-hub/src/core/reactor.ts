@@ -74,6 +74,13 @@ export function processEvents(events: WorkerEvent[]): {
   let terminalStatus: WorkerStatus | null = null;
   let exitCode: number | null = null;
   const significantEvents: Array<{ type: string; timestamp: string; summary: string }> = [];
+  const asNonEmptyString = (value: unknown): string | null =>
+    typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
+  const summarizeMessage = (value: unknown): string => {
+    const content = asNonEmptyString(value);
+    if (!content) return 'no content';
+    return content.length > 80 ? `${content.substring(0, 80)}...` : content;
+  };
 
   for (const event of events) {
     // Update last activity
@@ -83,6 +90,16 @@ export function processEvents(events: WorkerEvent[]): {
     }
 
     switch (event.type) {
+      case 'tool.execution_start': {
+        const toolName = asNonEmptyString(event.data.toolName) ?? 'unknown';
+        significantEvents.push({
+          type: 'tool_start',
+          timestamp: event.timestamp,
+          summary: `Tool ${toolName} started`,
+        });
+        break;
+      }
+
       case 'tool.execution_complete':
         toolCalls++;
         if (event.data.success === false) {
@@ -99,6 +116,37 @@ export function processEvents(events: WorkerEvent[]): {
       case 'assistant.turn_end':
         turns++;
         break;
+
+      case 'assistant.turn_start': {
+        const turnId = asNonEmptyString(event.data.turnId) ?? 'unknown';
+        significantEvents.push({
+          type: 'turn_start',
+          timestamp: event.timestamp,
+          summary: `Assistant turn started: ${turnId}`,
+        });
+        break;
+      }
+
+      case 'assistant.message': {
+        const toolRequests = Array.isArray(event.data.toolRequests) ? event.data.toolRequests.length : 0;
+        const detail = toolRequests > 0 ? `${toolRequests} tool request${toolRequests === 1 ? '' : 's'}` : summarizeMessage(event.data.content);
+        significantEvents.push({
+          type: 'assistant_message',
+          timestamp: event.timestamp,
+          summary: `Assistant message: ${detail}`,
+        });
+        break;
+      }
+
+      case 'user.message': {
+        const mode = asNonEmptyString(event.data.agentMode) ?? 'unknown';
+        significantEvents.push({
+          type: 'user_message',
+          timestamp: event.timestamp,
+          summary: `User message (${mode}): ${summarizeMessage(event.data.content)}`,
+        });
+        break;
+      }
 
       case 'session.error': {
         errors++;
@@ -160,6 +208,41 @@ export function processEvents(events: WorkerEvent[]): {
           type: 'model_change',
           timestamp: event.timestamp,
           summary: `Model: ${(event.data.newModel as string) ?? 'unknown'}`,
+        });
+        break;
+
+      case 'session.mode_changed': {
+        const previousMode = asNonEmptyString(event.data.previousMode) ?? 'unknown';
+        const newMode = asNonEmptyString(event.data.newMode) ?? 'unknown';
+        significantEvents.push({
+          type: 'mode_change',
+          timestamp: event.timestamp,
+          summary: `Mode: ${previousMode} -> ${newMode}`,
+        });
+        break;
+      }
+
+      case 'session.compaction_start':
+        significantEvents.push({
+          type: 'compaction',
+          timestamp: event.timestamp,
+          summary: 'Session compaction started',
+        });
+        break;
+
+      case 'session.compaction_complete':
+        significantEvents.push({
+          type: 'compaction',
+          timestamp: event.timestamp,
+          summary: 'Session compaction completed',
+        });
+        break;
+
+      case 'session.plan_changed':
+        significantEvents.push({
+          type: 'plan_change',
+          timestamp: event.timestamp,
+          summary: 'Session plan changed',
         });
         break;
     }
