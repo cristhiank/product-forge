@@ -27,6 +27,7 @@ interface SseClient {
 }
 
 const sseClients = new Map<http.ServerResponse, SseClient>();
+const WORKER_SYNC_INTERVAL_MS = 30_000;
 
 /**
  * Broadcast a new message to connected SSE clients (filtered by channel)
@@ -38,6 +39,20 @@ function broadcastMessage(msg: unknown): void {
     if (client.channel && msgObj.channel && msgObj.channel !== client.channel) continue;
     try {
       res.write(`event: message\ndata: ${data}\n\n`);
+    } catch {
+      sseClients.delete(res);
+    }
+  }
+}
+
+/**
+ * Broadcast worker sync updates to all SSE clients
+ */
+function broadcastWorkerSync(sync: unknown): void {
+  const data = JSON.stringify(sync);
+  for (const [res] of Array.from(sseClients)) {
+    try {
+      res.write(`event: worker_sync\ndata: ${data}\n\n`);
     } catch {
       sseClients.delete(res);
     }
@@ -91,6 +106,25 @@ function startMessageWatcher(hub: Hub): void {
   })();
 }
 
+/**
+ * Start periodic worker sync and broadcast updates via SSE
+ */
+function startWorkerSyncPoller(hub: Hub): NodeJS.Timeout {
+  return setInterval(() => {
+    try {
+      const sync = hub.workerSyncAll();
+      if (sync.length === 0) return;
+      broadcastWorkerSync({
+        type: 'worker_sync',
+        timestamp: new Date().toISOString(),
+        sync,
+      });
+    } catch (err) {
+      console.error('Worker sync poller error:', err);
+    }
+  }, WORKER_SYNC_INTERVAL_MS);
+}
+
 // ── Server ───────────────────────────────────────────────────
 
 export interface ServeOptions {
@@ -103,6 +137,7 @@ export async function startServer(opts: ServeOptions): Promise<void> {
 
   // Start watching for new messages in background
   startMessageWatcher(hub);
+  const workerSyncTimer = startWorkerSyncPoller(hub);
 
   const server = http.createServer(async (req, res) => {
     try {
@@ -342,5 +377,9 @@ export async function startServer(opts: ServeOptions): Promise<void> {
     console.log(`   Mode: ${status.mode}`);
     console.log(`   Channels: ${Object.keys(status.channels).join(', ')}`);
     console.log(`   Total messages: ${status.totalMessages}\n`);
+  });
+
+  server.on('close', () => {
+    clearInterval(workerSyncTimer);
   });
 }
