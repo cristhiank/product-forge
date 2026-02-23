@@ -3,7 +3,7 @@
  * Pure functions — each returns an HTML string.
  */
 
-import type { Message, SearchResult, ChannelInfo, HubStatus, Worker } from '../core/types.js';
+import type { Message, SearchResult, ChannelInfo, HubStatus, Worker, WorkerSyncResult } from '../core/types.js';
 
 // ── Helpers ──────────────────────────────────────────────────
 
@@ -620,6 +620,82 @@ export function workersPage(workers: WorkerWithHealth[]): string {
     </div>
     ${summaryBar}
     ${table}`;
+}
+
+export function workerDetailPage(
+  worker: WorkerWithHealth,
+  relatedMessages: Message[],
+  sync: WorkerSyncResult | null
+): string {
+  const emoji = agentTypeEmoji(worker.agentType);
+  const significantEvents = sync?.significantEvents ?? [];
+  const timelineHtml = significantEvents.length
+    ? `<ul class="worker-detail-timeline">
+        ${significantEvents.map((event) => `
+          <li class="worker-detail-event">
+            <div class="worker-detail-event-type">${esc(event.type)}</div>
+            <div class="worker-detail-event-summary">${esc(event.summary)}</div>
+            <div class="worker-detail-event-time">${formatTimestamp(event.timestamp)}</div>
+          </li>
+        `).join('\n')}
+      </ul>`
+    : `<div class="worker-detail-empty">No significant events from the latest sync.</div>`;
+
+  const messagesHtml = relatedMessages.length
+    ? relatedMessages.map(renderMessage).join('\n')
+    : `<div class="worker-detail-empty">No related hub messages for this worker yet.</div>`;
+
+  return `
+    <div class="page-header">
+      <div>
+        <div class="page-title">${emoji} Worker ${esc(worker.id)}</div>
+        <div class="page-subtitle">
+          ${statusBadge(worker.status)} ${healthBadge(worker.health)} · <code>${esc(worker.channel)}</code>
+        </div>
+      </div>
+      <a href="/workers" class="worker-detail-back-link">← Back to workers</a>
+    </div>
+
+    <div class="worker-detail-metrics">
+      <div class="worker-detail-metric">
+        <span class="worker-detail-metric-label">Tool Calls</span>
+        <span class="worker-detail-metric-value">${worker.toolCalls}</span>
+      </div>
+      <div class="worker-detail-metric">
+        <span class="worker-detail-metric-label">Turns</span>
+        <span class="worker-detail-metric-value">${worker.turns}</span>
+      </div>
+      <div class="worker-detail-metric">
+        <span class="worker-detail-metric-label">Errors</span>
+        <span class="worker-detail-metric-value ${worker.errors > 0 ? 'worker-counter-error' : ''}">${worker.errors}</span>
+      </div>
+      <div class="worker-detail-metric">
+        <span class="worker-detail-metric-label">Registered</span>
+        <span class="worker-detail-metric-value worker-time">${formatTimestamp(worker.registeredAt)}</span>
+      </div>
+      <div class="worker-detail-metric">
+        <span class="worker-detail-metric-label">Last Activity</span>
+        <span class="worker-detail-metric-value worker-time">${worker.lastEventAt ? formatTimestamp(worker.lastEventAt) : 'never'}</span>
+      </div>
+      <div class="worker-detail-metric">
+        <span class="worker-detail-metric-label">Last Event</span>
+        <span class="worker-detail-metric-value worker-time">${esc(worker.lastEventType || 'none')}</span>
+      </div>
+    </div>
+
+    <div class="worker-detail-grid">
+      <section class="worker-detail-section">
+        <h2>Timeline</h2>
+        ${timelineHtml}
+      </section>
+      <section class="worker-detail-section">
+        <h2>Related Messages (${relatedMessages.length})</h2>
+        <div class="worker-detail-messages">
+          ${messagesHtml}
+        </div>
+      </section>
+    </div>
+  `;
 }
 
 // ── 404 ──────────────────────────────────────────────────────
