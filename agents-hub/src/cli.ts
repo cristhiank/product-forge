@@ -94,6 +94,14 @@ function parseTags(str: string): string[] {
   return str.split(',').map(t => t.trim()).filter(Boolean);
 }
 
+function parseWorkerSyncIntervalMs(raw: string): number {
+  const value = parseInt(raw, 10);
+  if (!Number.isInteger(value) || value < 0) {
+    throw new Error(`Invalid worker sync interval: ${raw}. Expected a non-negative integer (milliseconds).`);
+  }
+  return value;
+}
+
 function describeWorkerSyncResult(result: WorkerSyncResult): string {
   if (result.ok) return 'Worker synced successfully';
   switch (result.syncStatus) {
@@ -715,13 +723,22 @@ export function runCli(): void {
     .command('serve')
     .description('Start real-time web dashboard for agent communications')
     .option('--port <number>', 'Port to listen on', '3000')
+    .option(
+      '--worker-sync-interval-ms <number>',
+      'Worker auto-sync interval in milliseconds (0 disables periodic sync)',
+      '30000',
+    )
     .action(async (opts) => {
       let hub: Hub | undefined;
       try {
         const dbPath = program.opts().db;
         hub = new Hub(dbPath);
         const { startServer } = await import('./serve/server.js');
-        await startServer({ port: parseInt(opts.port, 10), hub });
+        await startServer({
+          port: parseInt(opts.port, 10),
+          hub,
+          workerSyncIntervalMs: parseWorkerSyncIntervalMs(opts.workerSyncIntervalMs),
+        });
       } catch (err) {
         hub?.close();
         handleError(err);
