@@ -1,8 +1,8 @@
-export const id = 424;
-export const ids = [424];
+export const id = 957;
+export const ids = [957];
 export const modules = {
 
-/***/ 424:
+/***/ 957:
 /***/ ((__unused_webpack_module, __webpack_exports__, __webpack_require__) => {
 
 
@@ -753,6 +753,7 @@ a:hover { text-decoration: underline; }
 
 .wstatus-active { background: rgba(63, 185, 80, 0.15); color: var(--color-success); border-color: #238636; }
 .wstatus-completed { background: rgba(88, 166, 255, 0.15); color: var(--color-accent); border-color: #1f6feb; }
+.wstatus-succeeded { background: rgba(63, 185, 80, 0.15); color: var(--color-success); border-color: #238636; }
 .wstatus-failed { background: rgba(248, 81, 73, 0.15); color: var(--color-danger); border-color: #da3633; }
 .wstatus-lost { background: rgba(110, 118, 129, 0.15); color: var(--color-text-muted); border-color: #484f58; }
 
@@ -1027,6 +1028,31 @@ function formatTimestamp(iso) {
         return `${days}d ago`;
     return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
+function formatNumber(value) {
+    if (!Number.isFinite(value))
+        return '0';
+    return Math.round(value).toLocaleString('en-US');
+}
+function formatTokens(value) {
+    if (!Number.isFinite(value) || value <= 0)
+        return '0';
+    if (value >= 1_000_000)
+        return `${(value / 1_000_000).toFixed(1)}M`;
+    if (value >= 1_000)
+        return `${(value / 1_000).toFixed(1)}k`;
+    return formatNumber(value);
+}
+function formatUsd(value) {
+    const normalized = Number.isFinite(value) ? value : 0;
+    return `$${normalized.toFixed(2)}`;
+}
+function shortModelName(model) {
+    if (!model)
+        return 'unknown';
+    if (model.length <= 28)
+        return model;
+    return `${model.slice(0, 25)}...`;
+}
 function authorEmoji(author) {
     const lower = author.toLowerCase();
     if (lower.includes('scout'))
@@ -1257,7 +1283,7 @@ function layout(opts) {
     });
     const channelNav = sorted.map((ch) => {
         const isActive = ch.name === opts.currentChannel;
-        const href = ch.name === '#main' ? '/' : `/channel/${encodeURIComponent(ch.name.slice(1))}`;
+        const href = ch.name === '#main' ? '/timeline' : `/channel/${encodeURIComponent(ch.name.slice(1))}`;
         return `<li><a href="${href}" class="${isActive ? 'active' : ''}">
       ${esc(ch.name)}
       ${ch.messageCount > 0 ? `<span class="count">${ch.messageCount}</span>` : ''}
@@ -1286,10 +1312,13 @@ function layout(opts) {
       <div class="sidebar-section">
         <div class="sidebar-section-title">Navigation</div>
         <ul class="sidebar-nav">
-          <li><a href="/" class="${opts.activePage === 'timeline' ? 'active' : ''}">📡 Timeline</a></li>
+          <li><a href="/" class="${opts.activePage === 'overview' ? 'active' : ''}">🎛️ Overview</a></li>
+          <li><a href="/timeline" class="${opts.activePage === 'timeline' ? 'active' : ''}">📡 Timeline</a></li>
           <li><a href="/status" class="${opts.activePage === 'status' ? 'active' : ''}">📊 Status</a></li>
           <li><a href="/search" class="${opts.activePage === 'search' ? 'active' : ''}">🔍 Search</a></li>
           <li><a href="/workers" class="${opts.activePage === 'workers' ? 'active' : ''}">🤖 Workers</a></li>
+          <li><a href="/usage" class="${opts.activePage === 'usage' ? 'active' : ''}">💸 Usage</a></li>
+          <li><a href="/tools" class="${opts.activePage === 'tools' ? 'active' : ''}">🧰 Tools</a></li>
           <li><a href="/incidents" class="${opts.activePage === 'incidents' ? 'active' : ''}">🚨 Incidents</a></li>
         </ul>
       </div>
@@ -1361,7 +1390,7 @@ function layout(opts) {
       function renderWorkers(workers) {
         if (!workersTableBody) return;
         if (!Array.isArray(workers) || workers.length === 0) {
-          workersTableBody.innerHTML = '<tr><td colspan="9" class="worker-empty">No workers registered yet</td></tr>';
+          workersTableBody.innerHTML = '<tr><td colspan="12" class="worker-empty">No workers registered yet</td></tr>';
           if (workersSubtitle) workersSubtitle.textContent = '0 workers registered';
           setWorkerSummaryValue('workers-summary-total', 0);
           setWorkerSummaryValue('workers-summary-healthy', 0);
@@ -1383,16 +1412,28 @@ function layout(opts) {
           const encodedId = encodeURIComponent(String(w.id || ''));
           const agentType = escapeHtml(String(w.agentType || 'unknown'));
           const channelLabel = escapeHtml(String(w.channel || ''));
+          const modelRaw = String(w.activeModel || 'unknown');
+          const modelLabel = escapeHtml(modelRaw.length > 28 ? modelRaw.slice(0, 25) + '...' : modelRaw);
           const status = String(w.status || 'active');
           const health = String(w.health || 'healthy');
           const errors = Number(w.errors || 0);
+          const usage = w.usage && typeof w.usage === 'object' ? w.usage : {};
+          const inputTokens = Number(usage.inputTokens || 0);
+          const outputTokens = Number(usage.outputTokens || 0);
+          const estimatedCostUsd = Number(w.estimatedCostUsd || 0);
           const lastActivity = w.lastEventAt ? formatTimestamp(w.lastEventAt) : 'never';
           const duration = formatDurationSince(w.registeredAt);
+          const tokenLabel = (inputTokens >= 1000 ? (inputTokens / 1000).toFixed(1) + 'k' : String(Math.round(inputTokens))) +
+            ' / ' +
+            (outputTokens >= 1000 ? (outputTokens / 1000).toFixed(1) + 'k' : String(Math.round(outputTokens)));
           return '<tr class="worker-row" onclick="window.location=\\'/worker/' + encodedId + '\\'">' +
             '<td class="worker-id-cell"><a href="/worker/' + encodedId + '">' + id + '</a></td>' +
             '<td>' + workerEmoji(agentType) + ' ' + agentType + '</td>' +
             '<td>' + workerStatusBadge(status) + ' ' + workerHealthBadge(health) + '</td>' +
             '<td><code>' + channelLabel + '</code></td>' +
+            '<td title="' + escapeHtml(modelRaw) + '">' + modelLabel + '</td>' +
+            '<td class="worker-time">' + tokenLabel + '</td>' +
+            '<td class="worker-time">$' + estimatedCostUsd.toFixed(2) + '</td>' +
             '<td class="worker-counter">' + Number(w.toolCalls || 0) + '</td>' +
             '<td class="worker-counter">' + Number(w.turns || 0) + '</td>' +
             '<td class="worker-counter' + (errors > 0 ? ' worker-counter-error' : '') + '">' + errors + '</td>' +
@@ -1494,6 +1535,268 @@ function timelinePage(messages, channel) {
         ${messagesHtml}
       </div>
     </div>`;
+}
+// ── Ops Overview / Usage / Tools ──────────────────────────────
+function overviewPage(summary, usage, tools, actions) {
+    const topModels = summary.modelDistribution.slice(0, 6);
+    const topProviders = summary.providerDistribution.slice(0, 6);
+    const topWorkers = usage.topWorkers.slice(0, 10);
+    const hotTools = tools.slice(0, 10);
+    const recentActions = actions.actions.slice(0, 10);
+    const modelRows = topModels.length
+        ? topModels.map((item) => `
+        <tr>
+          <td><code>${esc(shortModelName(item.model))}</code></td>
+          <td>${esc(item.provider)}</td>
+          <td class="worker-counter">${formatTokens(item.totalTokens)}</td>
+          <td class="worker-time">${formatUsd(item.costUsd)}</td>
+        </tr>
+      `).join('\n')
+        : `<tr><td colspan="4" class="worker-empty">No model usage recorded yet.</td></tr>`;
+    const providerRows = topProviders.length
+        ? topProviders.map((item) => `
+        <tr>
+          <td>${esc(item.provider)}</td>
+          <td class="worker-counter">${formatTokens(item.totalTokens)}</td>
+          <td class="worker-time">${formatUsd(item.costUsd)}</td>
+          <td class="worker-counter">${formatNumber(item.requests)}</td>
+        </tr>
+      `).join('\n')
+        : `<tr><td colspan="4" class="worker-empty">No provider usage recorded yet.</td></tr>`;
+    const workerRows = topWorkers.length
+        ? topWorkers.map((worker) => `
+        <tr>
+          <td><a href="/worker/${encodeURIComponent(worker.workerId)}"><code>${esc(worker.workerId)}</code></a></td>
+          <td><code>${esc(worker.channel)}</code></td>
+          <td>${esc(shortModelName(worker.activeModel))}</td>
+          <td class="worker-counter">${formatTokens(worker.totalTokens)}</td>
+          <td class="worker-time">${formatUsd(worker.estimatedCostUsd)}</td>
+        </tr>
+      `).join('\n')
+        : `<tr><td colspan="5" class="worker-empty">No worker usage recorded yet.</td></tr>`;
+    const toolRows = hotTools.length
+        ? hotTools.map((tool) => `
+        <tr>
+          <td><code>${esc(tool.toolName)}</code></td>
+          <td class="worker-counter">${formatNumber(tool.calls)}</td>
+          <td class="worker-time">${formatDurationMs(tool.avgMs)}</td>
+          <td class="worker-time">${formatDurationMs(tool.maxMs)}</td>
+          <td class="worker-counter ${tool.errorCount > 0 ? 'worker-counter-error' : ''}">${formatNumber(tool.errorCount)}</td>
+          <td class="worker-time">${(tool.errorRate * 100).toFixed(1)}%</td>
+        </tr>
+      `).join('\n')
+        : `<tr><td colspan="6" class="worker-empty">No tool telemetry yet.</td></tr>`;
+    const actionRows = recentActions.length
+        ? recentActions.map((action) => `
+        <tr>
+          <td class="worker-time">${formatTimestamp(action.completedAt)}</td>
+          <td><code>${esc(action.workerId)}</code></td>
+          <td>${esc(action.actionType)}</td>
+          <td>${statusBadge(action.status)}</td>
+          <td>${action.error ? esc(action.error) : '<span class="worker-time">ok</span>'}</td>
+        </tr>
+      `).join('\n')
+        : `<tr><td colspan="5" class="worker-empty">No operator actions yet.</td></tr>`;
+    return `
+    <div class="page-header">
+      <div>
+        <div class="page-title">Ops Overview</div>
+        <div class="page-subtitle">Mission-control view for workers, incidents, tools, and token/cost telemetry</div>
+      </div>
+    </div>
+
+    <div class="workers-summary">
+      <div class="workers-summary-item summary-healthy">
+        <span class="workers-summary-count">${summary.workers.active}</span>
+        <span class="workers-summary-label">Active Workers</span>
+      </div>
+      <div class="workers-summary-item summary-stale">
+        <span class="workers-summary-count">${summary.workers.stale + summary.workers.lost}</span>
+        <span class="workers-summary-label">Stale + Lost</span>
+      </div>
+      <div class="workers-summary-item summary-failed">
+        <span class="workers-summary-count">${summary.incidents.workerIncidents}</span>
+        <span class="workers-summary-label">Worker Incidents</span>
+      </div>
+      <div class="workers-summary-item">
+        <span class="workers-summary-count">${summary.incidents.unresolvedRequests}</span>
+        <span class="workers-summary-label">Unresolved Requests</span>
+      </div>
+      <div class="workers-summary-item">
+        <span class="workers-summary-count">${formatUsd(summary.usage.estimatedCostUsd)}</span>
+        <span class="workers-summary-label">Estimated Cost</span>
+      </div>
+      <div class="workers-summary-item">
+        <span class="workers-summary-count">${formatUsd(summary.usage.burnRateUsdPerHour)}/h</span>
+        <span class="workers-summary-label">Burn Rate</span>
+      </div>
+      <div class="workers-summary-item">
+        <span class="workers-summary-count">${formatTokens(summary.usage.totalTokens)}</span>
+        <span class="workers-summary-label">Total Tokens</span>
+      </div>
+      <div class="workers-summary-item">
+        <span class="workers-summary-count">${(summary.throughput.toolErrorRate * 100).toFixed(1)}%</span>
+        <span class="workers-summary-label">Tool Error Rate</span>
+      </div>
+    </div>
+
+    <div class="incidents-grid">
+      <section class="incidents-section">
+        <h2>Model Distribution</h2>
+        <div class="workers-table-wrap">
+          <table class="workers-table">
+            <thead><tr><th>Model</th><th>Provider</th><th>Tokens</th><th>Cost</th></tr></thead>
+            <tbody>${modelRows}</tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="incidents-section">
+        <h2>Provider Distribution</h2>
+        <div class="workers-table-wrap">
+          <table class="workers-table">
+            <thead><tr><th>Provider</th><th>Tokens</th><th>Cost</th><th>Requests</th></tr></thead>
+            <tbody>${providerRows}</tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="incidents-section">
+        <h2>Top Workers by Cost</h2>
+        <div class="workers-table-wrap">
+          <table class="workers-table">
+            <thead><tr><th>Worker</th><th>Channel</th><th>Active Model</th><th>Tokens</th><th>Cost</th></tr></thead>
+            <tbody>${workerRows}</tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="incidents-section">
+        <h2>Tool Hotlist</h2>
+        <div class="workers-table-wrap">
+          <table class="workers-table">
+            <thead><tr><th>Tool</th><th>Calls</th><th>Avg</th><th>Max</th><th>Errors</th><th>Error %</th></tr></thead>
+            <tbody>${toolRows}</tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="incidents-section">
+        <h2>Recent Operator Actions</h2>
+        <div class="workers-table-wrap">
+          <table class="workers-table incidents-table">
+            <thead><tr><th>When</th><th>Worker</th><th>Action</th><th>Status</th><th>Detail</th></tr></thead>
+            <tbody>${actionRows}</tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  `;
+}
+function usagePage(usage) {
+    const modelRows = usage.byModel.length
+        ? usage.byModel.map((item) => `
+        <tr>
+          <td><code>${esc(shortModelName(item.model))}</code></td>
+          <td>${esc(item.provider)}</td>
+          <td class="worker-counter">${formatTokens(item.inputTokens)}</td>
+          <td class="worker-counter">${formatTokens(item.outputTokens)}</td>
+          <td class="worker-counter">${formatTokens(item.cachedInputTokens)}</td>
+          <td class="worker-counter">${formatTokens(item.totalTokens)}</td>
+          <td class="worker-time">${formatUsd(item.costUsd)}</td>
+        </tr>
+      `).join('\n')
+        : `<tr><td colspan="7" class="worker-empty">No model usage recorded yet.</td></tr>`;
+    const providerRows = usage.byProvider.length
+        ? usage.byProvider.map((item) => `
+        <tr>
+          <td>${esc(item.provider)}</td>
+          <td class="worker-counter">${formatTokens(item.inputTokens)}</td>
+          <td class="worker-counter">${formatTokens(item.outputTokens)}</td>
+          <td class="worker-counter">${formatTokens(item.cachedInputTokens)}</td>
+          <td class="worker-counter">${formatTokens(item.totalTokens)}</td>
+          <td class="worker-time">${formatUsd(item.costUsd)}</td>
+          <td class="worker-counter">${formatNumber(item.requests)}</td>
+        </tr>
+      `).join('\n')
+        : `<tr><td colspan="7" class="worker-empty">No provider usage recorded yet.</td></tr>`;
+    return `
+    <div class="page-header">
+      <div>
+        <div class="page-title">Usage & Cost</div>
+        <div class="page-subtitle">Token flow, estimated spend, and model/provider distribution</div>
+      </div>
+    </div>
+
+    <div class="workers-summary">
+      <div class="workers-summary-item"><span class="workers-summary-count">${formatTokens(usage.totals.inputTokens)}</span><span class="workers-summary-label">Input Tokens</span></div>
+      <div class="workers-summary-item"><span class="workers-summary-count">${formatTokens(usage.totals.outputTokens)}</span><span class="workers-summary-label">Output Tokens</span></div>
+      <div class="workers-summary-item"><span class="workers-summary-count">${formatTokens(usage.totals.cachedInputTokens)}</span><span class="workers-summary-label">Cached Input</span></div>
+      <div class="workers-summary-item"><span class="workers-summary-count">${formatTokens(usage.totals.compactionReclaimedTokens)}</span><span class="workers-summary-label">Compaction Reclaimed</span></div>
+      <div class="workers-summary-item"><span class="workers-summary-count">${formatUsd(usage.totals.estimatedCostUsd)}</span><span class="workers-summary-label">Estimated Cost</span></div>
+      <div class="workers-summary-item"><span class="workers-summary-count">${formatUsd(usage.totals.burnRateUsdPerHour)}/h</span><span class="workers-summary-label">Burn Rate</span></div>
+    </div>
+
+    <div class="incidents-grid">
+      <section class="incidents-section">
+        <h2>By Model</h2>
+        <div class="workers-table-wrap">
+          <table class="workers-table">
+            <thead><tr><th>Model</th><th>Provider</th><th>Input</th><th>Output</th><th>Cache In</th><th>Total</th><th>Cost</th></tr></thead>
+            <tbody>${modelRows}</tbody>
+          </table>
+        </div>
+      </section>
+      <section class="incidents-section">
+        <h2>By Provider</h2>
+        <div class="workers-table-wrap">
+          <table class="workers-table">
+            <thead><tr><th>Provider</th><th>Input</th><th>Output</th><th>Cache In</th><th>Total</th><th>Cost</th><th>Requests</th></tr></thead>
+            <tbody>${providerRows}</tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  `;
+}
+function toolsPage(tools) {
+    const rows = tools.length
+        ? tools.map((tool) => `
+        <tr>
+          <td><code>${esc(tool.toolName)}</code></td>
+          <td class="worker-counter">${formatNumber(tool.calls)}</td>
+          <td class="worker-time">${formatDurationMs(tool.avgMs)}</td>
+          <td class="worker-time">${formatDurationMs(tool.maxMs)}</td>
+          <td class="worker-counter">${formatNumber(tool.slowCount)}</td>
+          <td class="worker-counter ${tool.errorCount > 0 ? 'worker-counter-error' : ''}">${formatNumber(tool.errorCount)}</td>
+          <td class="worker-time">${(tool.errorRate * 100).toFixed(1)}%</td>
+        </tr>
+      `).join('\n')
+        : `<tr><td colspan="7" class="worker-empty">No tool telemetry recorded yet.</td></tr>`;
+    return `
+    <div class="page-header">
+      <div>
+        <div class="page-title">Tool Reliability</div>
+        <div class="page-subtitle">Fleet-wide tool latency and failure telemetry</div>
+      </div>
+    </div>
+    <div class="workers-table-wrap">
+      <table class="workers-table">
+        <thead>
+          <tr>
+            <th>Tool</th>
+            <th>Calls</th>
+            <th>Avg</th>
+            <th>Max</th>
+            <th>Slow (&gt;5s)</th>
+            <th>Errors</th>
+            <th>Error %</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+  `;
 }
 function statusPage(status, workerSummary = { active: 0, stale: 0, lost: 0, failed: 0 }) {
     const summary = workerSummary;
@@ -1755,11 +2058,17 @@ function renderWorkerRow(w) {
     const emoji = agentTypeEmoji(w.agentType);
     const duration = formatDuration(w.registeredAt);
     const lastActivity = w.lastEventAt ? formatTimestamp(w.lastEventAt) : 'never';
+    const inputTokens = w.usage?.inputTokens ?? 0;
+    const outputTokens = w.usage?.outputTokens ?? 0;
+    const modelLabel = shortModelName(w.activeModel);
     return `<tr class="worker-row" onclick="window.location='/worker/${esc(w.id)}'">
     <td class="worker-id-cell"><a href="/worker/${esc(w.id)}">${esc(w.id)}</a></td>
     <td>${emoji} ${esc(w.agentType || 'unknown')}</td>
     <td>${statusBadge(w.status)} ${healthBadge(w.health)}</td>
     <td><code>${esc(w.channel)}</code></td>
+    <td title="${esc(w.activeModel || 'unknown')}">${esc(modelLabel)}</td>
+    <td class="worker-time">${formatTokens(inputTokens)} / ${formatTokens(outputTokens)}</td>
+    <td class="worker-time">${formatUsd(w.estimatedCostUsd ?? 0)}</td>
     <td class="worker-counter">${w.toolCalls}</td>
     <td class="worker-counter">${w.turns}</td>
     <td class="worker-counter ${w.errors > 0 ? 'worker-counter-error' : ''}">${w.errors}</td>
@@ -1803,7 +2112,7 @@ function workersPage(workers) {
     </div>`;
     const tableRows = workers.length
         ? workers.map(renderWorkerRow).join('\n')
-        : `<tr><td colspan="9" class="worker-empty">No workers registered yet</td></tr>`;
+        : `<tr><td colspan="12" class="worker-empty">No workers registered yet</td></tr>`;
     const table = `
     <div class="workers-table-wrap">
       <table class="workers-table">
@@ -1813,6 +2122,9 @@ function workersPage(workers) {
             <th>Agent Type</th>
             <th>Status</th>
             <th>Channel</th>
+            <th>Model</th>
+            <th>Tokens (In/Out)</th>
+            <th>Cost</th>
             <th>Tool Calls</th>
             <th>Turns</th>
             <th>Errors</th>
@@ -1968,7 +2280,7 @@ function incidentsPage(workers, unresolvedRequests) {
     </div>
   `;
 }
-function workerDetailPage(worker, relatedMessages, sync) {
+function workerDetailPage(worker, relatedMessages, sync, actionHistory = []) {
     const emoji = agentTypeEmoji(worker.agentType);
     const significantEvents = sync?.significantEvents ?? [];
     const toolDurationStats = sync?.toolDurationStats ?? [];
@@ -2026,6 +2338,66 @@ function workerDetailPage(worker, relatedMessages, sync) {
     const messagesHtml = relatedMessages.length
         ? relatedMessages.map(renderMessage).join('\n')
         : `<div class="worker-detail-empty">No related hub messages for this worker yet.</div>`;
+    const usage = worker.usage ?? {
+        inputTokens: 0,
+        outputTokens: 0,
+        cachedInputTokens: 0,
+        cachedOutputTokens: 0,
+        compactionInputTokens: 0,
+        compactionOutputTokens: 0,
+        compactionCachedInputTokens: 0,
+        compactionReclaimedTokens: 0,
+        totalTokens: 0,
+    };
+    const modelDistribution = Object.values(worker.modelUsage ?? {})
+        .sort((a, b) => b.totalTokens - a.totalTokens || b.costUsd - a.costUsd || a.model.localeCompare(b.model));
+    const providerDistribution = Object.values(worker.providerUsage ?? {})
+        .sort((a, b) => b.totalTokens - a.totalTokens || b.costUsd - a.costUsd || a.provider.localeCompare(b.provider));
+    const modelUsageHtml = modelDistribution.length
+        ? `<div class="workers-table-wrap">
+        <table class="workers-table">
+          <thead><tr><th>Model</th><th>Provider</th><th>Tokens</th><th>Cost</th><th>Requests</th></tr></thead>
+          <tbody>
+            ${modelDistribution.map((entry) => `
+              <tr>
+                <td><code title="${esc(entry.model)}">${esc(shortModelName(entry.model))}</code></td>
+                <td>${esc(entry.provider)}</td>
+                <td class="worker-counter">${formatTokens(entry.totalTokens)}</td>
+                <td class="worker-time">${formatUsd(entry.costUsd)}</td>
+                <td class="worker-counter">${formatNumber(entry.requests)}</td>
+              </tr>
+            `).join('\n')}
+          </tbody>
+        </table>
+      </div>`
+        : `<div class="worker-detail-empty">No model usage captured for this worker yet.</div>`;
+    const providerUsageHtml = providerDistribution.length
+        ? `<div class="workers-table-wrap">
+        <table class="workers-table">
+          <thead><tr><th>Provider</th><th>Tokens</th><th>Cost</th><th>Requests</th></tr></thead>
+          <tbody>
+            ${providerDistribution.map((entry) => `
+              <tr>
+                <td>${esc(entry.provider)}</td>
+                <td class="worker-counter">${formatTokens(entry.totalTokens)}</td>
+                <td class="worker-time">${formatUsd(entry.costUsd)}</td>
+                <td class="worker-counter">${formatNumber(entry.requests)}</td>
+              </tr>
+            `).join('\n')}
+          </tbody>
+        </table>
+      </div>`
+        : `<div class="worker-detail-empty">No provider usage captured for this worker yet.</div>`;
+    const actionRows = actionHistory.length
+        ? actionHistory.map((action) => `
+        <tr>
+          <td class="worker-time">${formatTimestamp(action.completedAt)}</td>
+          <td>${esc(action.actionType)}</td>
+          <td>${statusBadge(action.status)}</td>
+          <td>${action.error ? esc(action.error) : '<span class="worker-time">ok</span>'}</td>
+        </tr>
+      `).join('\n')
+        : `<tr><td colspan="4" class="worker-empty">No operator actions for this worker yet.</td></tr>`;
     return `
     <div class="page-header">
       <div>
@@ -2049,6 +2421,38 @@ function workerDetailPage(worker, relatedMessages, sync) {
       <div class="worker-detail-metric">
         <span class="worker-detail-metric-label">Errors</span>
         <span class="worker-detail-metric-value ${worker.errors > 0 ? 'worker-counter-error' : ''}">${worker.errors}</span>
+      </div>
+      <div class="worker-detail-metric">
+        <span class="worker-detail-metric-label">Active Model</span>
+        <span class="worker-detail-metric-value" title="${esc(worker.activeModel || 'unknown')}">${esc(shortModelName(worker.activeModel))}</span>
+      </div>
+      <div class="worker-detail-metric">
+        <span class="worker-detail-metric-label">Provider</span>
+        <span class="worker-detail-metric-value">${esc(worker.activeProvider || 'unknown')}</span>
+      </div>
+      <div class="worker-detail-metric">
+        <span class="worker-detail-metric-label">Input Tokens</span>
+        <span class="worker-detail-metric-value">${formatTokens(usage.inputTokens)}</span>
+      </div>
+      <div class="worker-detail-metric">
+        <span class="worker-detail-metric-label">Output Tokens</span>
+        <span class="worker-detail-metric-value">${formatTokens(usage.outputTokens)}</span>
+      </div>
+      <div class="worker-detail-metric">
+        <span class="worker-detail-metric-label">Total Tokens</span>
+        <span class="worker-detail-metric-value">${formatTokens(usage.totalTokens)}</span>
+      </div>
+      <div class="worker-detail-metric">
+        <span class="worker-detail-metric-label">Est. Cost</span>
+        <span class="worker-detail-metric-value">${formatUsd(worker.estimatedCostUsd ?? 0)}</span>
+      </div>
+      <div class="worker-detail-metric">
+        <span class="worker-detail-metric-label">Model Switches</span>
+        <span class="worker-detail-metric-value">${formatNumber(worker.modelSwitches ?? 0)}</span>
+      </div>
+      <div class="worker-detail-metric">
+        <span class="worker-detail-metric-label">Compaction Reclaimed</span>
+        <span class="worker-detail-metric-value">${formatTokens(usage.compactionReclaimedTokens)}</span>
       </div>
       <div class="worker-detail-metric">
         <span class="worker-detail-metric-label">Registered</span>
@@ -2087,11 +2491,54 @@ function workerDetailPage(worker, relatedMessages, sync) {
           ${messagesHtml}
         </div>
       </section>
+      <section class="worker-detail-section">
+        <h2>Token Usage</h2>
+        <ul class="worker-detail-timeline">
+          <li class="worker-detail-event">
+            <div class="worker-detail-event-type">Usage</div>
+            <div class="worker-detail-event-summary">
+              ${formatTokens(usage.inputTokens)} input · ${formatTokens(usage.outputTokens)} output · ${formatTokens(usage.cachedInputTokens)} cached input
+            </div>
+            <div class="worker-detail-event-time">${formatUsd(worker.estimatedCostUsd ?? 0)} estimated cost</div>
+          </li>
+          <li class="worker-detail-event">
+            <div class="worker-detail-event-type">Compaction</div>
+            <div class="worker-detail-event-summary">
+              ${formatTokens(usage.compactionInputTokens)} in · ${formatTokens(usage.compactionOutputTokens)} out · ${formatTokens(usage.compactionCachedInputTokens)} cached
+            </div>
+            <div class="worker-detail-event-time">${formatTokens(usage.compactionReclaimedTokens)} reclaimed</div>
+          </li>
+        </ul>
+      </section>
+      <section class="worker-detail-section">
+        <h2>Model Usage</h2>
+        ${modelUsageHtml}
+      </section>
+      <section class="worker-detail-section">
+        <h2>Provider Usage</h2>
+        ${providerUsageHtml}
+      </section>
+      <section class="worker-detail-section">
+        <h2>Operator Actions (${actionHistory.length})</h2>
+        <div class="workers-table-wrap">
+          <table class="workers-table incidents-table">
+            <thead><tr><th>When</th><th>Action</th><th>Status</th><th>Detail</th></tr></thead>
+            <tbody>${actionRows}</tbody>
+          </table>
+        </div>
+      </section>
 
       <section class="worker-detail-section worker-detail-full-width" style="grid-column: 1 / -1;">
         <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
-            <h2 style="margin: 0;">Raw Events Log</h2>
-            <button id="refresh-events-btn" class="worker-detail-refresh-btn" style="padding: 4px 12px; border: 1px solid #444; background: #2a2a2a; color: #fff; cursor: pointer; border-radius: 4px;">Refresh</button>
+            <h2 style="margin: 0;">Transcript</h2>
+            <div style="display: flex; gap: 8px; align-items: center;">
+              <div id="view-toggle-group" style="display: flex; gap: 4px; border: 1px solid #444; border-radius: 4px; background: #1a1a1a;">
+                <button id="view-toggle-conversation" class="worker-detail-view-toggle" data-view="conversation" style="padding: 4px 12px; border: none; background: #2a2a2a; color: #fff; cursor: pointer; border-radius: 3px;">Conversation</button>
+                <button id="view-toggle-raw" class="worker-detail-view-toggle active" data-view="raw" style="padding: 4px 12px; border: none; background: #444; color: #fff; cursor: pointer; border-radius: 3px;">Raw</button>
+              </div>
+              <button id="load-older-btn" class="worker-detail-refresh-btn" style="padding: 4px 12px; border: 1px solid #444; background: #2a2a2a; color: #fff; cursor: pointer; border-radius: 4px; display: none;">Load Older</button>
+              <button id="refresh-events-btn" class="worker-detail-refresh-btn" style="padding: 4px 12px; border: 1px solid #444; background: #2a2a2a; color: #fff; cursor: pointer; border-radius: 4px;">Refresh</button>
+            </div>
         </div>
         <div id="events-log-container" style="max-height: 600px; overflow-y: auto; border: 1px solid #333; background: #111; padding: 0; font-family: monospace; font-size: 12px; border-radius: 4px;">
           <div style="padding: 12px; color: #888;">Click Refresh to load events...</div>
@@ -2104,6 +2551,14 @@ function workerDetailPage(worker, relatedMessages, sync) {
       const workerId = ${JSON.stringify(worker.id)};
       const container = document.getElementById('events-log-container');
       const refreshBtn = document.getElementById('refresh-events-btn');
+      const loadOlderBtn = document.getElementById('load-older-btn');
+      const conversationToggle = document.getElementById('view-toggle-conversation');
+      const rawToggle = document.getElementById('view-toggle-raw');
+      
+      let currentView = 'raw';
+      let currentCursor = null;
+      let currentEvents = [];
+      let currentConversationItems = [];
       
       function escapeHtml(str) {
         if (!str) return '';
@@ -2114,63 +2569,172 @@ function workerDetailPage(worker, relatedMessages, sync) {
           .replace(/"/g, '&quot;')
           .replace(/'/g, '&#039;');
       }
+      
+      function updateToggleStyles() {
+        const toggles = [conversationToggle, rawToggle];
+        toggles.forEach(btn => {
+          const isActive = btn.dataset.view === currentView;
+          btn.style.background = isActive ? '#444' : '#2a2a2a';
+          btn.classList.toggle('active', isActive);
+        });
+      }
 
-      async function loadEvents() {
-        container.innerHTML = '<div style="padding: 12px; color: #888;">Loading events...</div>';
+      function renderRawEvents(events) {
+        if (!events || !events.length) {
+          return '<div style="padding: 12px; color: #888;">No events found.</div>';
+        }
+        
+        // Render events (newest first in display)
+        const eventsHtml = events.slice().reverse().map((evt) => {
+          const isError = evt.type === 'session.error' || evt.type === 'tool.error' || (evt.data && evt.data.success === false);
+            const isUser = evt.type === 'turn.user_message' || evt.type === 'user.message';
+            const isAssistant = evt.type === 'turn.assistant_message' || evt.type === 'assistant.message';
+          const isTool = evt.type.startsWith('tool.');
+          
+          let contentStyle = 'color: #aaa;';
+          if (isError) contentStyle = 'color: #ff6b6b;';
+          else if (isUser) contentStyle = 'color: #4cd964;';
+          else if (isAssistant) contentStyle = 'color: #60a5fa;';
+          else if (isTool) contentStyle = 'color: #fbbf24;';
+          
+          const json = JSON.stringify(evt.data, null, 2);
+          
+          return \`
+            <div style="border-bottom: 1px solid #222; padding: 8px 12px;">
+              <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                <span style="font-weight: bold; \${contentStyle}">\${escapeHtml(evt.type)}</span>
+                <span style="color: #666;">\${escapeHtml(evt.timestamp || '')}</span>
+              </div>
+              <div style="white-space: pre-wrap; word-break: break-all; color: #ccc;">\${escapeHtml(json)}</div>
+            </div>
+          \`;
+        }).join('');
+        
+        return eventsHtml;
+      }
+      
+      function renderConversation(items) {
+        if (!items || !items.length) {
+          return '<div style="padding: 12px; color: #888;">No conversation items found.</div>';
+        }
+        
+        // Render conversation items (newest first in display)
+        const itemsHtml = items.slice().reverse().map((item) => {
+          let icon = '•';
+          let color = '#aaa';
+          
+          if (item.type === 'user_message') {
+            icon = '👤';
+            color = '#4cd964';
+          } else if (item.type === 'assistant_message') {
+            icon = '🤖';
+            color = '#60a5fa';
+          } else if (item.type === 'tool_lifecycle') {
+            icon = '🔧';
+            color = '#fbbf24';
+          } else if (item.type === 'error') {
+            icon = '❌';
+            color = '#ff6b6b';
+          }
+          
+          return \`
+            <div style="border-bottom: 1px solid #222; padding: 8px 12px;">
+              <div style="display: flex; gap: 8px; margin-bottom: 4px;">
+                <span style="font-size: 16px;">\${icon}</span>
+                <div style="flex: 1;">
+                  <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                    <span style="font-weight: bold; color: \${color};">\${escapeHtml(item.type.replace(/_/g, ' '))}</span>
+                    <span style="color: #666; font-size: 11px;">\${escapeHtml(item.timestamp || '')}</span>
+                  </div>
+                  <div style="color: #ccc; white-space: pre-wrap; word-break: break-word;">\${escapeHtml(item.content)}</div>
+                </div>
+              </div>
+            </div>
+          \`;
+        }).join('');
+        
+        return itemsHtml;
+      }
+
+      async function loadEvents(append = false) {
+        if (!append) {
+          container.innerHTML = '<div style="padding: 12px; color: #888;">Loading events...</div>';
+        }
+        
         try {
-          const res = await fetch(\`/api/workers/\${encodeURIComponent(workerId)}/events?limit=500\`);
+          const url = \`/api/workers/\${encodeURIComponent(workerId)}/events?limit=100&view=\${currentView}\${currentCursor && append ? '&cursor=' + encodeURIComponent(currentCursor) : ''}\`;
+          const res = await fetch(url);
           const data = await res.json();
           
           if (data.error) {
             container.innerHTML = \`<div style="padding: 12px; color: #ff6b6b;">Error: \${escapeHtml(data.error)}</div>\`;
+            loadOlderBtn.style.display = 'none';
             return;
           }
           
-          if (!data.events || !data.events.length) {
-            container.innerHTML = '<div style="padding: 12px; color: #888;">No events found.</div>';
-            return;
+          const pageEvents = data.events || [];
+          const pageConversationItems = data.conversationItems || [];
+          if (append) {
+            currentEvents = [...pageEvents, ...currentEvents];
+            currentConversationItems = [...pageConversationItems, ...currentConversationItems];
+          } else {
+            currentEvents = pageEvents;
+            currentConversationItems = pageConversationItems;
           }
           
-          // Render events (newest first)
-          const eventsHtml = data.events.reverse().map((evt, idx) => {
-            const isError = evt.type === 'session.error' || evt.type === 'tool.error' || (evt.data && evt.data.success === false);
-            const isUser = evt.type === 'user.message';
-            const isAssistant = evt.type === 'assistant.message';
-            const isTool = evt.type.startsWith('tool.');
-            
-            let contentStyle = 'color: #aaa;';
-            if (isError) contentStyle = 'color: #ff6b6b;';
-            else if (isUser) contentStyle = 'color: #4cd964;';
-            else if (isAssistant) contentStyle = 'color: #60a5fa;';
-            else if (isTool) contentStyle = 'color: #fbbf24;';
-            
-            const json = JSON.stringify(evt.data, null, 2);
-            
-            return \`
-              <div style="border-bottom: 1px solid #222; padding: 8px 12px;">
-                <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
-                  <span style="font-weight: bold; \${contentStyle}">\${escapeHtml(evt.type)}</span>
-                  <span style="color: #666;">\${escapeHtml(evt.timestamp || '')}</span>
-                </div>
-                <div style="white-space: pre-wrap; word-break: break-all; color: #ccc;">\${escapeHtml(json)}</div>
-              </div>
-            \`;
-          }).join('');
+          currentCursor = data.cursor;
+          loadOlderBtn.style.display = data.hasMore ? 'block' : 'none';
+          
+          let contentHtml = '';
+          if (currentView === 'conversation') {
+            contentHtml = renderConversation(currentConversationItems);
+          } else {
+            contentHtml = renderRawEvents(currentEvents);
+          }
           
           container.innerHTML = \`
             <div style="padding: 8px 12px; background: #222; border-bottom: 1px solid #333; color: #888; position: sticky; top: 0;">
-              Showing last \${data.events.length} events (Total: \${data.totalLines})
+              Showing \${currentView === 'conversation' ? currentConversationItems.length : currentEvents.length} \${currentView === 'conversation' ? 'items' : 'events'}\${data.totalLines !== null ? ' (Total: ' + data.totalLines + ')' : ''}
             </div>
-            \${eventsHtml}
+            \${contentHtml}
           \`;
         } catch (err) {
           container.innerHTML = \`<div style="padding: 12px; color: #ff6b6b;">Failed to load events: \${escapeHtml(err.message)}</div>\`;
+          loadOlderBtn.style.display = 'none';
         }
       }
       
-      refreshBtn.addEventListener('click', loadEvents);
+      refreshBtn.addEventListener('click', () => {
+        currentCursor = null;
+        currentEvents = [];
+        currentConversationItems = [];
+        loadEvents(false);
+      });
+      
+      loadOlderBtn.addEventListener('click', () => {
+        loadEvents(true);
+      });
+      
+      conversationToggle.addEventListener('click', () => {
+        currentView = 'conversation';
+        currentCursor = null;
+        currentEvents = [];
+        currentConversationItems = [];
+        updateToggleStyles();
+        loadEvents(false);
+      });
+      
+      rawToggle.addEventListener('click', () => {
+        currentView = 'raw';
+        currentCursor = null;
+        currentEvents = [];
+        currentConversationItems = [];
+        updateToggleStyles();
+        loadEvents(false);
+      });
+      
       // Auto-load on page view
-      loadEvents();
+      loadEvents(false);
     })();
     </script>
   `;
@@ -2180,14 +2744,209 @@ function notFoundPage() {
     return `<div class="not-found">
     <div class="not-found-code">404</div>
     <div class="not-found-text">Page not found</div>
-    <a href="/" class="not-found-link">← Back to timeline</a>
+    <a href="/" class="not-found-link">← Back to overview</a>
   </div>`;
 }
 
 // EXTERNAL MODULE: ./src/core/reactor.ts
 var reactor = __webpack_require__(553);
-// EXTERNAL MODULE: ./src/core/workers.ts + 1 modules
-var workers = __webpack_require__(21);
+// EXTERNAL MODULE: external "node:fs"
+var external_node_fs_ = __webpack_require__(24);
+;// CONCATENATED MODULE: ./src/core/telemetry.ts
+/**
+ * Telemetry abstraction for different agent types.
+ * Currently supports: copilot (Copilot CLI events.jsonl format)
+ */
+
+/**
+ * Copilot CLI telemetry reader
+ */
+class CopilotTelemetryReader {
+    readEvents(eventsPath, cursor, limit) {
+        if (!(0,external_node_fs_.existsSync)(eventsPath)) {
+            return {
+                events: [],
+                cursor: null,
+                hasMore: false,
+                count: 0,
+                totalLines: null,
+                error: 'Events file not found',
+            };
+        }
+        const fileSize = (0,external_node_fs_.statSync)(eventsPath).size;
+        const end = parseCursor(cursor, fileSize);
+        if (end <= 0) {
+            return {
+                events: [],
+                cursor: null,
+                hasMore: false,
+                count: 0,
+                totalLines: null,
+                error: null,
+            };
+        }
+        const boundedLimit = Math.max(1, Math.min(limit, 500));
+        const { selectedLines, nextCursor } = readPageLines(eventsPath, end, boundedLimit, fileSize);
+        const events = [];
+        for (const line of selectedLines) {
+            try {
+                const parsed = JSON.parse(line);
+                events.push({
+                    type: parsed.type ?? '',
+                    data: parsed.data ?? {},
+                    id: parsed.id ?? '',
+                    timestamp: parsed.timestamp ?? '',
+                    parentId: parsed.parentId ?? null,
+                });
+            }
+            catch {
+                // Skip malformed lines.
+            }
+        }
+        return {
+            events,
+            cursor: nextCursor,
+            hasMore: nextCursor !== null,
+            count: events.length,
+            totalLines: null,
+            error: null,
+        };
+    }
+    toConversation(events) {
+        const items = [];
+        for (const event of events) {
+            const timestamp = event.timestamp;
+            switch (event.type) {
+                case 'user.message':
+                case 'turn.user_message':
+                    items.push({
+                        type: 'user_message',
+                        timestamp,
+                        content: toContent(event.data.message, event.data.content),
+                        data: event.data,
+                    });
+                    break;
+                case 'assistant.message':
+                case 'turn.assistant_message':
+                    items.push({
+                        type: 'assistant_message',
+                        timestamp,
+                        content: toContent(event.data.message, event.data.content),
+                        data: event.data,
+                    });
+                    break;
+                case 'tool.execution_start':
+                case 'tool.execution_complete':
+                case 'tool.error':
+                    items.push({
+                        type: 'tool_lifecycle',
+                        timestamp,
+                        content: `${event.type}: ${toContent(event.data.toolName, event.data.tool_name, event.data.tool, 'unknown')}`,
+                        data: event.data,
+                    });
+                    break;
+                case 'session.error':
+                    items.push({
+                        type: 'error',
+                        timestamp,
+                        content: String(event.data.message ?? event.data.error ?? 'Unknown error'),
+                        data: event.data,
+                    });
+                    break;
+                default:
+                    items.push({
+                        type: 'unknown',
+                        timestamp,
+                        content: event.type,
+                        data: event.data,
+                    });
+            }
+        }
+        return items;
+    }
+}
+/**
+ * Get telemetry reader using the telemetry source path, not role/agent labels.
+ */
+function getTelemetryReader(eventsPath) {
+    if (!eventsPath)
+        return null;
+    if (isCopilotSessionEventsPath(eventsPath))
+        return new CopilotTelemetryReader();
+    return null;
+}
+function isCopilotSessionEventsPath(eventsPath) {
+    const normalizedPath = eventsPath.replace(/\\/g, '/');
+    return normalizedPath.includes('/.copilot/session-state/') && normalizedPath.endsWith('/events.jsonl');
+}
+function parseCursor(cursor, fileSize) {
+    if (!cursor)
+        return fileSize;
+    const match = cursor.match(/^byte:(\d+)$/);
+    if (!match)
+        return fileSize;
+    const parsed = parseInt(match[1], 10);
+    if (Number.isNaN(parsed))
+        return fileSize;
+    return Math.max(0, Math.min(parsed, fileSize));
+}
+function readPageLines(eventsPath, end, limit, fileSize) {
+    const fd = (0,external_node_fs_.openSync)(eventsPath, 'r');
+    const chunkSize = 64 * 1024;
+    let start = end;
+    let text = '';
+    try {
+        while (start > 0) {
+            const readLen = Math.min(chunkSize, start);
+            start -= readLen;
+            const chunk = Buffer.alloc(readLen);
+            (0,external_node_fs_.readSync)(fd, chunk, 0, readLen, start);
+            text = chunk.toString('utf-8') + text;
+            const parts = text.split('\n');
+            const completeLines = (start > 0 ? parts.slice(1) : parts).filter(line => line.trim().length > 0);
+            if (completeLines.length >= limit + 1 || start === 0)
+                break;
+        }
+    }
+    finally {
+        (0,external_node_fs_.closeSync)(fd);
+    }
+    let parts = text.split('\n');
+    if (start > 0) {
+        parts = parts.slice(1);
+    }
+    if (end === fileSize && !text.endsWith('\n') && parts.length > 0) {
+        parts.pop();
+    }
+    if (parts.length > 0 && parts[parts.length - 1] === '') {
+        parts.pop();
+    }
+    const selectedLinesReversed = [];
+    let bytesFromEnd = 0;
+    for (let i = parts.length - 1; i >= 0; i -= 1) {
+        const line = parts[i];
+        bytesFromEnd += Buffer.byteLength(`${line}\n`, 'utf-8');
+        if (!line.trim())
+            continue;
+        selectedLinesReversed.push(line);
+        if (selectedLinesReversed.length >= limit)
+            break;
+    }
+    const selectedLines = selectedLinesReversed.reverse();
+    const selectedStart = Math.max(0, end - bytesFromEnd);
+    return {
+        selectedLines,
+        nextCursor: selectedStart > 0 ? `byte:${selectedStart}` : null,
+    };
+}
+function toContent(...values) {
+    for (const value of values) {
+        if (typeof value === 'string' && value.trim().length > 0)
+            return value;
+    }
+    return '';
+}
+
 ;// CONCATENATED MODULE: ./src/serve/server.ts
 /**
  * Lightweight HTTP server for the agents-hub dashboard.
@@ -2269,6 +3028,12 @@ function sanitizeRedirectPath(path) {
         return '/incidents';
     return path;
 }
+function parseLimit(query, key, fallback, max) {
+    const raw = parseInt(query.get(key) || String(fallback), 10);
+    if (!Number.isFinite(raw))
+        return fallback;
+    return Math.min(Math.max(1, raw), max);
+}
 // ── Background watcher ───────────────────────────────────────
 /**
  * Start background task to watch for new messages and broadcast via SSE
@@ -2348,8 +3113,29 @@ async function startServer(opts) {
                 });
                 return sendJson(res, result);
             }
+            if (pathname === '/api/ops/summary') {
+                return sendJson(res, hub.opsSummary());
+            }
+            if (pathname === '/api/ops/tools') {
+                return sendJson(res, { tools: hub.opsTools() });
+            }
+            if (pathname === '/api/ops/usage') {
+                return sendJson(res, hub.opsUsage());
+            }
+            if (pathname === '/api/ops/actions') {
+                const limit = parseLimit(query, 'limit', 100, 1000);
+                return sendJson(res, hub.opsActions(limit));
+            }
+            const workerUsageMatch = pathname.match(/^\/api\/workers\/(.+)\/usage$/);
+            if (workerUsageMatch) {
+                const workerId = decodeURIComponent(workerUsageMatch[1]);
+                const usage = hub.workerUsage(workerId);
+                if (!usage)
+                    return sendJson(res, { error: 'Worker not found' }, 404);
+                return sendJson(res, usage);
+            }
             // ── JSON API for workers ──
-            const workerApiMatch = pathname.match(/^\/api\/workers\/(.+)$/);
+            const workerApiMatch = pathname.match(/^\/api\/workers\/([^/]+)$/);
             if (workerApiMatch) {
                 const workerId = decodeURIComponent(workerApiMatch[1]);
                 const sync = hub.workerSync(workerId);
@@ -2386,30 +3172,98 @@ async function startServer(opts) {
                 const stopMatch = pathname.match(/^\/workers\/(.+)\/stop$/);
                 if (stopMatch) {
                     const workerId = decodeURIComponent(stopMatch[1]);
+                    const requestedAt = new Date().toISOString();
                     const worker = hub.workerGet(workerId);
-                    if (!worker)
+                    if (!worker) {
+                        hub.recordOperatorAction({
+                            workerId,
+                            actionType: 'stop_worker',
+                            status: 'failed',
+                            requestedAt,
+                            completedAt: new Date().toISOString(),
+                            error: `Worker not found: ${workerId}`,
+                        });
                         return sendJson(res, { error: `Worker not found: ${workerId}` }, 404);
+                    }
                     if (worker.pid === null || worker.status !== 'active') {
+                        hub.recordOperatorAction({
+                            workerId,
+                            actionType: 'stop_worker',
+                            status: 'failed',
+                            requestedAt,
+                            completedAt: new Date().toISOString(),
+                            error: 'Stop action requires an active worker with a PID',
+                        });
                         return sendJson(res, { error: 'Stop action requires an active worker with a PID' }, 409);
                     }
                     process.kill(worker.pid, 'SIGTERM');
-                    hub.workerSync(workerId);
+                    const syncResult = hub.workerSync(workerId);
+                    hub.recordOperatorAction({
+                        workerId,
+                        actionType: 'stop_worker',
+                        status: 'succeeded',
+                        requestedAt,
+                        completedAt: new Date().toISOString(),
+                        metadata: {
+                            redirect: redirectPath,
+                            syncStatus: syncResult.syncStatus,
+                            workerStatus: syncResult.status,
+                        },
+                    });
                     return sendRedirect(res, redirectPath);
                 }
                 const syncMatch = pathname.match(/^\/workers\/(.+)\/sync$/);
                 if (syncMatch) {
                     const workerId = decodeURIComponent(syncMatch[1]);
+                    const requestedAt = new Date().toISOString();
                     const worker = hub.workerGet(workerId);
-                    if (!worker)
+                    if (!worker) {
+                        hub.recordOperatorAction({
+                            workerId,
+                            actionType: 'retry_sync',
+                            status: 'failed',
+                            requestedAt,
+                            completedAt: new Date().toISOString(),
+                            error: `Worker not found: ${workerId}`,
+                        });
                         return sendJson(res, { error: `Worker not found: ${workerId}` }, 404);
-                    hub.workerSync(workerId);
+                    }
+                    const syncResult = hub.workerSync(workerId);
+                    hub.recordOperatorAction({
+                        workerId,
+                        actionType: 'retry_sync',
+                        status: syncResult.ok ? 'succeeded' : 'failed',
+                        requestedAt,
+                        completedAt: new Date().toISOString(),
+                        error: syncResult.ok ? null : syncResult.error,
+                        metadata: {
+                            redirect: redirectPath,
+                            syncStatus: syncResult.syncStatus,
+                            workerStatus: syncResult.status,
+                            newEvents: syncResult.newEvents,
+                        },
+                    });
                     return sendRedirect(res, redirectPath);
                 }
             }
             // Refresh channel list for each request
             const currentChannels = hub.channelList(true);
-            // ── Timeline (root) ──
+            // ── Ops overview (root) ──
             if (pathname === '/') {
+                const summary = hub.opsSummary();
+                const usage = hub.opsUsage();
+                const tools = hub.opsTools();
+                const actions = hub.opsActions(100);
+                const html = layout({
+                    title: 'Overview',
+                    channels: currentChannels,
+                    activePage: 'overview',
+                    body: overviewPage(summary, usage, tools, actions),
+                });
+                return sendHtml(res, html);
+            }
+            // ── Timeline page ──
+            if (pathname === '/timeline') {
                 const messages = hub.read({ limit: 100 }).messages;
                 const html = layout({
                     title: 'Timeline',
@@ -2470,6 +3324,26 @@ async function startServer(opts) {
                 });
                 return sendHtml(res, html);
             }
+            // ── Usage page ──
+            if (pathname === '/usage') {
+                const html = layout({
+                    title: 'Usage',
+                    channels: currentChannels,
+                    activePage: 'usage',
+                    body: usagePage(hub.opsUsage()),
+                });
+                return sendHtml(res, html);
+            }
+            // ── Tools page ──
+            if (pathname === '/tools') {
+                const html = layout({
+                    title: 'Tools',
+                    channels: currentChannels,
+                    activePage: 'tools',
+                    body: toolsPage(hub.opsTools()),
+                });
+                return sendHtml(res, html);
+            }
             // ── Workers page ──
             if (pathname === '/workers') {
                 const workers = hub.workerList().map(w => ({
@@ -2513,6 +3387,7 @@ async function startServer(opts) {
                     }), 404);
                 }
                 const messages = hub.read({ workerId, limit: 100 }).messages;
+                const actionHistory = hub.listOperatorActions({ workerId, limit: 50 });
                 const html = layout({
                     title: `Worker ${workerId}`,
                     channels: currentChannels,
@@ -2520,7 +3395,7 @@ async function startServer(opts) {
                     body: workerDetailPage({
                         ...worker,
                         health: (0,reactor/* detectHealth */._2)(worker.lastEventAt),
-                    }, messages, sync),
+                    }, messages, sync, actionHistory),
                 });
                 return sendHtml(res, html);
             }
@@ -2532,15 +3407,34 @@ async function startServer(opts) {
                 if (!worker || !worker.eventsPath) {
                     return sendJson(res, { error: 'Worker not found or no events path' }, 404);
                 }
-                const limit = parseInt(query.get('limit') || '500', 10);
-                const { events, totalLines, error } = (0,workers/* readWorkerEvents */.OD)(worker.eventsPath, limit);
-                return sendJson(res, {
+                // Resolve telemetry reader from worker telemetry source path.
+                const reader = getTelemetryReader(worker.eventsPath);
+                if (!reader) {
+                    return sendJson(res, {
+                        error: `Unsupported telemetry source: ${worker.eventsPath}`
+                    }, 400);
+                }
+                // Parse query params
+                const rawLimit = parseInt(query.get('limit') || '500', 10);
+                const limit = Math.min(Math.max(1, rawLimit), 500);
+                const cursor = query.get('cursor') || null;
+                const view = query.get('view') === 'conversation' ? 'conversation' : 'raw';
+                // Read events with pagination
+                const result = reader.readEvents(worker.eventsPath, cursor, limit);
+                // If conversation view, transform events
+                let response = {
                     workerId,
-                    events,
-                    totalLines,
-                    error,
-                    eventsPath: worker.eventsPath
-                });
+                    view,
+                    ...result,
+                };
+                if (view === 'conversation' && !result.error) {
+                    const conversationItems = reader.toConversation(result.events);
+                    response = {
+                        ...response,
+                        conversationItems,
+                    };
+                }
+                return sendJson(res, response);
             }
             // ── Thread view ──
             const threadMatch = pathname.match(/^\/thread\/(.+)$/);
@@ -2579,7 +3473,7 @@ async function startServer(opts) {
             sendHtml(res, layout({
                 title: 'Not Found',
                 channels: currentChannels,
-                activePage: 'timeline',
+                activePage: 'overview',
                 body: notFoundPage(),
             }), 404);
         }

@@ -3,10 +3,135 @@ import { readdirSync, readFileSync, existsSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { now } from '../utils/time.js';
-import type { Worker, WorkerStatus, RegisterWorkerOptions } from './types.js';
+import type {
+  Worker,
+  WorkerStatus,
+  RegisterWorkerOptions,
+  TokenUsageTotals,
+  ModelUsageSummary,
+  ProviderUsageSummary,
+} from './types.js';
+
+const EMPTY_USAGE_TOTALS: TokenUsageTotals = {
+  inputTokens: 0,
+  outputTokens: 0,
+  cachedInputTokens: 0,
+  cachedOutputTokens: 0,
+  compactionInputTokens: 0,
+  compactionOutputTokens: 0,
+  compactionCachedInputTokens: 0,
+  compactionReclaimedTokens: 0,
+  totalTokens: 0,
+};
+
+function asNumber(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value) ? value : 0;
+}
+
+function parseUsageTotals(raw: unknown): TokenUsageTotals {
+  if (!raw || typeof raw !== 'object') return { ...EMPTY_USAGE_TOTALS };
+  const usage = raw as Record<string, unknown>;
+  return {
+    inputTokens: asNumber(usage.inputTokens),
+    outputTokens: asNumber(usage.outputTokens),
+    cachedInputTokens: asNumber(usage.cachedInputTokens),
+    cachedOutputTokens: asNumber(usage.cachedOutputTokens),
+    compactionInputTokens: asNumber(usage.compactionInputTokens),
+    compactionOutputTokens: asNumber(usage.compactionOutputTokens),
+    compactionCachedInputTokens: asNumber(usage.compactionCachedInputTokens),
+    compactionReclaimedTokens: asNumber(usage.compactionReclaimedTokens),
+    totalTokens: asNumber(usage.totalTokens),
+  };
+}
+
+function parseModelUsage(raw: unknown): Record<string, ModelUsageSummary> {
+  if (!raw || typeof raw !== 'object') return {};
+  const source = raw as Record<string, unknown>;
+  const parsed: Record<string, ModelUsageSummary> = {};
+  for (const [key, value] of Object.entries(source)) {
+    if (!value || typeof value !== 'object') continue;
+    const item = value as Record<string, unknown>;
+    parsed[key] = {
+      model: typeof item.model === 'string' ? item.model : key,
+      provider: typeof item.provider === 'string' ? item.provider : 'unknown',
+      inputTokens: asNumber(item.inputTokens),
+      outputTokens: asNumber(item.outputTokens),
+      cachedInputTokens: asNumber(item.cachedInputTokens),
+      cachedOutputTokens: asNumber(item.cachedOutputTokens),
+      totalTokens: asNumber(item.totalTokens),
+      costUsd: asNumber(item.costUsd),
+      requests: asNumber(item.requests),
+      lastUsedAt: typeof item.lastUsedAt === 'string' ? item.lastUsedAt : null,
+    };
+  }
+  return parsed;
+}
+
+function parseProviderUsage(raw: unknown): Record<string, ProviderUsageSummary> {
+  if (!raw || typeof raw !== 'object') return {};
+  const source = raw as Record<string, unknown>;
+  const parsed: Record<string, ProviderUsageSummary> = {};
+  for (const [key, value] of Object.entries(source)) {
+    if (!value || typeof value !== 'object') continue;
+    const item = value as Record<string, unknown>;
+    parsed[key] = {
+      provider: typeof item.provider === 'string' ? item.provider : key,
+      inputTokens: asNumber(item.inputTokens),
+      outputTokens: asNumber(item.outputTokens),
+      cachedInputTokens: asNumber(item.cachedInputTokens),
+      cachedOutputTokens: asNumber(item.cachedOutputTokens),
+      totalTokens: asNumber(item.totalTokens),
+      costUsd: asNumber(item.costUsd),
+      requests: asNumber(item.requests),
+      lastUsedAt: typeof item.lastUsedAt === 'string' ? item.lastUsedAt : null,
+    };
+  }
+  return parsed;
+}
+
+function parseOpsTelemetryMetadata(metadata: Record<string, unknown>): {
+  activeModel: string | null;
+  activeProvider: string | null;
+  modelSwitches: number;
+  estimatedCostUsd: number;
+  usage: TokenUsageTotals;
+  modelUsage: Record<string, ModelUsageSummary>;
+  providerUsage: Record<string, ProviderUsageSummary>;
+} {
+  const raw = metadata.opsTelemetry;
+  if (!raw || typeof raw !== 'object') {
+    return {
+      activeModel: null,
+      activeProvider: null,
+      modelSwitches: 0,
+      estimatedCostUsd: 0,
+      usage: { ...EMPTY_USAGE_TOTALS },
+      modelUsage: {},
+      providerUsage: {},
+    };
+  }
+  const item = raw as Record<string, unknown>;
+  return {
+    activeModel: typeof item.activeModel === 'string' ? item.activeModel : null,
+    activeProvider: typeof item.activeProvider === 'string' ? item.activeProvider : null,
+    modelSwitches: asNumber(item.modelSwitches),
+    estimatedCostUsd: asNumber(item.estimatedCostUsd),
+    usage: parseUsageTotals(item.usageTotals),
+    modelUsage: parseModelUsage(item.models),
+    providerUsage: parseProviderUsage(item.providers),
+  };
+}
 
 /** Convert a DB row to a Worker object */
 function rowToWorker(row: Record<string, unknown>): Worker {
+  let metadata: Record<string, unknown> = {};
+  try {
+    metadata = JSON.parse((row.metadata as string) || '{}') as Record<string, unknown>;
+  } catch {
+    metadata = {};
+  }
+  const ops = parseOpsTelemetryMetadata(metadata);
+
   return {
     id: row.id as string,
     sessionId: (row.session_id as string) ?? null,
@@ -24,9 +149,16 @@ function rowToWorker(row: Record<string, unknown>): Worker {
     toolCalls: (row.tool_calls as number) ?? 0,
     turns: (row.turns as number) ?? 0,
     errors: (row.errors as number) ?? 0,
+    activeModel: ops.activeModel,
+    activeProvider: ops.activeProvider,
+    modelSwitches: ops.modelSwitches,
+    estimatedCostUsd: ops.estimatedCostUsd,
+    usage: ops.usage,
+    modelUsage: ops.modelUsage,
+    providerUsage: ops.providerUsage,
     registeredAt: row.registered_at as string,
     completedAt: (row.completed_at as string) ?? null,
-    metadata: JSON.parse((row.metadata as string) || '{}'),
+    metadata,
   };
 }
 

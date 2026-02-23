@@ -1,6 +1,15 @@
 import { describe, it, expect } from 'vitest';
 import type { ChannelInfo, Message } from '../../src/core/types.js';
-import { incidentsPage, layout, renderMessage, type WorkerWithHealth } from '../../src/serve/renderer.js';
+import {
+  incidentsPage,
+  layout,
+  overviewPage,
+  renderMessage,
+  toolsPage,
+  usagePage,
+  workersPage,
+  type WorkerWithHealth,
+} from '../../src/serve/renderer.js';
 
 function makeMessage(workerId: string | null): Message {
   return {
@@ -83,6 +92,30 @@ describe('renderMessage', () => {
 });
 
 describe('renderer incidents', () => {
+  it('shows overview/usage/tools nav entries', () => {
+    const channels: ChannelInfo[] = [{
+      name: '#main',
+      createdAt: '2026-02-23T00:00:00.000Z',
+      createdBy: 'system',
+      description: null,
+      workerId: null,
+      messageCount: 1,
+      lastActivity: '2026-02-23T00:00:00.000Z',
+    }];
+
+    const html = layout({
+      title: 'Overview',
+      channels,
+      activePage: 'overview',
+      body: '<div>content</div>',
+    });
+
+    expect(html).toContain('href="/" class="active">🎛️ Overview');
+    expect(html).toContain('href="/usage"');
+    expect(html).toContain('href="/tools"');
+    expect(html).toContain('href="/timeline"');
+  });
+
   it('shows incidents nav entry as active', () => {
     const channels: ChannelInfo[] = [{
       name: '#main',
@@ -142,5 +175,74 @@ describe('renderer incidents', () => {
     expect(html.indexOf('worker-new')).toBeLessThan(html.indexOf('worker-old'));
     expect(html.indexOf('Newest request content')).toBeLessThan(html.indexOf('Old request content'));
     expect(html).toContain('Error Clusters');
+  });
+
+  it('renders workers table with model and usage columns', () => {
+    const html = workersPage([
+      makeWorker({
+        id: 'worker-cost',
+        activeModel: 'claude-sonnet-4.5',
+        estimatedCostUsd: 12.34,
+        usage: {
+          inputTokens: 4000,
+          outputTokens: 1500,
+          cachedInputTokens: 600,
+          cachedOutputTokens: 0,
+          compactionInputTokens: 0,
+          compactionOutputTokens: 0,
+          compactionCachedInputTokens: 0,
+          compactionReclaimedTokens: 0,
+          totalTokens: 6100,
+        },
+      }),
+    ]);
+    expect(html).toContain('Model');
+    expect(html).toContain('Tokens (In/Out)');
+    expect(html).toContain('Cost');
+    expect(html).toContain('claude-sonnet-4.5');
+    expect(html).toContain('$12.34');
+  });
+
+  it('renders overview/usage/tools pages', () => {
+    const summary = {
+      generatedAt: '2026-02-23T00:00:00.000Z',
+      workers: { total: 1, active: 1, healthy: 1, stale: 0, lost: 0, failed: 0, completed: 0 },
+      throughput: { turns: 10, toolCalls: 20, errors: 1, toolErrorRate: 0.05 },
+      usage: {
+        inputTokens: 1000,
+        outputTokens: 500,
+        cachedInputTokens: 100,
+        cachedOutputTokens: 0,
+        compactionInputTokens: 50,
+        compactionOutputTokens: 10,
+        compactionCachedInputTokens: 5,
+        compactionReclaimedTokens: 200,
+        totalTokens: 1600,
+        estimatedCostUsd: 1.23,
+        burnRateUsdPerHour: 0.45,
+      },
+      incidents: { workerIncidents: 0, unresolvedRequests: 0 },
+      modelDistribution: [],
+      providerDistribution: [],
+    };
+    const usage = {
+      generatedAt: '2026-02-23T00:00:00.000Z',
+      totals: summary.usage,
+      byModel: [],
+      byProvider: [],
+      topWorkers: [],
+    };
+    const actions = {
+      generatedAt: '2026-02-23T00:00:00.000Z',
+      total: 0,
+      successRate: 1,
+      byType: [],
+      actions: [],
+    };
+    const tools = [];
+
+    expect(overviewPage(summary, usage, tools, actions)).toContain('Ops Overview');
+    expect(usagePage(usage)).toContain('Usage & Cost');
+    expect(toolsPage(tools)).toContain('Tool Reliability');
   });
 });

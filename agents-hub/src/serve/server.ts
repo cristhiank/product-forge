@@ -9,16 +9,20 @@ import type { ChannelInfo } from '../core/types.js';
 import { CSS } from './styles.js';
 import {
   layout,
+  overviewPage,
   timelinePage,
   statusPage,
   searchPage,
   threadView,
   workersPage,
+  usagePage,
+  toolsPage,
   incidentsPage,
   workerDetailPage,
   notFoundPage,
 } from './renderer.js';
 import { detectHealth } from '../core/reactor.js';
+import { getTelemetryReader } from '../core/telemetry.js';
 
 // ── SSE clients ──────────────────────────────────────────────
 
@@ -104,6 +108,12 @@ function sortNewestFirst<T extends { createdAt: string }>(items: T[]): T[] {
 function sanitizeRedirectPath(path: string | null): string {
   if (!path || !path.startsWith('/')) return '/incidents';
   return path;
+}
+
+function parseLimit(query: URLSearchParams, key: string, fallback: number, max: number): number {
+  const raw = parseInt(query.get(key) || String(fallback), 10);
+  if (!Number.isFinite(raw)) return fallback;
+  return Math.min(Math.max(1, raw), max);
 }
 
 // ── Background watcher ───────────────────────────────────────
@@ -203,8 +213,33 @@ export async function startServer(opts: ServeOptions): Promise<void> {
         return sendJson(res, result);
       }
 
+      if (pathname === '/api/ops/summary') {
+        return sendJson(res, hub.opsSummary());
+      }
+
+      if (pathname === '/api/ops/tools') {
+        return sendJson(res, { tools: hub.opsTools() });
+      }
+
+      if (pathname === '/api/ops/usage') {
+        return sendJson(res, hub.opsUsage());
+      }
+
+      if (pathname === '/api/ops/actions') {
+        const limit = parseLimit(query, 'limit', 100, 1000);
+        return sendJson(res, hub.opsActions(limit));
+      }
+
+      const workerUsageMatch = pathname.match(/^\/api\/workers\/(.+)\/usage$/);
+      if (workerUsageMatch) {
+        const workerId = decodeURIComponent(workerUsageMatch[1]);
+        const usage = hub.workerUsage(workerId);
+        if (!usage) return sendJson(res, { error: 'Worker not found' }, 404);
+        return sendJson(res, usage);
+      }
+
       // ── JSON API for workers ──
-      const workerApiMatch = pathname.match(/^\/api\/workers\/(.+)$/);
+      const workerApiMatch = pathname.match(/^\/api\/workers\/([^/]+)$/);
       if (workerApiMatch) {
         const workerId = decodeURIComponent(workerApiMatch[1]);
         const sync = hub.workerSync(workerId);
@@ -244,22 +279,78 @@ export async function startServer(opts: ServeOptions): Promise<void> {
         const stopMatch = pathname.match(/^\/workers\/(.+)\/stop$/);
         if (stopMatch) {
           const workerId = decodeURIComponent(stopMatch[1]);
+          const requestedAt = new Date().toISOString();
           const worker = hub.workerGet(workerId);
-          if (!worker) return sendJson(res, { error: `Worker not found: ${workerId}` }, 404);
+          if (!worker) {
+            hub.recordOperatorAction({
+              workerId,
+              actionType: 'stop_worker',
+              status: 'failed',
+              requestedAt,
+              completedAt: new Date().toISOString(),
+              error: `Worker not found: ${workerId}`,
+            });
+            return sendJson(res, { error: `Worker not found: ${workerId}` }, 404);
+          }
           if (worker.pid === null || worker.status !== 'active') {
+            hub.recordOperatorAction({
+              workerId,
+              actionType: 'stop_worker',
+              status: 'failed',
+              requestedAt,
+              completedAt: new Date().toISOString(),
+              error: 'Stop action requires an active worker with a PID',
+            });
             return sendJson(res, { error: 'Stop action requires an active worker with a PID' }, 409);
           }
           process.kill(worker.pid, 'SIGTERM');
-          hub.workerSync(workerId);
+          const syncResult = hub.workerSync(workerId);
+          hub.recordOperatorAction({
+            workerId,
+            actionType: 'stop_worker',
+            status: 'succeeded',
+            requestedAt,
+            completedAt: new Date().toISOString(),
+            metadata: {
+              redirect: redirectPath,
+              syncStatus: syncResult.syncStatus,
+              workerStatus: syncResult.status,
+            },
+          });
           return sendRedirect(res, redirectPath);
         }
 
         const syncMatch = pathname.match(/^\/workers\/(.+)\/sync$/);
         if (syncMatch) {
           const workerId = decodeURIComponent(syncMatch[1]);
+          const requestedAt = new Date().toISOString();
           const worker = hub.workerGet(workerId);
-          if (!worker) return sendJson(res, { error: `Worker not found: ${workerId}` }, 404);
-          hub.workerSync(workerId);
+          if (!worker) {
+            hub.recordOperatorAction({
+              workerId,
+              actionType: 'retry_sync',
+              status: 'failed',
+              requestedAt,
+              completedAt: new Date().toISOString(),
+              error: `Worker not found: ${workerId}`,
+            });
+            return sendJson(res, { error: `Worker not found: ${workerId}` }, 404);
+          }
+          const syncResult = hub.workerSync(workerId);
+          hub.recordOperatorAction({
+            workerId,
+            actionType: 'retry_sync',
+            status: syncResult.ok ? 'succeeded' : 'failed',
+            requestedAt,
+            completedAt: new Date().toISOString(),
+            error: syncResult.ok ? null : syncResult.error,
+            metadata: {
+              redirect: redirectPath,
+              syncStatus: syncResult.syncStatus,
+              workerStatus: syncResult.status,
+              newEvents: syncResult.newEvents,
+            },
+          });
           return sendRedirect(res, redirectPath);
         }
       }
@@ -267,8 +358,23 @@ export async function startServer(opts: ServeOptions): Promise<void> {
       // Refresh channel list for each request
       const currentChannels = hub.channelList(true) as ChannelInfo[];
 
-      // ── Timeline (root) ──
+      // ── Ops overview (root) ──
       if (pathname === '/') {
+        const summary = hub.opsSummary();
+        const usage = hub.opsUsage();
+        const tools = hub.opsTools();
+        const actions = hub.opsActions(100);
+        const html = layout({
+          title: 'Overview',
+          channels: currentChannels,
+          activePage: 'overview',
+          body: overviewPage(summary, usage, tools, actions),
+        });
+        return sendHtml(res, html);
+      }
+
+      // ── Timeline page ──
+      if (pathname === '/timeline') {
         const messages = hub.read({ limit: 100 }).messages;
         const html = layout({
           title: 'Timeline',
@@ -330,6 +436,28 @@ export async function startServer(opts: ServeOptions): Promise<void> {
         return sendHtml(res, html);
       }
 
+      // ── Usage page ──
+      if (pathname === '/usage') {
+        const html = layout({
+          title: 'Usage',
+          channels: currentChannels,
+          activePage: 'usage',
+          body: usagePage(hub.opsUsage()),
+        });
+        return sendHtml(res, html);
+      }
+
+      // ── Tools page ──
+      if (pathname === '/tools') {
+        const html = layout({
+          title: 'Tools',
+          channels: currentChannels,
+          activePage: 'tools',
+          body: toolsPage(hub.opsTools()),
+        });
+        return sendHtml(res, html);
+      }
+
       // ── Workers page ──
       if (pathname === '/workers') {
         const workers = hub.workerList().map(w => ({
@@ -380,6 +508,7 @@ export async function startServer(opts: ServeOptions): Promise<void> {
         }
 
         const messages = hub.read({ workerId, limit: 100 }).messages;
+        const actionHistory = hub.listOperatorActions({ workerId, limit: 50 });
         const html = layout({
           title: `Worker ${workerId}`,
           channels: currentChannels,
@@ -390,10 +519,56 @@ export async function startServer(opts: ServeOptions): Promise<void> {
               health: detectHealth(worker.lastEventAt),
             },
             messages,
-            sync
+            sync,
+            actionHistory,
           ),
         });
         return sendHtml(res, html);
+      }
+
+      // ── Worker events API ──
+      const apiEventsMatch = pathname.match(/^\/api\/workers\/(.+)\/events$/);
+      if (apiEventsMatch) {
+        const workerId = decodeURIComponent(apiEventsMatch[1]);
+        const worker = hub.workerGet(workerId);
+        
+        if (!worker || !worker.eventsPath) {
+          return sendJson(res, { error: 'Worker not found or no events path' }, 404);
+        }
+        
+        // Resolve telemetry reader from worker telemetry source path.
+        const reader = getTelemetryReader(worker.eventsPath);
+        if (!reader) {
+          return sendJson(res, { 
+            error: `Unsupported telemetry source: ${worker.eventsPath}` 
+          }, 400);
+        }
+        
+        // Parse query params
+        const rawLimit = parseInt(query.get('limit') || '500', 10);
+        const limit = Math.min(Math.max(1, rawLimit), 500);
+        const cursor = query.get('cursor') || null;
+        const view = query.get('view') === 'conversation' ? 'conversation' : 'raw';
+        
+        // Read events with pagination
+        const result = reader.readEvents(worker.eventsPath, cursor, limit);
+        
+        // If conversation view, transform events
+        let response: Record<string, unknown> = {
+          workerId,
+          view,
+          ...result,
+        };
+        
+        if (view === 'conversation' && !result.error) {
+          const conversationItems = reader.toConversation(result.events);
+          response = {
+            ...response,
+            conversationItems,
+          };
+        }
+        
+        return sendJson(res, response);
       }
 
       // ── Thread view ──
@@ -443,7 +618,7 @@ export async function startServer(opts: ServeOptions): Promise<void> {
         layout({
           title: 'Not Found',
           channels: currentChannels,
-          activePage: 'timeline',
+          activePage: 'overview',
           body: notFoundPage(),
         }),
         404

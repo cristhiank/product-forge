@@ -187,6 +187,13 @@ export interface Worker {
   toolCalls: number;
   turns: number;
   errors: number;
+  activeModel?: string | null;
+  activeProvider?: string | null;
+  modelSwitches?: number;
+  estimatedCostUsd?: number;
+  usage?: TokenUsageTotals;
+  modelUsage?: Record<string, ModelUsageSummary>;
+  providerUsage?: Record<string, ProviderUsageSummary>;
   registeredAt: string;
   completedAt: string | null;
   metadata: Record<string, unknown>;
@@ -236,6 +243,54 @@ export interface ToolDurationStat {
   slowCount: number;
 }
 
+export interface TokenUsageTotals {
+  inputTokens: number;
+  outputTokens: number;
+  cachedInputTokens: number;
+  cachedOutputTokens: number;
+  compactionInputTokens: number;
+  compactionOutputTokens: number;
+  compactionCachedInputTokens: number;
+  compactionReclaimedTokens: number;
+  totalTokens: number;
+}
+
+export interface ModelUsageSummary {
+  model: string;
+  provider: string;
+  inputTokens: number;
+  outputTokens: number;
+  cachedInputTokens: number;
+  cachedOutputTokens: number;
+  totalTokens: number;
+  costUsd: number;
+  requests: number;
+  lastUsedAt: string | null;
+}
+
+export interface ProviderUsageSummary {
+  provider: string;
+  inputTokens: number;
+  outputTokens: number;
+  cachedInputTokens: number;
+  cachedOutputTokens: number;
+  totalTokens: number;
+  costUsd: number;
+  requests: number;
+  lastUsedAt: string | null;
+}
+
+export interface OperatorAction {
+  id: string;
+  workerId: string;
+  actionType: 'retry_sync' | 'stop_worker';
+  status: 'succeeded' | 'failed';
+  requestedAt: string;
+  completedAt: string;
+  error: string | null;
+  metadata: Record<string, unknown>;
+}
+
 /**
  * Result of syncing worker events
  */
@@ -252,9 +307,87 @@ export interface WorkerSyncResult {
   error: string | null;
   slowTools: SlowToolExecution[];
   toolDurationStats: ToolDurationStat[];
+  toolFailureCounts?: Record<string, number>;
+  activeModel?: string | null;
+  activeProvider?: string | null;
+  modelSwitches?: number;
+  estimatedCostUsd?: number;
+  usage?: TokenUsageTotals;
+  modelUsage?: Record<string, ModelUsageSummary>;
+  providerUsage?: Record<string, ProviderUsageSummary>;
   significantEvents: Array<{
     type: string;
     timestamp: string;
     summary: string;
   }>;
+}
+
+export interface OpsSummary {
+  generatedAt: string;
+  workers: {
+    total: number;
+    active: number;
+    healthy: number;
+    stale: number;
+    lost: number;
+    failed: number;
+    completed: number;
+  };
+  throughput: {
+    turns: number;
+    toolCalls: number;
+    errors: number;
+    toolErrorRate: number;
+  };
+  usage: TokenUsageTotals & {
+    estimatedCostUsd: number;
+    burnRateUsdPerHour: number;
+  };
+  incidents: {
+    workerIncidents: number;
+    unresolvedRequests: number;
+  };
+  modelDistribution: ModelUsageSummary[];
+  providerDistribution: ProviderUsageSummary[];
+}
+
+export interface OpsToolSummary {
+  toolName: string;
+  calls: number;
+  avgMs: number;
+  maxMs: number;
+  slowCount: number;
+  errorCount: number;
+  errorRate: number;
+}
+
+export interface OpsUsage {
+  generatedAt: string;
+  totals: TokenUsageTotals & {
+    estimatedCostUsd: number;
+    burnRateUsdPerHour: number;
+  };
+  byModel: ModelUsageSummary[];
+  byProvider: ProviderUsageSummary[];
+  topWorkers: Array<{
+    workerId: string;
+    channel: string;
+    activeModel: string | null;
+    activeProvider: string | null;
+    totalTokens: number;
+    estimatedCostUsd: number;
+  }>;
+}
+
+export interface OpsActions {
+  generatedAt: string;
+  total: number;
+  successRate: number;
+  byType: Array<{
+    actionType: OperatorAction['actionType'];
+    total: number;
+    succeeded: number;
+    failed: number;
+  }>;
+  actions: OperatorAction[];
 }

@@ -87,6 +87,7 @@ export function processEvents(
   exitCode: number | null;
   slowTools: SlowToolExecution[];
   toolDurationStats: ToolDurationStat[];
+  toolFailureCounts: Record<string, number>;
   pendingStarts: Record<string, PendingToolStart>;
   significantEvents: Array<{ type: string; timestamp: string; summary: string }>;
 } {
@@ -109,6 +110,7 @@ export function processEvents(
   }
   const durationTotals = new Map<string, { count: number; totalMs: number; maxMs: number; slowCount: number }>();
   const slowTools: SlowToolExecution[] = [];
+  const toolFailureCounts = new Map<string, number>();
   const significantEvents: Array<{ type: string; timestamp: string; summary: string }> = [];
   const summarizeMessage = (value: unknown): string => {
     const content = asNonEmptyString(value);
@@ -194,6 +196,7 @@ export function processEvents(
           }
         if (event.data.success === false) {
           errors++;
+          toolFailureCounts.set(toolName, (toolFailureCounts.get(toolName) ?? 0) + 1);
           significantEvents.push({
             type: 'tool_error',
             timestamp: event.timestamp,
@@ -349,6 +352,7 @@ export function processEvents(
     }))
     .sort((a, b) => b.totalMs - a.totalMs || a.toolName.localeCompare(b.toolName));
   const nextPendingStarts = Object.fromEntries(pendingStarts.entries());
+  const nextToolFailureCounts = Object.fromEntries(toolFailureCounts.entries());
 
   return {
     toolCalls,
@@ -360,6 +364,7 @@ export function processEvents(
     exitCode,
     slowTools,
     toolDurationStats,
+    toolFailureCounts: nextToolFailureCounts,
     pendingStarts: nextPendingStarts,
     significantEvents,
   };

@@ -41,6 +41,14 @@ export type {
   WorkerEvent,
   RegisterWorkerOptions,
   WorkerSyncResult,
+  TokenUsageTotals,
+  ModelUsageSummary,
+  ProviderUsageSummary,
+  OperatorAction,
+  OpsSummary,
+  OpsToolSummary,
+  OpsUsage,
+  OpsActions,
 } from './core/types.js';
 
 // Database utilities
@@ -63,6 +71,13 @@ export {
 } from './core/channels.js';
 
 export { searchMessages } from './core/search.js';
+
+// Operator actions module
+export {
+  recordOperatorAction,
+  listOperatorActions,
+  summarizeOperatorActions,
+} from './core/actions.js';
 
 // Watch module
 export { watchMessages } from './core/watch.js';

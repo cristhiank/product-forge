@@ -81,6 +81,20 @@ export function initSchema(db: Database.Database): void {
     )
   `);
 
+  // Operator actions table - audit retries/stops and their outcomes
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS operator_actions (
+      id TEXT PRIMARY KEY,
+      worker_id TEXT NOT NULL,
+      action_type TEXT NOT NULL CHECK(action_type IN ('retry_sync','stop_worker')),
+      status TEXT NOT NULL CHECK(status IN ('succeeded','failed')),
+      requested_at TEXT NOT NULL,
+      completed_at TEXT NOT NULL,
+      error TEXT,
+      metadata TEXT DEFAULT '{}'
+    )
+  `);
+
   // Create indexes for efficient querying
   db.exec(`CREATE INDEX IF NOT EXISTS idx_messages_channel ON messages(channel)`);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_messages_type ON messages(type)`);
@@ -92,6 +106,8 @@ export function initSchema(db: Database.Database): void {
   // Worker indexes
   db.exec(`CREATE INDEX IF NOT EXISTS idx_workers_status ON workers(status)`);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_workers_session ON workers(session_id)`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_operator_actions_worker ON operator_actions(worker_id, completed_at DESC)`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_operator_actions_type_status ON operator_actions(action_type, status)`);
 
   // FTS5 virtual table for full-text search
   db.exec(`

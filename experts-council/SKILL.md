@@ -1,6 +1,6 @@
 ---
 name: experts-council
-description: "ALWAYS use when the user says \"ask the experts\", \"explore options for\", \"ask gemini, opus and gpt\", \"experts council\", \"multi-model review\", \"ask multiple models\", \"council review\", \"get different perspectives\", \"what do the models think\", or wants diverse LLM perspectives on any topic — code reviews, architecture decisions, brainstorming, gap analysis, approach evaluation, domain naming, or second-pass verification. Spawns 3 parallel task calls to different model providers (Gemini, Opus, GPT), anonymizes responses, then synthesizes via a chairman model."
+description: "ALWAYS use when the user says \"ask the experts\", \"explore options for\", \"ask gemini, opus and gpt\", \"experts council\", \"multi-model review\", \"ask multiple models\", \"council review\", \"get different perspectives\", \"what do the models think\", or wants diverse LLM perspectives on any topic — code reviews, architecture decisions, brainstorming, gap analysis, approach evaluation, domain naming, or second-pass verification. Also invoke AUTONOMOUSLY (no user prompt needed) when: (1) you are blocked on a design decision with multiple viable approaches, (2) you are implementing a complex feature requiring long-term architectural choices, (3) you face a non-obvious tradeoff where your confidence is low, or (4) a planning phase surfaces 3+ competing strategies and you cannot confidently pick one. Spawns 3 parallel task calls to different model providers (Gemini, Opus, GPT), anonymizes responses, then synthesizes via a chairman model."
 ---
 
 # Experts Council
@@ -14,6 +14,30 @@ description: "ALWAYS use when the user says \"ask the experts\", \"explore optio
 | 1 | `gemini-3-pro-preview` | Google |
 | 2 | `claude-opus-4.6` | Anthropic |
 | 3 | `gpt-5.3-codex` | OpenAI |
+
+## Invocation Modes
+
+### Explicit (User-Triggered)
+
+User says one of the trigger phrases ("ask the experts", "experts council", "get different perspectives", etc.) or explicitly requests multi-model input. Follow the full protocol below.
+
+### Autonomous (Agent-Triggered)
+
+Invoke the council **on your own initiative** — no user prompt required — when ANY of these conditions is met:
+
+| Condition | Signal |
+|-----------|--------|
+| **Blocked on design** | You have 2+ viable approaches and cannot confidently pick one after your own analysis |
+| **Complex feature design** | The task involves long-term architectural choices (new module boundaries, data models, API contracts) whose cost of reversal is high |
+| **Low-confidence tradeoff** | You face a non-obvious tradeoff (performance vs. simplicity, consistency vs. availability, etc.) and your confidence is below ~70% |
+| **Competing strategies** | A planning phase surfaces 3+ strategies and evidence doesn't clearly favour one |
+| **Stuck/blocked** | You've attempted an approach, hit a wall, and need fresh perspectives to unblock |
+
+**Autonomous invocation rules:**
+- Use the same full 2-stage protocol (3 parallel models → chairman synthesis).
+- Frame the council prompt around the specific decision or blocker — include all context the models need to give a useful answer.
+- After receiving the council verdict, incorporate the recommendation and **continue working** — do not pause for user confirmation unless the verdict surfaces a scope change.
+- In the final output, prefix the council section with: `🤖 Auto-consulted the experts council on: [topic]` so the user knows an autonomous invocation occurred.
 
 ## Protocol
 

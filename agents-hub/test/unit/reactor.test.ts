@@ -213,6 +213,7 @@ malformed line without braces
       const result = processEvents(events);
       expect(result.toolCalls).toBe(2);
       expect(result.errors).toBe(1);
+      expect(result.toolFailureCounts).toEqual({ bash: 1 });
     });
 
     it('should NOT set terminal status from session.error (transient errors)', () => {

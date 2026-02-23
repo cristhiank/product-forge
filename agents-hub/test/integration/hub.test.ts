@@ -6,7 +6,9 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { Hub } from '../../src/hub.js';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { mkdtempSync, rmSync, existsSync } from 'fs';
+import { mkdtempSync, rmSync, existsSync, writeFileSync, statSync } from 'fs';
+import { openDatabase } from '../../src/db/connection.js';
+import { updateWorker } from '../../src/core/workers.js';
 
 describe('Hub integration', () => {
   let tempDir: string;
@@ -305,6 +307,172 @@ describe('Hub integration', () => {
 
       const channels = hub.channelList(false);
       expect(channels.some((c) => c.name === '#test-channel')).toBe(true);
+    });
+  });
+
+  describe('ops telemetry and actions', () => {
+    let hub: Hub;
+
+    beforeEach(() => {
+      hub = Hub.init(dbPath, 'multi');
+      hub.workerRegister({
+        id: 'ops-worker-1',
+        channel: '#worker-ops-worker-1',
+        metadata: {
+          opsTelemetry: {
+            activeModel: 'claude-sonnet-4.5',
+            activeProvider: 'anthropic',
+            modelSwitches: 2,
+            estimatedCostUsd: 4.2,
+            usageTotals: {
+              inputTokens: 2000,
+              outputTokens: 1000,
+              cachedInputTokens: 300,
+              cachedOutputTokens: 0,
+              compactionInputTokens: 50,
+              compactionOutputTokens: 20,
+              compactionCachedInputTokens: 10,
+              compactionReclaimedTokens: 500,
+              totalTokens: 3300,
+            },
+            models: {
+              'claude-sonnet-4.5': {
+                model: 'claude-sonnet-4.5',
+                provider: 'anthropic',
+                inputTokens: 2000,
+                outputTokens: 1000,
+                cachedInputTokens: 300,
+                cachedOutputTokens: 0,
+                totalTokens: 3300,
+                costUsd: 4.2,
+                requests: 7,
+                lastUsedAt: '2026-02-23T00:00:00.000Z',
+              },
+            },
+            providers: {
+              anthropic: {
+                provider: 'anthropic',
+                inputTokens: 2000,
+                outputTokens: 1000,
+                cachedInputTokens: 300,
+                cachedOutputTokens: 0,
+                totalTokens: 3300,
+                costUsd: 4.2,
+                requests: 7,
+                lastUsedAt: '2026-02-23T00:00:00.000Z',
+              },
+            },
+          },
+          toolTiming: {
+            pendingStarts: {},
+            toolStats: {
+              bash: { count: 10, totalMs: 12000, maxMs: 4000, slowCount: 1 },
+            },
+            slowTools: [],
+            toolFailures: {
+              bash: 2,
+            },
+          },
+        },
+      });
+      hub.recordOperatorAction({
+        workerId: 'ops-worker-1',
+        actionType: 'retry_sync',
+        status: 'succeeded',
+      });
+    });
+
+    afterEach(() => {
+      hub.close();
+    });
+
+    it('aggregates ops summary, tools, usage and actions', () => {
+      const summary = hub.opsSummary();
+      const tools = hub.opsTools();
+      const usage = hub.opsUsage();
+      const actions = hub.opsActions();
+      const workerUsage = hub.workerUsage('ops-worker-1');
+
+      expect(summary.workers.total).toBe(1);
+      expect(summary.usage.totalTokens).toBe(3300);
+      expect(summary.usage.estimatedCostUsd).toBeCloseTo(4.2, 4);
+
+      expect(tools.length).toBe(1);
+      expect(tools[0].toolName).toBe('bash');
+      expect(tools[0].calls).toBe(10);
+      expect(tools[0].errorCount).toBe(2);
+
+      expect(usage.totals.totalTokens).toBe(3300);
+      expect(usage.byModel[0].model).toBe('claude-sonnet-4.5');
+      expect(usage.byProvider[0].provider).toBe('anthropic');
+
+      expect(actions.total).toBe(1);
+      expect(actions.byType[0].actionType).toBe('retry_sync');
+      expect(workerUsage).not.toBeNull();
+      expect(workerUsage!.usage.totalTokens).toBe(3300);
+    });
+
+    it('backfills telemetry from historical events when ops metadata is missing', () => {
+      const eventsPath = join(tempDir, 'ops-backfill.events.jsonl');
+      const events = [
+        {
+          type: 'session.model_change',
+          timestamp: '2026-02-23T00:00:00.000Z',
+          data: {
+            previousModel: 'claude-3',
+            newModel: 'claude-sonnet-4.5',
+            selectedModel: 'claude-sonnet-4.5',
+          },
+        },
+        {
+          type: 'session.compaction_complete',
+          timestamp: '2026-02-23T00:01:00.000Z',
+          data: {
+            preCompactionTokens: 5000,
+            compactionTokensUsed: {
+              input: 1200,
+              output: 100,
+              cachedInput: 50,
+            },
+          },
+        },
+      ];
+      writeFileSync(eventsPath, `${events.map(event => JSON.stringify(event)).join('\n')}\n`);
+
+      hub.workerRegister({
+        id: 'ops-worker-backfill',
+        channel: '#worker-ops-worker-backfill',
+      });
+
+      const db = openDatabase(dbPath);
+      try {
+        updateWorker(db, 'ops-worker-backfill', {
+          eventsPath,
+          eventsOffset: statSync(eventsPath).size,
+          lastEventAt: '2026-02-23T00:01:00.000Z',
+          lastEventType: 'session.compaction_complete',
+        });
+      } finally {
+        db.close();
+      }
+
+      const sync = hub.workerSync('ops-worker-backfill');
+      const worker = hub.workerGet('ops-worker-backfill');
+      const metadata = (worker?.metadata ?? {}) as Record<string, unknown>;
+
+      expect(sync.ok).toBe(true);
+      expect(sync.newEvents).toBe(0);
+      expect(sync.activeModel).toBe('claude-sonnet-4.5');
+      expect(sync.usage?.inputTokens).toBe(1200);
+      expect(sync.usage?.outputTokens).toBe(100);
+      expect(sync.usage?.cachedInputTokens).toBe(50);
+      expect(sync.usage?.totalTokens).toBe(1350);
+      expect(sync.usage?.compactionInputTokens).toBe(1200);
+      expect(sync.usage?.compactionOutputTokens).toBe(100);
+      expect(sync.usage?.compactionCachedInputTokens).toBe(50);
+      expect(worker?.activeModel).toBe('claude-sonnet-4.5');
+      expect(worker?.usage?.totalTokens).toBe(1350);
+      expect(metadata.opsTelemetry).toBeDefined();
     });
   });
 });

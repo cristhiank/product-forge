@@ -737,6 +737,7 @@ a:hover { text-decoration: underline; }
 
 .wstatus-active { background: rgba(63, 185, 80, 0.15); color: var(--color-success); border-color: #238636; }
 .wstatus-completed { background: rgba(88, 166, 255, 0.15); color: var(--color-accent); border-color: #1f6feb; }
+.wstatus-succeeded { background: rgba(63, 185, 80, 0.15); color: var(--color-success); border-color: #238636; }
 .wstatus-failed { background: rgba(248, 81, 73, 0.15); color: var(--color-danger); border-color: #da3633; }
 .wstatus-lost { background: rgba(110, 118, 129, 0.15); color: var(--color-text-muted); border-color: #484f58; }
 
