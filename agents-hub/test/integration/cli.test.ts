@@ -285,4 +285,27 @@ describe('CLI integration', () => {
       expect(result.updatedAt).toBeDefined();
     });
   });
+
+  describe('worker sync command', () => {
+    beforeEach(() => {
+      runCli('init --mode single');
+    });
+
+    it('should surface no_worker sync status with a clear message', () => {
+      const result = runCli('worker sync --id "missing-worker"');
+
+      expect(result.ok).toBe(false);
+      expect(result.syncStatus).toBe('no_worker');
+      expect(result.message).toContain('Worker not found');
+    });
+
+    it('should surface no_events_path sync status with a clear message', () => {
+      runCli('worker register --id "no-events-worker"');
+      const result = runCli('worker sync --id "no-events-worker"');
+
+      expect(result.ok).toBe(false);
+      expect(result.syncStatus).toBe('no_events_path');
+      expect(result.message).toContain('No events path');
+    });
+  });
 });

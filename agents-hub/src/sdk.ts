@@ -347,7 +347,10 @@ export class HubSDK {
 
   /** Get detailed worker status including sync */
   getWorkerStatus(id: string, sync = true): (Worker & { health?: string }) | null {
-    if (sync) this.hub.workerSync(id);
+    if (sync) {
+      const syncResult = this.hub.workerSync(id);
+      if (syncResult.syncStatus === 'no_worker') return null;
+    }
     const worker = this.hub.workerGet(id);
     if (!worker) return null;
     return { ...worker, health: detectHealth(worker.lastEventAt) };

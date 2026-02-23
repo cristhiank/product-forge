@@ -39,12 +39,13 @@ describe('workerSync lazy re-discovery', () => {
     rmSync(tempDir, { recursive: true, force: true });
   });
 
-  it('should return null when worker not found', () => {
+  it('should return no_worker when worker not found', () => {
     const result = hub.workerSync('nonexistent');
-    expect(result).toBeNull();
+    expect(result.ok).toBe(false);
+    expect(result.syncStatus).toBe('no_worker');
   });
 
-  it('should return null when eventsPath missing and re-discovery fails', () => {
+  it('should return no_events_path when eventsPath missing and re-discovery fails', () => {
     // discoverSession returns null during sync retry
     mockDiscoverSession.mockReturnValue(null);
 
@@ -53,7 +54,8 @@ describe('workerSync lazy re-discovery', () => {
     expect(worker!.eventsPath).toBeNull();
 
     const result = hub.workerSync('early-worker');
-    expect(result).toBeNull();
+    expect(result.ok).toBe(false);
+    expect(result.syncStatus).toBe('no_events_path');
     // discoverSession called once during sync retry (registerWorker uses internal reference)
     expect(mockDiscoverSession).toHaveBeenCalledTimes(1);
     expect(mockDiscoverSession).toHaveBeenCalledWith('early-worker');
@@ -76,9 +78,10 @@ describe('workerSync lazy re-discovery', () => {
 
     // Sync should retry discovery, find session, and process events
     const result = hub.workerSync('late-worker');
-    expect(result).not.toBeNull();
-    expect(result!.workerId).toBe('late-worker');
-    expect(result!.newEvents).toBe(1);
+    expect(result.ok).toBe(true);
+    expect(result.syncStatus).toBe('ok');
+    expect(result.workerId).toBe('late-worker');
+    expect(result.newEvents).toBe(1);
 
     // Worker record should be updated with discovered session info
     const updated = hub.workerGet('late-worker');
@@ -99,8 +102,8 @@ describe('workerSync lazy re-discovery', () => {
 
     // First sync: triggers re-discovery
     const result1 = hub.workerSync('worker-resync');
-    expect(result1).not.toBeNull();
-    expect(result1!.newEvents).toBe(1);
+    expect(result1.ok).toBe(true);
+    expect(result1.newEvents).toBe(1);
 
     // Append more events
     const event2 = { type: 'tool.execution_complete', timestamp: '2026-01-15T12:01:00Z', tool_name: 'bash' };
@@ -108,8 +111,8 @@ describe('workerSync lazy re-discovery', () => {
 
     // Second sync: eventsPath is now set, no re-discovery needed
     const result2 = hub.workerSync('worker-resync');
-    expect(result2).not.toBeNull();
-    expect(result2!.newEvents).toBe(1); // only the new event
+    expect(result2.ok).toBe(true);
+    expect(result2.newEvents).toBe(1); // only the new event
     // discoverSession called only once (first sync), not on second sync
     expect(mockDiscoverSession).toHaveBeenCalledTimes(1);
   });
