@@ -845,6 +845,119 @@ a:hover { text-decoration: underline; }
   padding: 8px 0;
 }
 
+/* Incidents page */
+.incidents-grid {
+  display: grid;
+  gap: 16px;
+}
+
+.incidents-section {
+  background: var(--color-bg-subtle);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 16px;
+}
+
+.incidents-section h2 {
+  margin: 0 0 12px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.incidents-table td {
+  vertical-align: middle;
+  max-width: 420px;
+  white-space: normal;
+}
+
+.incident-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.incident-action-form {
+  margin: 0;
+}
+
+.incident-action-link,
+.incident-action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 5px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--color-border);
+  background: var(--color-bg-elevated);
+  color: var(--color-link);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.incident-action-btn:hover,
+.incident-action-link:hover {
+  background: var(--color-bg-inset);
+  text-decoration: none;
+}
+
+.incident-action-btn-danger {
+  color: var(--color-danger);
+  border-color: #da3633;
+}
+
+.incident-action-btn:disabled {
+  cursor: not-allowed;
+  color: var(--color-text-muted);
+  border-color: var(--color-border-subtle);
+  background: var(--color-bg-subtle);
+}
+
+.incident-cluster-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.incident-cluster-item {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  background: var(--color-bg-elevated);
+}
+
+.incident-cluster-main {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+}
+
+.incident-cluster-count {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  color: var(--color-danger);
+}
+
+.incident-cluster-label {
+  color: var(--color-text-secondary);
+  font-size: 13px;
+}
+
+.incident-cluster-meta {
+  margin-top: 6px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
 /* Scrollbar styling for dark theme */
 .timeline::-webkit-scrollbar,
 .sidebar::-webkit-scrollbar {
@@ -1127,6 +1240,7 @@ function layout(opts) {
           <li><a href="/status" class="${opts.activePage === 'status' ? 'active' : ''}">📊 Status</a></li>
           <li><a href="/search" class="${opts.activePage === 'search' ? 'active' : ''}">🔍 Search</a></li>
           <li><a href="/workers" class="${opts.activePage === 'workers' ? 'active' : ''}">🤖 Workers</a></li>
+          <li><a href="/incidents" class="${opts.activePage === 'incidents' ? 'active' : ''}">🚨 Incidents</a></li>
         </ul>
       </div>
 
@@ -1468,6 +1582,79 @@ function threadView(parent, replies) {
       </div>` : `<div class="empty-state"><div class="empty-state-icon">💬</div><div class="empty-state-text">No replies yet</div></div>`}
     </div>`;
 }
+function incidentTimestamp(iso) {
+    if (!iso)
+        return 0;
+    const ts = new Date(iso).getTime();
+    return Number.isNaN(ts) ? 0 : ts;
+}
+function clusterSignature(content) {
+    const normalized = content
+        .toLowerCase()
+        .replace(/[0-9a-f]{8,}/g, '#')
+        .replace(/\d+/g, '#')
+        .replace(/\s+/g, ' ')
+        .trim();
+    return normalized.slice(0, 90);
+}
+function firstNonEmptyLine(content) {
+    const line = content.split('\n').map(s => s.trim()).find(Boolean) || '';
+    return line.length > 140 ? `${line.slice(0, 137)}...` : line;
+}
+function buildIncidentClusters(workers, unresolvedRequests) {
+    const clusters = new Map();
+    for (const worker of workers) {
+        const eventType = worker.lastEventType || 'unknown';
+        const key = `worker:${worker.status}:${worker.health}:${eventType}`;
+        const incidentAt = worker.lastEventAt ?? worker.completedAt ?? worker.registeredAt;
+        const label = `Worker ${worker.status}/${worker.health} · ${eventType}`;
+        const existing = clusters.get(key);
+        if (existing) {
+            existing.count += 1;
+            if (incidentTimestamp(incidentAt) > incidentTimestamp(existing.lastSeen))
+                existing.lastSeen = incidentAt;
+            if (!existing.workerIds.includes(worker.id))
+                existing.workerIds.push(worker.id);
+        }
+        else {
+            clusters.set(key, {
+                key,
+                label,
+                count: 1,
+                lastSeen: incidentAt,
+                workerIds: [worker.id],
+                requestIds: [],
+            });
+        }
+    }
+    for (const req of unresolvedRequests) {
+        const severity = typeof req.metadata.severity === 'string' ? req.metadata.severity : 'unknown';
+        const signature = clusterSignature(req.content);
+        const key = `request:${severity}:${signature}`;
+        const preview = firstNonEmptyLine(req.content);
+        const label = `Request ${severity} · ${preview || 'unspecified'}`;
+        const existing = clusters.get(key);
+        if (existing) {
+            existing.count += 1;
+            if (incidentTimestamp(req.createdAt) > incidentTimestamp(existing.lastSeen))
+                existing.lastSeen = req.createdAt;
+            if (!existing.requestIds.includes(req.id))
+                existing.requestIds.push(req.id);
+        }
+        else {
+            clusters.set(key, {
+                key,
+                label,
+                count: 1,
+                lastSeen: req.createdAt,
+                workerIds: [],
+                requestIds: [req.id],
+            });
+        }
+    }
+    return Array.from(clusters.values())
+        .sort((a, b) => incidentTimestamp(b.lastSeen) - incidentTimestamp(a.lastSeen) || b.count - a.count || a.label.localeCompare(b.label));
+}
 function agentTypeEmoji(agentType) {
     if (!agentType)
         return '🤖';
@@ -1597,6 +1784,139 @@ function workersPage(workers) {
     </div>
     ${summaryBar}
     ${table}`;
+}
+function incidentsPage(workers, unresolvedRequests) {
+    const incidentWorkers = workers
+        .filter(w => w.health !== 'healthy' || w.status === 'failed' || w.status === 'lost' || w.errors > 0)
+        .sort((a, b) => {
+        const aTs = incidentTimestamp(a.lastEventAt ?? a.completedAt ?? a.registeredAt);
+        const bTs = incidentTimestamp(b.lastEventAt ?? b.completedAt ?? b.registeredAt);
+        return bTs - aTs || b.errors - a.errors || a.id.localeCompare(b.id);
+    });
+    const unresolvedSorted = [...unresolvedRequests]
+        .sort((a, b) => incidentTimestamp(b.createdAt) - incidentTimestamp(a.createdAt));
+    const clusters = buildIncidentClusters(incidentWorkers, unresolvedSorted);
+    const workerRows = incidentWorkers.length
+        ? incidentWorkers.map((w) => {
+            const encodedId = encodeURIComponent(w.id);
+            const severity = w.status === 'failed' || w.health === 'lost' || w.errors > 0 ? 'major' : 'minor';
+            const stopDisabled = !(w.pid && w.status === 'active');
+            const stopTitle = stopDisabled ? 'Stop action only available for active workers with a PID' : 'Stop worker process';
+            return `<tr>
+        <td><a href="/worker/${encodedId}"><code>${esc(w.id)}</code></a></td>
+        <td>${statusBadge(w.status)} ${healthBadge(w.health)}</td>
+        <td><span class="metadata-badge badge-severity-${esc(severity)}">${esc(severity)}</span></td>
+        <td class="worker-counter ${w.errors > 0 ? 'worker-counter-error' : ''}">${w.errors}</td>
+        <td class="worker-time">${w.lastEventAt ? formatTimestamp(w.lastEventAt) : 'never'}</td>
+        <td class="incident-actions">
+          <a class="incident-action-link" href="/worker/${encodedId}">View detail</a>
+          <form class="incident-action-form" action="/workers/${encodedId}/sync?redirect=%2Fincidents" method="post">
+            <button type="submit" class="incident-action-btn">Retry sync</button>
+          </form>
+          <form class="incident-action-form" action="/workers/${encodedId}/stop?redirect=%2Fincidents" method="post">
+            <button type="submit" class="incident-action-btn incident-action-btn-danger" ${stopDisabled ? `disabled title="${esc(stopTitle)}"` : `title="${esc(stopTitle)}"`}>Stop worker</button>
+          </form>
+        </td>
+      </tr>`;
+        }).join('\n')
+        : `<tr><td colspan="6" class="worker-empty">No stale/lost/failed worker incidents right now.</td></tr>`;
+    const requestRows = unresolvedSorted.length
+        ? unresolvedSorted.map((req) => {
+            const severity = typeof req.metadata.severity === 'string' ? req.metadata.severity : 'info';
+            const preview = firstNonEmptyLine(req.content);
+            return `<tr>
+        <td class="worker-time">${formatTimestamp(req.createdAt)}</td>
+        <td><code>${esc(req.channel)}</code></td>
+        <td><span class="metadata-badge badge-severity-${esc(severity)}">${esc(severity)}</span></td>
+        <td>${esc(preview || req.content)}</td>
+        <td><a class="incident-action-link" href="/thread/${esc(req.id)}">View detail</a></td>
+      </tr>`;
+        }).join('\n')
+        : `<tr><td colspan="5" class="worker-empty">No unresolved requests.</td></tr>`;
+    const clusterItems = clusters.length
+        ? `<ul class="incident-cluster-list">
+        ${clusters.map((cluster) => `
+          <li class="incident-cluster-item">
+            <div class="incident-cluster-main">
+              <span class="incident-cluster-count">${cluster.count}</span>
+              <span class="incident-cluster-label">${esc(cluster.label)}</span>
+            </div>
+            <div class="incident-cluster-meta">
+              <span>Last seen: ${formatTimestamp(cluster.lastSeen)}</span>
+              ${cluster.workerIds.length > 0 ? `<span>Workers: ${cluster.workerIds.slice(0, 3).map(id => `<a href="/worker/${encodeURIComponent(id)}"><code>${esc(id)}</code></a>`).join(', ')}${cluster.workerIds.length > 3 ? ` +${cluster.workerIds.length - 3}` : ''}</span>` : ''}
+              ${cluster.requestIds.length > 0 ? `<span>Requests: ${cluster.requestIds.slice(0, 2).map(id => `<a href="/thread/${esc(id)}"><code>${esc(id)}</code></a>`).join(', ')}${cluster.requestIds.length > 2 ? ` +${cluster.requestIds.length - 2}` : ''}</span>` : ''}
+            </div>
+          </li>
+        `).join('\n')}
+      </ul>`
+        : `<div class="worker-detail-empty">No error clusters detected.</div>`;
+    return `
+    <div class="page-header">
+      <div>
+        <div class="page-title">Incidents</div>
+        <div class="page-subtitle">Operational triage for worker failures, unresolved requests, and clustered errors</div>
+      </div>
+    </div>
+
+    <div class="workers-summary">
+      <div class="workers-summary-item summary-failed">
+        <span class="workers-summary-count">${incidentWorkers.length}</span>
+        <span class="workers-summary-label">Worker Incidents</span>
+      </div>
+      <div class="workers-summary-item summary-stale">
+        <span class="workers-summary-count">${unresolvedSorted.length}</span>
+        <span class="workers-summary-label">Unresolved Requests</span>
+      </div>
+      <div class="workers-summary-item">
+        <span class="workers-summary-count">${clusters.length}</span>
+        <span class="workers-summary-label">Error Clusters</span>
+      </div>
+    </div>
+
+    <div class="incidents-grid">
+      <section class="incidents-section">
+        <h2>Stale/Lost/Failed Workers</h2>
+        <div class="workers-table-wrap">
+          <table class="workers-table incidents-table">
+            <thead>
+              <tr>
+                <th>Worker</th>
+                <th>Status</th>
+                <th>Severity</th>
+                <th>Errors</th>
+                <th>Last Activity</th>
+                <th>Quick Actions</th>
+              </tr>
+            </thead>
+            <tbody>${workerRows}</tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="incidents-section">
+        <h2>Unresolved Requests</h2>
+        <div class="workers-table-wrap">
+          <table class="workers-table incidents-table">
+            <thead>
+              <tr>
+                <th>Newest</th>
+                <th>Channel</th>
+                <th>Severity</th>
+                <th>Summary</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody>${requestRows}</tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="incidents-section">
+        <h2>Error Clusters</h2>
+        ${clusterItems}
+      </section>
+    </div>
+  `;
 }
 function workerDetailPage(worker, relatedMessages, sync) {
     const emoji = agentTypeEmoji(worker.agentType);
@@ -1782,6 +2102,10 @@ function sendJson(res, data, status = 200) {
     res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' });
     res.end(JSON.stringify(data));
 }
+function sendRedirect(res, location, status = 303) {
+    res.writeHead(status, { Location: location });
+    res.end();
+}
 function sendCss(res) {
     res.writeHead(200, {
         'Content-Type': 'text/css; charset=utf-8',
@@ -1794,6 +2118,18 @@ function parseUrl(url) {
     const pathname = idx >= 0 ? url.slice(0, idx) : url;
     const query = new URLSearchParams(idx >= 0 ? url.slice(idx + 1) : '');
     return { pathname, query };
+}
+function workerIncidentTimestamp(worker) {
+    const iso = worker.lastEventAt ?? worker.completedAt ?? worker.registeredAt;
+    return new Date(iso).getTime();
+}
+function sortNewestFirst(items) {
+    return items.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+}
+function sanitizeRedirectPath(path) {
+    if (!path || !path.startsWith('/'))
+        return '/incidents';
+    return path;
 }
 // ── Background watcher ───────────────────────────────────────
 /**
@@ -1896,6 +2232,39 @@ async function startServer(opts) {
                 }));
                 return sendJson(res, { workers });
             }
+            if (pathname === '/api/incidents') {
+                const workers = hub.workerList()
+                    .map(w => ({ ...w, health: (0,reactor/* detectHealth */._2)(w.lastEventAt) }))
+                    .filter(w => w.health !== 'healthy' || w.status === 'failed' || w.status === 'lost' || w.errors > 0)
+                    .sort((a, b) => workerIncidentTimestamp(b) - workerIncidentTimestamp(a) || b.errors - a.errors || a.id.localeCompare(b.id));
+                const unresolvedRequests = sortNewestFirst(hub.read({ type: 'request', unresolved: true, limit: 200 }).messages);
+                return sendJson(res, { workers, unresolvedRequests });
+            }
+            if (req.method === 'POST') {
+                const redirectPath = sanitizeRedirectPath(query.get('redirect'));
+                const stopMatch = pathname.match(/^\/workers\/(.+)\/stop$/);
+                if (stopMatch) {
+                    const workerId = decodeURIComponent(stopMatch[1]);
+                    const worker = hub.workerGet(workerId);
+                    if (!worker)
+                        return sendJson(res, { error: `Worker not found: ${workerId}` }, 404);
+                    if (worker.pid === null || worker.status !== 'active') {
+                        return sendJson(res, { error: 'Stop action requires an active worker with a PID' }, 409);
+                    }
+                    process.kill(worker.pid, 'SIGTERM');
+                    hub.workerSync(workerId);
+                    return sendRedirect(res, redirectPath);
+                }
+                const syncMatch = pathname.match(/^\/workers\/(.+)\/sync$/);
+                if (syncMatch) {
+                    const workerId = decodeURIComponent(syncMatch[1]);
+                    const worker = hub.workerGet(workerId);
+                    if (!worker)
+                        return sendJson(res, { error: `Worker not found: ${workerId}` }, 404);
+                    hub.workerSync(workerId);
+                    return sendRedirect(res, redirectPath);
+                }
+            }
             // Refresh channel list for each request
             const currentChannels = hub.channelList(true);
             // ── Timeline (root) ──
@@ -1971,6 +2340,20 @@ async function startServer(opts) {
                     channels: currentChannels,
                     activePage: 'workers',
                     body: workersPage(workers),
+                });
+                return sendHtml(res, html);
+            }
+            // ── Incidents page ──
+            if (pathname === '/incidents') {
+                const workers = hub.workerList()
+                    .map(w => ({ ...w, health: (0,reactor/* detectHealth */._2)(w.lastEventAt) }))
+                    .sort((a, b) => workerIncidentTimestamp(b) - workerIncidentTimestamp(a) || b.errors - a.errors || a.id.localeCompare(b.id));
+                const unresolvedRequests = sortNewestFirst(hub.read({ type: 'request', unresolved: true, limit: 200 }).messages);
+                const html = layout({
+                    title: 'Incidents',
+                    channels: currentChannels,
+                    activePage: 'incidents',
+                    body: incidentsPage(workers, unresolvedRequests),
                 });
                 return sendHtml(res, html);
             }
