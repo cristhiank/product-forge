@@ -3,6 +3,7 @@
 
 # Build output
 dist/
+.test-dist/
 node_modules/
 
 # Temporary investigation files

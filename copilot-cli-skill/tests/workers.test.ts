@@ -156,3 +156,67 @@ test('sdk.spawnWorker forwards taskId into manager.spawn options', () => {
   sdk.spawnWorker('hello', { taskId: 'TASK-SDK' });
   assert.equal(capturedTaskId, 'TASK-SDK');
 });
+
+// ──────────────────────────────────────────────────
+// awaitCompletion tests
+// ──────────────────────────────────────────────────
+
+test('awaitCompletion returns immediately for already-completed worker', () => {
+  const root = makeRepoRoot('await-completed');
+  const stateDir = writeWorkerState(root, 'done-w', { status: 'running' });
+  writeFileSync(join(stateDir, 'exit.json'), JSON.stringify({ exitCode: 0, completedAt: new Date().toISOString() }));
+
+  const manager = new WorkerManager(root);
+  const result = manager.awaitCompletion('done-w');
+  assert.equal(result.status, 'completed');
+  rmSync(root, { recursive: true, force: true });
+});
+
+test('awaitCompletion returns immediately for spawn_failed worker', () => {
+  const root = makeRepoRoot('await-spawn-failed');
+  writeWorkerState(root, 'sf-w', { status: 'spawn_failed' });
+
+  const manager = new WorkerManager(root);
+  const result = manager.awaitCompletion('sf-w');
+  assert.equal(result.status, 'spawn_failed');
+  rmSync(root, { recursive: true, force: true });
+});
+
+test('awaitCompletion throws on timeout', () => {
+  const root = makeRepoRoot('await-timeout');
+  writeWorkerState(root, 'slow-w', { status: 'running' }, process.pid);
+
+  const manager = new WorkerManager(root);
+  assert.throws(
+    () => manager.awaitCompletion('slow-w', { pollIntervalMs: 50, timeoutMs: 100 }),
+    /Timed out waiting for worker slow-w/,
+  );
+  rmSync(root, { recursive: true, force: true });
+});
+
+test('awaitCompletion invokes onProgress callback', () => {
+  const root = makeRepoRoot('await-progress');
+  const stateDir = writeWorkerState(root, 'prog-w', { status: 'running' });
+  writeFileSync(join(stateDir, 'exit.json'), JSON.stringify({ exitCode: 1, completedAt: new Date().toISOString() }));
+
+  const calls: string[] = [];
+  const manager = new WorkerManager(root);
+  const result = manager.awaitCompletion('prog-w', {
+    onProgress: (s) => calls.push(s.status),
+  });
+  assert.equal(result.status, 'failed');
+  assert.ok(calls.includes('failed'), 'onProgress should be called with terminal status');
+  rmSync(root, { recursive: true, force: true });
+});
+
+test('sdk.awaitWorker delegates to manager.awaitCompletion', () => {
+  const root = makeRepoRoot('sdk-await');
+  const stateDir = writeWorkerState(root, 'sdk-aw', { status: 'running' });
+  writeFileSync(join(stateDir, 'exit.json'), JSON.stringify({ exitCode: 0, completedAt: new Date().toISOString() }));
+
+  const manager = new WorkerManager(root);
+  const sdk = new WorkerSDK(manager);
+  const result = sdk.awaitWorker('sdk-aw');
+  assert.equal(result.status, 'completed');
+  rmSync(root, { recursive: true, force: true });
+});

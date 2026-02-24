@@ -5,7 +5,7 @@
  */
 
 import { WorkerManager } from './workers.js';
-import type { SpawnOptions, WorkerInfo, WorkerStatus, CleanupResult } from './types.js';
+import type { SpawnOptions, WorkerInfo, WorkerStatus, CleanupResult, AwaitOptions } from './types.js';
 
 export interface WorkerSDKOptions {
   /** Default agent for spawned workers */
@@ -44,6 +44,8 @@ export interface WorkerSDKOptions {
   autopilot?: boolean;
   /** Default autopilot continuation limit */
   maxAutopilotContinues?: number;
+  /** Auto-commit changes on successful worker exit */
+  autoCommit?: boolean | string;
 }
 
 /**
@@ -89,12 +91,18 @@ export class WorkerSDK {
       stream: opts.stream ?? this.defaults.stream,
       contextProviders: opts.contextProviders,
       taskId: opts.taskId,
+      autoCommit: opts.autoCommit ?? this.defaults.autoCommit,
     });
   }
 
   /** Get detailed status of a worker */
   checkWorker(workerId: string): WorkerStatus {
     return this.manager.getStatus(workerId);
+  }
+
+  /** Block until worker reaches a terminal state, polling at configurable interval */
+  awaitWorker(workerId: string, opts?: AwaitOptions): WorkerStatus {
+    return this.manager.awaitCompletion(workerId, opts);
   }
 
   /** List all workers */

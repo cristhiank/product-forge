@@ -71,6 +71,7 @@ export function runCli(): void {
     .option('--autopilot', 'Enable autopilot mode')
     .option('--max-autopilot-continues <count>', 'Limit autopilot continuation messages')
     .option('--task-id <id>', 'Associate spawn request with a task ID for deduplication')
+    .option('--auto-commit [message]', 'Auto-commit changes on successful exit (optionally with custom message)')
     .option('--context-providers <json>', 'JSON array of context providers to apply to the worktree')
     .action((opts) => {
       try {
@@ -113,6 +114,7 @@ export function runCli(): void {
           autopilot: opts.autopilot,
           maxAutopilotContinues,
           taskId: opts.taskId,
+          autoCommit: opts.autoCommit === true ? true : opts.autoCommit || undefined,
           contextProviders,
         });
         output(result, program.opts().pretty);
@@ -139,6 +141,30 @@ export function runCli(): void {
           const status = manager.getStatus(workerId);
           output(status, program.opts().pretty);
         }
+      } catch (err) {
+        handleError(err);
+      }
+    });
+
+  // ============ await command ============
+  program
+    .command('await')
+    .description('Wait for a worker to reach a terminal state')
+    .argument('<worker-id>', 'Worker ID to wait for')
+    .option('--poll-interval <ms>', 'Polling interval in ms (default: 3000)')
+    .option('--timeout <ms>', 'Maximum wait time in ms (0 = no limit, default: 0)')
+    .action((workerId, opts) => {
+      try {
+        const repoRoot = resolve(program.opts().repoRoot);
+        const manager = new WorkerManager(repoRoot);
+        const pollIntervalMs = opts.pollInterval !== undefined
+          ? parseNonNegativeInt(opts.pollInterval, '--poll-interval')
+          : undefined;
+        const timeoutMs = opts.timeout !== undefined
+          ? parseNonNegativeInt(opts.timeout, '--timeout')
+          : undefined;
+        const result = manager.awaitCompletion(workerId, { pollIntervalMs, timeoutMs });
+        output(result, program.opts().pretty);
       } catch (err) {
         handleError(err);
       }

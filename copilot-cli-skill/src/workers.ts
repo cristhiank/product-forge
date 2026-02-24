@@ -122,6 +122,19 @@ export class WorkerManager {
     }
     args.push('--prompt', augmentedPrompt);
 
+    // Build env for wrapper
+    const wrapperEnv: Record<string, string> = {
+      ...process.env as Record<string, string>,
+      ...contextEnv,
+      WORKER_STATE_DIR: stateDir,
+    };
+    if (opts.autoCommit) {
+      wrapperEnv.WORKER_AUTO_COMMIT = '1';
+      if (typeof opts.autoCommit === 'string') {
+        wrapperEnv.WORKER_COMMIT_MSG = opts.autoCommit;
+      }
+    }
+
     // Spawn detached copilot process via wrapper script
     const outputLog = join(stateDir, 'output.log');
     const wrapperPath = resolveWorkerWrapperPath(dirname(fileURLToPath(import.meta.url)));
@@ -129,7 +142,7 @@ export class WorkerManager {
       cwd: worktreePath,
       detached: true,
       stdio: ['ignore', 'pipe', 'pipe'],
-      env: { ...process.env, ...contextEnv, WORKER_STATE_DIR: stateDir },
+      env: wrapperEnv,
     });
 
     // Redirect stdout+stderr to log file
@@ -355,6 +368,45 @@ export class WorkerManager {
     }
 
     return workers;
+  }
+
+  /** Terminal statuses that awaitCompletion considers "done" */
+  private static TERMINAL_STATUSES = new Set([
+    'completed', 'failed', 'spawn_failed', 'completed_no_exit',
+  ]);
+
+  /**
+   * Poll getStatus() until the worker reaches a terminal state.
+   * Returns the final WorkerStatus.
+   *
+   * @throws if timeout is exceeded
+   * @throws if worker is not found
+   */
+  awaitCompletion(workerId: string, opts: import('./types.js').AwaitOptions = {}): WorkerStatus {
+    const pollInterval = opts.pollIntervalMs ?? 3000;
+    const timeout = opts.timeoutMs ?? 0; // 0 = no limit
+    const deadline = timeout > 0 ? Date.now() + timeout : 0;
+
+    while (true) {
+      const status = this.getStatus(workerId);
+
+      if (opts.onProgress) {
+        try { opts.onProgress(status); } catch { /* ignore callback errors */ }
+      }
+
+      if (WorkerManager.TERMINAL_STATUSES.has(status.status)) {
+        return status;
+      }
+
+      // Check timeout
+      if (deadline > 0 && Date.now() + pollInterval > deadline) {
+        throw new Error(
+          `Timed out waiting for worker ${workerId} after ${timeout}ms (last status: ${status.status})`
+        );
+      }
+
+      sleepMs(pollInterval);
+    }
   }
 
   /** Clean up a worker: kill process, remove worktree, delete state */

@@ -64,22 +64,57 @@ The `--agent`, `--model`, and `--autopilot` flags set SDK defaults.
 
 ---
 
+## Agent Type Selection
+
+The `agent` option determines which agent profile runs in the worker. **Match agent type to task intent:**
+
+| Task Intent | Agent | Why |
+|-------------|-------|-----|
+| Implement a feature / write code | `Orchestrator` or `Executor` | These agents edit files, run builds, update backlog |
+| Review / verify code changes | `Verifier` | Read-only analysis, produces verdict reports |
+| Explore codebase, find patterns | `Scout` | Read-only exploration, caches snippets |
+
+**Common mistake:** Spawning a worker with `--agent Verifier` for an implementation task. The Verifier will review existing code instead of writing new code. Always use `Orchestrator` (or `Executor` for focused implementation) when the goal is to produce code changes.
+
+---
+
+## Task Deduplication (taskId)
+
+Use `taskId` to prevent duplicate workers for the same logical task:
+
+```bash
+# First spawn — creates worker
+$WORKER exec 'return sdk.spawnWorker("implement B-042", { taskId: "B-042", agent: "Orchestrator" })'
+
+# Second spawn with same taskId — throws error with existing worker info
+$WORKER exec 'return sdk.spawnWorker("implement B-042", { taskId: "B-042" })'
+# Error: taskId already active: B-042 (workerId=abc123, status=running, pid=1234)
+```
+
+The dedup check considers workers in `running` or `spawning` status as active. Workers in `completed`, `failed`, or `spawn_failed` status don't block new spawns with the same taskId.
+
+---
+
 ## SDK Method Reference
 
 | Method | Description |
 |--------|-------------|
-| `sdk.spawnWorker(prompt, opts?)` | Spawn new worker. opts: `{ agent?, model?, allowAll?, addDirs?, allowAllPaths?, allowAllUrls?, allowTools?, denyTools?, availableTools?, excludedTools?, allowUrls?, denyUrls?, disallowTempDir?, noAskUser?, disableParallelToolsExecution?, stream?, autopilot?, maxAutopilotContinues?, worktreeBase?, branchPrefix?, contextProviders? }` |
+| `sdk.spawnWorker(prompt, opts?)` | Spawn new worker. opts: `{ agent?, model?, taskId?, autoCommit?, allowAll?, addDirs?, allowAllPaths?, allowAllUrls?, allowTools?, denyTools?, availableTools?, excludedTools?, allowUrls?, denyUrls?, disallowTempDir?, noAskUser?, disableParallelToolsExecution?, stream?, autopilot?, maxAutopilotContinues?, worktreeBase?, branchPrefix?, contextProviders? }` |
 | `sdk.checkWorker(workerId)` | Get detailed status (pid, status, prompt, exitCode, logTail). ⚠️ logTail is only last 20 lines — for deeper log access, use shell monitoring (see below) |
+| `sdk.awaitWorker(workerId, opts?)` | Block until worker reaches terminal state. opts: `{ pollIntervalMs? (default 3000), timeoutMs? (default: no limit), onProgress? }`. Returns final `WorkerStatus`. Throws on timeout. |
 | `sdk.listAll()` | List all workers with basic info (id, pid, status) |
 | `sdk.cleanupWorker(workerId, force?)` | Kill process, remove worktree, clean state |
 | `sdk.cleanupAll(force?)` | Clean up all non-running workers (or all if force=true) |
 
 **Worker Status Values:**
 
-- `running` — Worker process is currently active
+- `spawning` — Worker process is starting up (readiness probe in progress)
+- `running` — Worker process is confirmed active
 - `completed` — Worker exited successfully (exit code 0)
+- `completed_no_exit` — Process stopped but no exit metadata found (likely success, wrapper was killed)
 - `failed` — Worker exited with error (exit code non-zero)
-- `unknown` — Status cannot be determined (old workers without exit.json fall back to this)
+- `spawn_failed` — Worker process failed to start (crashed before producing output)
+- `unknown` — Status cannot be determined (old workers without metadata fall back to this)
 
 **Additional Status Fields (when process stopped):**
 
@@ -144,7 +179,18 @@ Main Repo (working on feature-x)
 3. Process runs detached (survives terminal close)
 4. Output streams to `output.log` for monitoring
 5. On exit, wrapper script captures exit code and timestamp in `exit.json`
-6. **Cleanup** terminates process, removes worktree, deletes branch
+6. If `autoCommit` is enabled and exit code is 0, wrapper auto-commits uncommitted changes
+7. **Cleanup** terminates process, removes worktree, deletes branch
+
+**Auto-Commit:** When spawned with `autoCommit: true` (or a custom commit message string), the wrapper automatically runs `git add -A && git commit` on successful exit. This ensures worker output is always committed before cleanup. Use this to avoid the common problem of losing uncommitted changes during worktree removal.
+
+```bash
+# Enable auto-commit with default message
+$WORKER exec 'return sdk.spawnWorker("implement feature", { autoCommit: true })'
+
+# Enable auto-commit with custom message
+$WORKER exec 'return sdk.spawnWorker("implement feature", { autoCommit: "feat: implement B-042 magic link auth" })'
+```
 
 **Exit Handling:** When a worker exits, the wrapper script writes `exit.json`:
 

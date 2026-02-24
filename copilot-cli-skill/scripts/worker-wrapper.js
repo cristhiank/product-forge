@@ -6,7 +6,7 @@
  * Usage: node worker-wrapper.js <copilot-args>
  * Environment: WORKER_STATE_DIR must be set
  */
-import { spawn } from 'node:child_process';
+import { spawn, execSync } from 'node:child_process';
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -16,8 +16,23 @@ if (!workerStateDir) {
   process.exit(1);
 }
 
+const autoCommit = process.env.WORKER_AUTO_COMMIT === '1';
+
 let child = null;
 let settled = false;
+
+const tryAutoCommit = () => {
+  if (!autoCommit) return;
+  try {
+    const status = execSync('git status --porcelain', { encoding: 'utf-8', timeout: 10000 }).trim();
+    if (!status) return; // nothing to commit
+    execSync('git add -A', { timeout: 10000 });
+    const msg = process.env.WORKER_COMMIT_MSG || 'chore: auto-commit worker changes';
+    execSync(`git commit -m "${msg}"`, { timeout: 30000 });
+  } catch {
+    // Best-effort — don't fail the wrapper if commit fails
+  }
+};
 
 const writeExitJson = (exitCode) => {
   const data = {
@@ -30,6 +45,7 @@ const writeExitJson = (exitCode) => {
 const finalize = (exitCode) => {
   if (settled) return;
   settled = true;
+  if (exitCode === 0) tryAutoCommit();
   writeExitJson(exitCode);
   process.exit(exitCode);
 };

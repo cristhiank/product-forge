@@ -50,6 +50,8 @@ export interface SpawnOptions {
   contextProviders?: WorkerContextProvider[];
   /** Optional caller-provided task ID for deduplication and tracking */
   taskId?: string;
+  /** Auto-commit uncommitted changes when worker exits successfully (exit code 0) */
+  autoCommit?: boolean | string;
 }
 
 /** Information about a spawned worker */
@@ -85,6 +87,16 @@ export interface CleanupResult {
   worktreeRemoved: boolean;
   branchDeleted: boolean;
   stateRemoved: boolean;
+}
+
+/** Options for awaitCompletion */
+export interface AwaitOptions {
+  /** Polling interval in milliseconds (default: 3000) */
+  pollIntervalMs?: number;
+  /** Maximum wait time in milliseconds (default: no limit) */
+  timeoutMs?: number;
+  /** Callback invoked on each poll with current status */
+  onProgress?: (status: WorkerStatus) => void;
 }
 
 /** Worker metadata stored in meta.json */
