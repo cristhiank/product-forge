@@ -76,8 +76,8 @@ export class WorkerManager {
 
     // Spawn detached copilot process via wrapper script
     const outputLog = join(stateDir, 'output.log');
-    const wrapperPath = join(dirname(fileURLToPath(import.meta.url)), 'worker-wrapper.sh');
-    const child = spawn(wrapperPath, args, {
+    const wrapperPath = resolveWorkerWrapperPath(dirname(fileURLToPath(import.meta.url)));
+    const child = spawn(process.execPath, [wrapperPath, ...args], {
       cwd: worktreePath,
       detached: true,
       stdio: ['ignore', 'pipe', 'pipe'],
@@ -297,18 +297,24 @@ export class WorkerManager {
         // Wait for graceful shutdown (max 5s)
         const deadline = Date.now() + 5000;
         while (Date.now() < deadline && isProcessRunning(pid)) {
-          execSync('sleep 0.5', { stdio: 'pipe' });
+          sleepMs(500);
         }
 
-        // Escalate to process-group TERM for any remaining descendants.
+        // Escalate to process tree TERM for any remaining descendants.
         if (isProcessRunning(pid)) {
-          try {
-            process.kill(-pid, 'SIGTERM');
-          } catch { /* ignore */ }
+          if (process.platform === 'win32') {
+            try {
+              execSync(`taskkill /PID ${pid} /T`, { stdio: 'ignore' });
+            } catch { /* ignore */ }
+          } else {
+            try {
+              process.kill(-pid, 'SIGTERM');
+            } catch { /* ignore */ }
+          }
 
           const groupDeadline = Date.now() + 5000;
           while (Date.now() < groupDeadline && isProcessRunning(pid)) {
-            execSync('sleep 0.5', { stdio: 'pipe' });
+            sleepMs(500);
           }
         }
 
@@ -317,18 +323,24 @@ export class WorkerManager {
           if (!force) {
             throw new Error(`Process ${pid} still running. Use force=true to kill.`);
           }
-          try {
-            process.kill(-pid, 'SIGKILL');
-          } catch { /* ignore */ }
+          if (process.platform === 'win32') {
+            try {
+              execSync(`taskkill /PID ${pid} /T /F`, { stdio: 'ignore' });
+            } catch { /* ignore */ }
+          } else {
+            try {
+              process.kill(-pid, 'SIGKILL');
+            } catch { /* ignore */ }
+          }
 
           const killDeadline = Date.now() + 2000;
           while (Date.now() < killDeadline && isProcessRunning(pid)) {
-            execSync('sleep 0.5', { stdio: 'pipe' });
+            sleepMs(500);
           }
         }
 
         if (isProcessRunning(pid)) {
-          throw new Error(`Process group ${pid} still running after SIGKILL.`);
+          throw new Error(`Process ${pid} still running after force cleanup.`);
         }
       }
 
@@ -385,19 +397,36 @@ export class WorkerManager {
   }
 }
 
+function resolveWorkerWrapperPath(moduleDir: string): string {
+  const candidates = [
+    join(moduleDir, 'worker-wrapper.js'),
+    join(moduleDir, '..', 'scripts', 'worker-wrapper.js'),
+  ];
+  for (const candidate of candidates) {
+    if (existsSync(candidate)) return candidate;
+  }
+  throw new Error(`Worker wrapper not found (checked: ${candidates.join(', ')})`);
+}
+
 /** Check if a process is running by PID */
 function isProcessRunning(pid: number): boolean {
   if (!Number.isFinite(pid) || pid <= 0) return false;
-  try {
-    process.kill(-pid, 0);
-    return true;
-  } catch { /* ignore */ }
+  if (process.platform !== 'win32') {
+    try {
+      process.kill(-pid, 0);
+      return true;
+    } catch { /* ignore */ }
+  }
   try {
     process.kill(pid, 0);
     return true;
   } catch {
     return false;
   }
+}
+
+function sleepMs(ms: number): void {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 }
 
 function writeSyntheticExitMetadata(exitPath: string, terminatedBy: string): void {

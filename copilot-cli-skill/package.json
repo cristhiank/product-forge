@@ -6,9 +6,10 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
-    "build": "ncc build src/skill-cli.ts -o scripts --minify --no-source-map-register && find scripts -name '*.d.ts' -o -name '*.d.ts.map' | xargs rm -f 2>/dev/null; find scripts -type d -empty -delete 2>/dev/null; true",
+    "build": "ncc build src/skill-cli.ts -o scripts --minify --no-source-map-register && node -e \"const fs=require('fs');const walk=(d)=>{for(const e of fs.readdirSync(d,{withFileTypes:true})){const p=d+'/'+e.name;if(e.isDirectory()){walk(p);if(fs.readdirSync(p).length===0)fs.rmdirSync(p);}else if(p.endsWith('.d.ts')||p.endsWith('.d.ts.map')){fs.rmSync(p,{force:true});}}};if(fs.existsSync('scripts'))walk('scripts');\"",
     "dev": "tsc --watch",
-    "clean": "rm -rf dist scripts/index.js"
+    "clean": "node -e \"const fs=require('fs');for(const p of ['dist','scripts/index.js'])fs.rmSync(p,{recursive:true,force:true});\"",
+    "publish:skill": "node publish-skill.mjs"
   },
   "dependencies": {
     "commander": "^13.1.0"
