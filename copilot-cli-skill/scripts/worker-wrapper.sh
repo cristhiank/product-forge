@@ -11,18 +11,41 @@ if [ -z "$WORKER_STATE_DIR" ]; then
   exit 1
 fi
 
-# Run copilot with all arguments (no set -e — we must capture the exit code)
-copilot "$@"
-EXIT_CODE=$?
+# Run copilot as a child process so traps can forward shutdown signals.
+CHILD_PID=""
+EXIT_CODE=0
 
-# Write exit metadata
-TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-cat > "$WORKER_STATE_DIR/exit.json" <<EOF
+write_exit_json() {
+  TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+  cat > "$WORKER_STATE_DIR/exit.json" <<EOF
 {
   "exitCode": $EXIT_CODE,
   "completedAt": "$TIMESTAMP"
 }
 EOF
+}
+
+handle_shutdown() {
+  if [ -n "$CHILD_PID" ]; then
+    kill -TERM "$CHILD_PID" 2>/dev/null || true
+    wait "$CHILD_PID"
+    EXIT_CODE=$?
+  else
+    EXIT_CODE=143
+  fi
+
+  write_exit_json
+  exit "$EXIT_CODE"
+}
+
+trap 'handle_shutdown' TERM INT HUP
+
+copilot "$@" &
+CHILD_PID=$!
+wait "$CHILD_PID"
+EXIT_CODE=$?
+
+write_exit_json
 
 # Exit with the same code
 exit $EXIT_CODE

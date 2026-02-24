@@ -286,6 +286,7 @@ export class WorkerManager {
 
     // Kill process if running
     const pidPath = join(stateDir, 'worker.pid');
+    const exitPath = join(stateDir, 'exit.json');
     if (existsSync(pidPath)) {
       const pid = parseInt(readFileSync(pidPath, 'utf-8').trim(), 10);
       if (isProcessRunning(pid)) {
@@ -299,15 +300,40 @@ export class WorkerManager {
           execSync('sleep 0.5', { stdio: 'pipe' });
         }
 
+        // Escalate to process-group TERM for any remaining descendants.
+        if (isProcessRunning(pid)) {
+          try {
+            process.kill(-pid, 'SIGTERM');
+          } catch { /* ignore */ }
+
+          const groupDeadline = Date.now() + 5000;
+          while (Date.now() < groupDeadline && isProcessRunning(pid)) {
+            execSync('sleep 0.5', { stdio: 'pipe' });
+          }
+        }
+
         // Force kill if still running
         if (isProcessRunning(pid)) {
           if (!force) {
             throw new Error(`Process ${pid} still running. Use force=true to kill.`);
           }
           try {
-            process.kill(pid, 'SIGKILL');
+            process.kill(-pid, 'SIGKILL');
           } catch { /* ignore */ }
+
+          const killDeadline = Date.now() + 2000;
+          while (Date.now() < killDeadline && isProcessRunning(pid)) {
+            execSync('sleep 0.5', { stdio: 'pipe' });
+          }
         }
+
+        if (isProcessRunning(pid)) {
+          throw new Error(`Process group ${pid} still running after SIGKILL.`);
+        }
+      }
+
+      if (force && !isProcessRunning(pid) && !existsSync(exitPath)) {
+        writeSyntheticExitMetadata(exitPath, 'cleanup');
       }
     }
 
@@ -361,10 +387,24 @@ export class WorkerManager {
 
 /** Check if a process is running by PID */
 function isProcessRunning(pid: number): boolean {
+  if (!Number.isFinite(pid) || pid <= 0) return false;
+  try {
+    process.kill(-pid, 0);
+    return true;
+  } catch { /* ignore */ }
   try {
     process.kill(pid, 0);
     return true;
   } catch {
     return false;
   }
+}
+
+function writeSyntheticExitMetadata(exitPath: string, terminatedBy: string): void {
+  const exitData = {
+    exitCode: 137,
+    completedAt: new Date().toISOString(),
+    terminatedBy,
+  };
+  writeFileSync(exitPath, `${JSON.stringify(exitData, null, 2)}\n`);
 }
