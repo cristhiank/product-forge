@@ -146,6 +146,8 @@ Items live in exactly one folder at a time:
 
 **Status auto-sync:** The `Status` field is automatically updated when items move between folders: `next→Not Started`, `working→In Progress`, `done→Done`, `archive→Archived`. Folder is always the source of truth.
 
+> ⚠️ **Always commit backlog changes.** `.backlog/` files are tracked in git. After any state change (`move`, `complete`, `archive`, `create`, `update-body`), include the modified `.backlog/` files in your next `git commit`. Backlog changes left uncommitted will be lost on branch switches or worktree cleanup, and will appear stale to other sessions.
+
 ### ID Conventions
 
 **Single-Project Mode:** Bare IDs like `B-001`, `B-001.1` (child), `B-002`
@@ -298,6 +300,28 @@ $BACKLOG stats | jq '.default.next'
 ```
 
 ## Best Practices & Hygiene
+
+### Commit Backlog Changes to Git
+
+`.backlog/` directories are part of the repository. **Every backlog state change must be committed.** This is the most common source of stale state across sessions — agents do the work, call `complete()`, but never commit the moved files.
+
+**After any backlog operation that modifies files** (`complete`, `move`, `archive`, `create`, `update-body`, `pick`, `hygiene --fix`):
+
+```bash
+# Include backlog files in the same commit as your code changes
+git add .backlog/ && git commit -m "chore(backlog): mark B-042 done"
+
+# Or include them in a feature commit
+git add -A && git commit -m "feat: implement magic link auth
+
+Backlog: B-042 → done"
+```
+
+**For workers/worktrees:** If using the copilot-cli-skill with `autoCommit: true`, backlog changes are included automatically. Otherwise, always commit before the worktree is cleaned up — uncommitted backlog changes are lost forever on cleanup.
+
+**Rule of thumb:** If you called a backlog write command, you must `git add .backlog/` before your session ends.
+
+### General Hygiene
 
 Run `$BACKLOG hygiene --stale-days 30` weekly to prevent backlog rot. Archive done items after 7 days. Limit WIP to 3-5 items.
 
