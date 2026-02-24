@@ -22,6 +22,28 @@ export class WorkerManager {
   /** Spawn a new Copilot CLI worker in an isolated worktree */
   spawn(opts: SpawnOptions): WorkerInfo {
     if (!opts.prompt) throw new Error('prompt is required');
+    if (opts.taskId && existsSync(this.workersDir)) {
+      const entries = readdirSync(this.workersDir, { withFileTypes: true });
+      for (const entry of entries) {
+        if (!entry.isDirectory()) continue;
+        const metaPath = join(this.workersDir, entry.name, 'meta.json');
+        if (!existsSync(metaPath)) continue;
+        try {
+          const existingMeta: WorkerMeta = JSON.parse(readFileSync(metaPath, 'utf-8'));
+          if (existingMeta.task_id !== opts.taskId) continue;
+          const existing = this.getStatus(entry.name);
+          if (existing.status === 'running' || existing.status === 'spawning') {
+            throw new Error(
+              `taskId already active: ${opts.taskId} (workerId=${existing.workerId}, status=${existing.status}, pid=${existing.pid})`
+            );
+          }
+        } catch (error) {
+          if (error instanceof Error && error.message.includes('taskId already active:')) {
+            throw error;
+          }
+        }
+      }
+    }
 
     const workerId = randomUUID();
     const worktreeBase = opts.worktreeBase ?? '../worktrees';
@@ -131,10 +153,28 @@ export class WorkerManager {
       agent: opts.agent ?? '',
       model: opts.model ?? '',
       started_at: new Date().toISOString(),
-      status: 'running',
+      status: 'spawning',
+      task_id: opts.taskId,
       context_providers: contextResult,
     };
-    writeFileSync(join(stateDir, 'meta.json'), JSON.stringify(meta, null, 2));
+    const metaPath = join(stateDir, 'meta.json');
+    writeFileSync(metaPath, JSON.stringify(meta, null, 2));
+
+    const setMetaStatus = (nextStatus: WorkerMeta['status']): void => {
+      try {
+        const current: WorkerMeta = JSON.parse(readFileSync(metaPath, 'utf-8'));
+        if (current.status !== 'spawning') return;
+        current.status = nextStatus;
+        writeFileSync(metaPath, JSON.stringify(current, null, 2));
+      } catch {
+        // Ignore transient IO/parse races for status updates
+      }
+    };
+    child.once('spawn', () => setMetaStatus('running'));
+    child.once('error', () => setMetaStatus('spawn_failed'));
+    setTimeout(() => {
+      setMetaStatus(isProcessRunning(pid) ? 'running' : 'spawn_failed');
+    }, 100);
 
     return {
       workerId,
@@ -143,7 +183,7 @@ export class WorkerManager {
       branchName,
       stateDir,
       outputLog,
-      status: 'running',
+      status: 'spawning',
     };
   }
 
@@ -160,12 +200,13 @@ export class WorkerManager {
     }
 
     const meta: WorkerMeta = JSON.parse(readFileSync(metaPath, 'utf-8'));
+    const metaStatus = meta.status ?? 'running';
 
     // Check PID
     let pid = 0;
-    let status: 'running' | 'completed' | 'failed' | 'unknown' = 'unknown';
+    let status: WorkerStatus['status'] = metaStatus === 'spawn_failed' ? 'spawn_failed' : 'unknown';
     const pidPath = join(stateDir, 'worker.pid');
-    if (existsSync(pidPath)) {
+    if (status !== 'spawn_failed' && existsSync(pidPath)) {
       pid = parseInt(readFileSync(pidPath, 'utf-8').trim(), 10);
       const isRunning = isProcessRunning(pid);
       
@@ -182,9 +223,9 @@ export class WorkerManager {
     let completedAt: string | null = null;
     let logTail: string[] = [];
     let errorSummary: string | null = null;
+    const exitPath = join(stateDir, 'exit.json');
 
-    if (status !== 'running') {
-      const exitPath = join(stateDir, 'exit.json');
+    if (status !== 'running' && status !== 'spawn_failed') {
       if (existsSync(exitPath)) {
         try {
           const exitData = JSON.parse(readFileSync(exitPath, 'utf-8'));
@@ -200,6 +241,8 @@ export class WorkerManager {
         } catch {
           // Invalid exit.json, keep status as 'unknown'
         }
+      } else if (metaStatus === 'running') {
+        status = 'completed_no_exit';
       }
     }
 
@@ -250,26 +293,42 @@ export class WorkerManager {
   }
 
   /** List all workers with basic info */
-  listWorkers(): Array<{ workerId: string; pid: number; status: 'running' | 'completed' | 'failed' | 'unknown' }> {
+  listWorkers(): Array<{ workerId: string; pid: number; status: WorkerStatus['status']; taskId?: string }> {
     if (!existsSync(this.workersDir)) return [];
 
     const entries = readdirSync(this.workersDir, { withFileTypes: true });
-    const workers: Array<{ workerId: string; pid: number; status: 'running' | 'completed' | 'failed' | 'unknown' }> = [];
+    const workers: Array<{ workerId: string; pid: number; status: WorkerStatus['status']; taskId?: string }> = [];
 
     for (const entry of entries) {
       if (!entry.isDirectory()) continue;
       const workerId = entry.name;
       const pidPath = join(this.workersDir, workerId, 'worker.pid');
+      const metaPath = join(this.workersDir, workerId, 'meta.json');
 
       let pid = 0;
-      let status: 'running' | 'completed' | 'failed' | 'unknown' = 'unknown';
+      let status: WorkerStatus['status'] = 'unknown';
+      let taskId: string | undefined;
+      let metaStatus: string | undefined;
 
-      if (existsSync(pidPath)) {
+      if (existsSync(metaPath)) {
+        try {
+          const meta: WorkerMeta = JSON.parse(readFileSync(metaPath, 'utf-8'));
+          taskId = meta.task_id;
+          metaStatus = meta.status;
+        } catch {
+          // Ignore invalid metadata while listing workers
+        }
+      }
+
+      // Honor spawn_failed from meta before PID checks
+      if (metaStatus === 'spawn_failed') {
+        status = 'spawn_failed';
+      } else if (existsSync(pidPath)) {
         pid = parseInt(readFileSync(pidPath, 'utf-8').trim(), 10);
         const isRunning = isProcessRunning(pid);
         
         if (isRunning) {
-          status = 'running';
+          status = metaStatus === 'spawning' ? 'spawning' : 'running';
         } else {
           // Process stopped, check for exit.json
           const exitPath = join(this.workersDir, workerId, 'exit.json');
@@ -286,11 +345,13 @@ export class WorkerManager {
               // Invalid exit.json
               status = 'unknown';
             }
+          } else if (metaStatus === 'running') {
+            status = 'completed_no_exit';
           }
         }
       }
 
-      workers.push({ workerId, pid, status });
+      workers.push({ workerId, pid, status, taskId });
     }
 
     return workers;
@@ -316,6 +377,10 @@ export class WorkerManager {
     if (existsSync(pidPath)) {
       const pid = parseInt(readFileSync(pidPath, 'utf-8').trim(), 10);
       if (isProcessRunning(pid)) {
+        const lifecycleStatus = meta.status ?? 'running';
+        if (!force && lifecycleStatus === 'spawning') {
+          throw new Error(`Worker ${workerId} is still spawning; cleanup requires force=true.`);
+        }
         try {
           process.kill(pid, 'SIGTERM');
         } catch { /* ignore */ }
@@ -442,18 +507,17 @@ function appendVariadicFlag(args: string[], flag: string, values?: string[]): vo
 /** Check if a process is running by PID */
 function isProcessRunning(pid: number): boolean {
   if (!Number.isFinite(pid) || pid <= 0) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch { /* ignore */ }
   if (process.platform !== 'win32') {
     try {
       process.kill(-pid, 0);
       return true;
     } catch { /* ignore */ }
   }
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch {
-    return false;
-  }
+  return false;
 }
 
 function sleepMs(ms: number): void {

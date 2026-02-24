@@ -70,6 +70,7 @@ export function runCli(): void {
     .option('--stream <mode>', 'Streaming mode (on|off)')
     .option('--autopilot', 'Enable autopilot mode')
     .option('--max-autopilot-continues <count>', 'Limit autopilot continuation messages')
+    .option('--task-id <id>', 'Associate spawn request with a task ID for deduplication')
     .option('--context-providers <json>', 'JSON array of context providers to apply to the worktree')
     .action((opts) => {
       try {
@@ -111,6 +112,7 @@ export function runCli(): void {
           stream,
           autopilot: opts.autopilot,
           maxAutopilotContinues,
+          taskId: opts.taskId,
           contextProviders,
         });
         output(result, program.opts().pretty);

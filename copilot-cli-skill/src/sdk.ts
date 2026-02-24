@@ -88,6 +88,7 @@ export class WorkerSDK {
         opts.disableParallelToolsExecution ?? this.defaults.disableParallelToolsExecution,
       stream: opts.stream ?? this.defaults.stream,
       contextProviders: opts.contextProviders,
+      taskId: opts.taskId,
     });
   }
 

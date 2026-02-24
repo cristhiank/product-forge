@@ -48,6 +48,8 @@ export interface SpawnOptions {
   maxAutopilotContinues?: number;
   /** Context providers to apply to the worker worktree (symlinks, env, files, prompt sections) */
   contextProviders?: WorkerContextProvider[];
+  /** Optional caller-provided task ID for deduplication and tracking */
+  taskId?: string;
 }
 
 /** Information about a spawned worker */
@@ -58,7 +60,7 @@ export interface WorkerInfo {
   branchName: string;
   stateDir: string;
   outputLog: string;
-  status: 'running' | 'completed' | 'failed' | 'unknown';
+  status: 'spawning' | 'running' | 'completed' | 'failed' | 'unknown' | 'spawn_failed' | 'completed_no_exit';
 }
 
 /** Detailed worker status */
@@ -95,7 +97,8 @@ export interface WorkerMeta {
   agent: string;
   model: string;
   started_at: string;
-  status: string;
+  status: 'spawning' | 'running' | 'completed' | 'failed' | 'spawn_failed';
+  task_id?: string;
   context_providers?: ContextProviderResult;
 }
 
