@@ -18,6 +18,23 @@ function handleError(err: unknown): never {
   process.exit(1);
 }
 
+function collectStringOption(value: string, previous: string[]): string[] {
+  return [...previous, value];
+}
+
+function parseNonNegativeInt(value: string, optionName: string): number {
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isInteger(parsed) || parsed < 0) {
+    throw new Error(`Invalid value for ${optionName}: ${value}. Expected a non-negative integer.`);
+  }
+  return parsed;
+}
+
+function parseStreamMode(value: string): 'on' | 'off' {
+  if (value === 'on' || value === 'off') return value;
+  throw new Error(`Invalid value for --stream: ${value}. Expected "on" or "off".`);
+}
+
 export function runCli(): void {
   const program = new Command();
 
@@ -38,14 +55,32 @@ export function runCli(): void {
     .option('--worktree-base <path>', 'Base directory for worktrees')
     .option('--branch-prefix <prefix>', 'Branch name prefix')
     .option('--add-dir <dir...>', 'Allow access to directories')
+    .option('--allow-all', 'Enable all permissions (--allow-all-tools --allow-all-paths --allow-all-urls)')
     .option('--allow-all-paths', 'Allow access to all paths')
     .option('--allow-all-urls', 'Allow all URL access')
+    .option('--allow-tool <tool>', 'Allow a specific tool without confirmation (repeatable)', collectStringOption, [])
+    .option('--deny-tool <tool>', 'Deny a specific tool (repeatable)', collectStringOption, [])
+    .option('--available-tools <tool>', 'Restrict model-visible tools to this set (repeatable)', collectStringOption, [])
+    .option('--excluded-tools <tool>', 'Exclude model-visible tools from this set (repeatable)', collectStringOption, [])
+    .option('--allow-url <url>', 'Allow a specific URL/domain without confirmation (repeatable)', collectStringOption, [])
+    .option('--deny-url <url>', 'Deny a specific URL/domain (repeatable)', collectStringOption, [])
+    .option('--disallow-temp-dir', 'Prevent automatic access to system temp directory')
+    .option('--no-ask-user', 'Disable ask_user tool for autonomous worker runs')
+    .option('--disable-parallel-tools-execution', 'Disable parallel execution of tool calls')
+    .option('--stream <mode>', 'Streaming mode (on|off)')
     .option('--autopilot', 'Enable autopilot mode')
+    .option('--max-autopilot-continues <count>', 'Limit autopilot continuation messages')
     .option('--context-providers <json>', 'JSON array of context providers to apply to the worktree')
     .action((opts) => {
       try {
         const repoRoot = resolve(program.opts().repoRoot);
         const manager = new WorkerManager(repoRoot);
+        const maxAutopilotContinues = opts.maxAutopilotContinues !== undefined
+          ? parseNonNegativeInt(opts.maxAutopilotContinues, '--max-autopilot-continues')
+          : undefined;
+        const stream = opts.stream !== undefined
+          ? parseStreamMode(opts.stream)
+          : undefined;
         let contextProviders;
         if (opts.contextProviders) {
           try {
@@ -61,9 +96,21 @@ export function runCli(): void {
           worktreeBase: opts.worktreeBase,
           branchPrefix: opts.branchPrefix,
           addDirs: opts.addDir,
+          allowAll: opts.allowAll,
           allowAllPaths: opts.allowAllPaths,
           allowAllUrls: opts.allowAllUrls,
+          allowTools: opts.allowTool?.length ? opts.allowTool : undefined,
+          denyTools: opts.denyTool?.length ? opts.denyTool : undefined,
+          availableTools: opts.availableTools?.length ? opts.availableTools : undefined,
+          excludedTools: opts.excludedTools?.length ? opts.excludedTools : undefined,
+          allowUrls: opts.allowUrl?.length ? opts.allowUrl : undefined,
+          denyUrls: opts.denyUrl?.length ? opts.denyUrl : undefined,
+          disallowTempDir: opts.disallowTempDir,
+          noAskUser: opts.askUser === false,
+          disableParallelToolsExecution: opts.disableParallelToolsExecution,
+          stream,
           autopilot: opts.autopilot,
+          maxAutopilotContinues,
           contextProviders,
         });
         output(result, program.opts().pretty);

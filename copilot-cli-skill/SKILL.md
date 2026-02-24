@@ -33,7 +33,9 @@ $WORKER exec --agent Orchestrator --autopilot \
 $WORKER exec 'return sdk.spawnWorker("investigate auth bug #42", {
   agent: "Orchestrator",
   model: "claude-opus-4.6",
-  allowAllPaths: true
+  allowAllPaths: true,
+  noAskUser: true,
+  maxAutopilotContinues: 20
 })'
 
 # List all workers
@@ -66,7 +68,7 @@ The `--agent`, `--model`, and `--autopilot` flags set SDK defaults.
 
 | Method | Description |
 |--------|-------------|
-| `sdk.spawnWorker(prompt, opts?)` | Spawn new worker. opts: `{ agent?, model?, autopilot?, worktreeBase?, addDirs?, allowAllPaths?, allowAllUrls?, contextProviders? }` |
+| `sdk.spawnWorker(prompt, opts?)` | Spawn new worker. opts: `{ agent?, model?, allowAll?, addDirs?, allowAllPaths?, allowAllUrls?, allowTools?, denyTools?, availableTools?, excludedTools?, allowUrls?, denyUrls?, disallowTempDir?, noAskUser?, disableParallelToolsExecution?, stream?, autopilot?, maxAutopilotContinues?, worktreeBase?, branchPrefix?, contextProviders? }` |
 | `sdk.checkWorker(workerId)` | Get detailed status (pid, status, prompt, exitCode, logTail). ⚠️ logTail is only last 20 lines — for deeper log access, use shell monitoring (see below) |
 | `sdk.listAll()` | List all workers with basic info (id, pid, status) |
 | `sdk.cleanupWorker(workerId, force?)` | Kill process, remove worktree, clean state |
@@ -85,6 +87,19 @@ The `--agent`, `--model`, and `--autopilot` flags set SDK defaults.
 - `completedAt: string | null` — ISO timestamp when worker completed
 - `logTail: string[]` — Last 20 non-empty lines from output.log
 - `errorSummary: string | null` — Last log line if failed (quick error diagnosis)
+
+### Latest Copilot CLI Feature Support
+
+Worker spawn now supports these modern Copilot CLI controls:
+
+- `allowAll` → `--allow-all` (equivalent to allow-all-tools/paths/urls)
+- `allowTools` / `denyTools` → `--allow-tool` / `--deny-tool`
+- `availableTools` / `excludedTools` → `--available-tools` / `--excluded-tools`
+- `allowUrls` / `denyUrls` → `--allow-url` / `--deny-url`
+- `noAskUser` → `--no-ask-user`
+- `maxAutopilotContinues` → `--max-autopilot-continues`
+- `disableParallelToolsExecution` → `--disable-parallel-tools-execution`
+- `stream` → `--stream on|off`
 
 ### Low-Level Manager Access
 

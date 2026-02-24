@@ -60,19 +60,45 @@ export class WorkerManager {
     );
 
     // Build copilot command
-    const args = ['--allow-all-tools'];
+    const args: string[] = [];
+    if (opts.allowAll) {
+      args.push('--allow-all');
+    } else {
+      args.push('--allow-all-tools');
+    }
     if (opts.agent) args.push('--agent', opts.agent);
     if (opts.model) args.push('--model', opts.model);
-    if (opts.allowAllPaths) {
+    if (!opts.allowAll && opts.allowAllPaths) {
       args.push('--allow-all-paths');
-    } else if (opts.addDirs) {
+    } else if (!opts.allowAll && opts.addDirs) {
       for (const dir of opts.addDirs) {
         args.push('--add-dir', dir);
       }
     }
-    if (opts.allowAllUrls) args.push('--allow-all-urls');
+    if (!opts.allowAll && opts.allowAllUrls) args.push('--allow-all-urls');
+    appendVariadicFlag(args, '--allow-tool', opts.allowTools);
+    appendVariadicFlag(args, '--deny-tool', opts.denyTools);
+    appendVariadicFlag(args, '--available-tools', opts.availableTools);
+    appendVariadicFlag(args, '--excluded-tools', opts.excludedTools);
+    appendVariadicFlag(args, '--allow-url', opts.allowUrls);
+    appendVariadicFlag(args, '--deny-url', opts.denyUrls);
+    if (opts.disallowTempDir) args.push('--disallow-temp-dir');
+    if (opts.noAskUser) args.push('--no-ask-user');
+    if (opts.disableParallelToolsExecution) args.push('--disable-parallel-tools-execution');
+    if (opts.stream !== undefined) {
+      if (opts.stream !== 'on' && opts.stream !== 'off') {
+        throw new Error(`Invalid stream mode: ${opts.stream}`);
+      }
+      args.push('--stream', opts.stream);
+    }
     if (opts.autopilot) args.push('--autopilot');
-    args.push('-p', augmentedPrompt);
+    if (opts.maxAutopilotContinues !== undefined) {
+      if (!Number.isInteger(opts.maxAutopilotContinues) || opts.maxAutopilotContinues < 0) {
+        throw new Error(`Invalid maxAutopilotContinues: ${opts.maxAutopilotContinues}`);
+      }
+      args.push('--max-autopilot-continues', String(opts.maxAutopilotContinues));
+    }
+    args.push('--prompt', augmentedPrompt);
 
     // Spawn detached copilot process via wrapper script
     const outputLog = join(stateDir, 'output.log');
@@ -406,6 +432,11 @@ function resolveWorkerWrapperPath(moduleDir: string): string {
     if (existsSync(candidate)) return candidate;
   }
   throw new Error(`Worker wrapper not found (checked: ${candidates.join(', ')})`);
+}
+
+function appendVariadicFlag(args: string[], flag: string, values?: string[]): void {
+  if (!values || values.length === 0) return;
+  args.push(flag, ...values);
 }
 
 /** Check if a process is running by PID */

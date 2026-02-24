@@ -1,113 +1,125 @@
 # Copilot CLI Flags Reference
 
-This document lists the key Copilot CLI flags relevant for spawning autonomous worker processes.
+Key flags for autonomous workers, validated against `copilot --help` (CLI `0.0.415`).
 
-## Non-Interactive Execution Flags
+## Core Autonomous Flags
 
 ### `--allow-all-tools`
-**Required for autonomous workers.** Auto-approves all tool usage without prompting. Without this flag, the CLI will wait for user confirmation on tool calls, blocking non-interactive execution.
+Default baseline for non-interactive workers. Auto-approves tool prompts.
 
 ```bash
-copilot --allow-all-tools "implement feature X"
+copilot --allow-all-tools -p "implement feature X"
 ```
 
-### `--allow-all-paths`
-Disables path verification prompts. Allows the worker to access any file within the worktree without user approval.
+### `--allow-all` / `--yolo`
+Shortcut for full permission mode:
 
 ```bash
-copilot --allow-all-paths --allow-all-tools "refactor auth module"
+--allow-all-tools --allow-all-paths --allow-all-urls
 ```
-
-### `--allow-all-urls`
-Allows unrestricted URL access for external searches and API calls without prompting.
 
 ```bash
-copilot --allow-all-urls --allow-all-tools "research latest Next.js patterns"
+copilot --allow-all -p "run end-to-end migration"
 ```
 
-## Directory Access Control
-
-### `--add-dir <directory>`
-**Repeatable.** Grants file access to specific directories. Use this to restrict worker access to relevant portions of the codebase.
+### `--no-ask-user`
+Disables `ask_user` tool so autonomous workers do not block awaiting human input.
 
 ```bash
-copilot --add-dir ./src --add-dir ./tests --allow-all-tools "add tests for auth"
+copilot --allow-all-tools --no-ask-user -p "finish the refactor autonomously"
 ```
 
-Multiple `--add-dir` flags can be combined to grant granular access.
+## Tool Visibility + Permission Controls
 
-## Agent and Model Selection
-
-### `--agent <agent>`
-Specifies a custom agent for the worker. Useful for routing work to specialized agents (e.g., Scout, Executor, Creative).
+### `--available-tools` / `--excluded-tools`
+Control which tools are visible to the model.
 
 ```bash
-copilot --agent Scout --allow-all-tools "explore authentication patterns"
+copilot --available-tools bash view rg -p "inspect and patch"
+copilot --excluded-tools ask_user -p "autonomous run"
 ```
 
-### `--model <model>`
-Overrides the default model. Available models include:
-- `claude-sonnet-4.6` (default for most tasks)
-- `claude-opus-4.6` (premium, complex reasoning)
-- `claude-haiku-4.5` (fast, cost-effective)
-- `gpt-5.3-codex` (code-focused)
-- `gemini-3-pro-preview` (multi-modal)
-
-```bash
-copilot --model claude-opus-4.6 --allow-all-tools "design authentication architecture"
-```
-
-## Session Management
-
-### `--resume <session-id>`
-Resumes a specific previously-started session by ID.
-
-```bash
-copilot --resume 20260221-143000-abc
-```
-
-### `--continue`
-Resumes the most recent session in the current directory.
-
-```bash
-copilot --continue
-```
-
-## Autonomous Continuation
-
-### `--autopilot`
-Enables autopilot mode, allowing the agent to continue working autonomously across multiple turns until completion.
-
-```bash
-copilot --autopilot --allow-all-tools "implement feature X from start to finish"
-```
-
-## Combined Example: Autonomous Worker
+### `--allow-tool` / `--deny-tool`
+Control approval policy for allowed tools. Deny rules take precedence.
 
 ```bash
 copilot \
-  --agent Executor \
+  --allow-all-tools \
+  --allow-tool 'shell(git:*)' \
+  --deny-tool 'shell(git push)' \
+  -p "prepare commit but do not push"
+```
+
+## URL + Path Controls
+
+### URLs
+
+```bash
+copilot --allow-url github.com --deny-url https://malicious-site.com -p "research issue"
+copilot --allow-all-urls -p "web research task"
+```
+
+### Paths
+
+```bash
+copilot --add-dir ./src --add-dir ./tests --allow-all-tools -p "update tests"
+copilot --allow-all-paths --allow-all-tools -p "repo-wide refactor"
+copilot --disallow-temp-dir --allow-all-tools -p "work without temp dir"
+```
+
+## Autopilot + Execution Behavior
+
+### `--autopilot` + `--max-autopilot-continues`
+
+```bash
+copilot --autopilot --max-autopilot-continues 20 --allow-all-tools -p "fix flaky tests"
+```
+
+### `--disable-parallel-tools-execution`
+For serialized execution when parallel tool execution causes instability.
+
+```bash
+copilot --disable-parallel-tools-execution --allow-all-tools -p "run deterministic workflow"
+```
+
+### `--stream on|off`
+Control streaming output behavior.
+
+```bash
+copilot --stream off --allow-all-tools -p "quiet non-streaming run"
+```
+
+## Agent + Model Selection
+
+```bash
+copilot --agent Scout --model gpt-5.3-codex --allow-all-tools -p "explore auth architecture"
+```
+
+## Combined Example (Modern Worker)
+
+```bash
+copilot \
+  --agent Orchestrator \
   --model claude-sonnet-4.6 \
   --add-dir ./src/auth \
   --add-dir ./tests/auth \
-  --allow-all-tools \
-  --allow-all-paths \
+  --allow-tool write \
+  --deny-tool 'shell(git push)' \
+  --no-ask-user \
   --autopilot \
-  "implement magic link authentication per plan.md"
+  --max-autopilot-continues 25 \
+  -p "implement magic link auth per plan.md"
 ```
 
-This spawns a fully autonomous worker that:
-- Uses the Executor agent
-- Has access to auth-related directories
-- Auto-approves all tool usage
-- Continues autonomously until completion
-- Requires no user interaction
+## Mapping to `copilot-cli-skill` Spawn Options
 
-## Safety Considerations
-
-When spawning autonomous workers:
-- **Always** use `--allow-all-tools` (required for non-interactive execution)
-- **Consider** limiting scope with `--add-dir` instead of `--allow-all-paths`
-- **Review** the prompt carefully — workers execute autonomously
-- **Monitor** output logs for errors or unexpected behavior
-- **Set** appropriate model based on task complexity and budget
+- `allowAll` → `--allow-all`
+- `allowAllPaths` / `addDirs` / `allowAllUrls`
+- `allowTools` / `denyTools`
+- `availableTools` / `excludedTools`
+- `allowUrls` / `denyUrls`
+- `disallowTempDir`
+- `noAskUser`
+- `autopilot` / `maxAutopilotContinues`
+- `disableParallelToolsExecution`
+- `stream`

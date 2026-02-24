@@ -12,8 +12,38 @@ export interface WorkerSDKOptions {
   agent?: string;
   /** Default model for spawned workers */
   model?: string;
+  /** Default all-permissions mode */
+  allowAll?: boolean;
+  /** Default directory allow-list */
+  addDirs?: string[];
+  /** Default path permission mode */
+  allowAllPaths?: boolean;
+  /** Default URL permission mode */
+  allowAllUrls?: boolean;
+  /** Default tool allow-list */
+  allowTools?: string[];
+  /** Default tool deny-list */
+  denyTools?: string[];
+  /** Default model-visible tool allow-list */
+  availableTools?: string[];
+  /** Default model-visible tool deny-list */
+  excludedTools?: string[];
+  /** Default URL allow-list */
+  allowUrls?: string[];
+  /** Default URL deny-list */
+  denyUrls?: string[];
+  /** Default temp-dir policy */
+  disallowTempDir?: boolean;
+  /** Default ask_user behavior */
+  noAskUser?: boolean;
+  /** Default parallel tool execution policy */
+  disableParallelToolsExecution?: boolean;
+  /** Default streaming mode */
+  stream?: 'on' | 'off';
   /** Enable autopilot by default */
   autopilot?: boolean;
+  /** Default autopilot continuation limit */
+  maxAutopilotContinues?: number;
 }
 
 /**
@@ -38,12 +68,25 @@ export class WorkerSDK {
       prompt,
       agent: opts.agent ?? this.defaults.agent,
       model: opts.model ?? this.defaults.model,
+      allowAll: opts.allowAll ?? this.defaults.allowAll,
       autopilot: opts.autopilot ?? this.defaults.autopilot,
+      maxAutopilotContinues: opts.maxAutopilotContinues ?? this.defaults.maxAutopilotContinues,
       worktreeBase: opts.worktreeBase,
       branchPrefix: opts.branchPrefix,
-      addDirs: opts.addDirs,
-      allowAllPaths: opts.allowAllPaths,
-      allowAllUrls: opts.allowAllUrls,
+      addDirs: opts.addDirs ?? this.defaults.addDirs,
+      allowAllPaths: opts.allowAllPaths ?? this.defaults.allowAllPaths,
+      allowAllUrls: opts.allowAllUrls ?? this.defaults.allowAllUrls,
+      allowTools: opts.allowTools ?? this.defaults.allowTools,
+      denyTools: opts.denyTools ?? this.defaults.denyTools,
+      availableTools: opts.availableTools ?? this.defaults.availableTools,
+      excludedTools: opts.excludedTools ?? this.defaults.excludedTools,
+      allowUrls: opts.allowUrls ?? this.defaults.allowUrls,
+      denyUrls: opts.denyUrls ?? this.defaults.denyUrls,
+      disallowTempDir: opts.disallowTempDir ?? this.defaults.disallowTempDir,
+      noAskUser: opts.noAskUser ?? this.defaults.noAskUser,
+      disableParallelToolsExecution:
+        opts.disableParallelToolsExecution ?? this.defaults.disableParallelToolsExecution,
+      stream: opts.stream ?? this.defaults.stream,
       contextProviders: opts.contextProviders,
     });
   }

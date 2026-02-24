@@ -14,14 +14,38 @@ export interface SpawnOptions {
   worktreeBase?: string;
   /** Branch name prefix (default: 'worker') */
   branchPrefix?: string;
+  /** Enable all permissions shortcut (--allow-all) */
+  allowAll?: boolean;
   /** Directories to allow access to */
   addDirs?: string[];
   /** Allow access to all paths */
   allowAllPaths?: boolean;
   /** Allow all URL access */
   allowAllUrls?: boolean;
+  /** Allow specific tools without confirmation (repeatable) */
+  allowTools?: string[];
+  /** Deny specific tools (repeatable) */
+  denyTools?: string[];
+  /** Restrict model-visible tools to this set */
+  availableTools?: string[];
+  /** Exclude specific tools from model-visible set */
+  excludedTools?: string[];
+  /** Allow specific URLs or domains without confirmation */
+  allowUrls?: string[];
+  /** Deny specific URLs or domains */
+  denyUrls?: string[];
+  /** Prevent automatic access to system temp directory */
+  disallowTempDir?: boolean;
+  /** Disable ask_user tool for autonomous runs */
+  noAskUser?: boolean;
+  /** Disable parallel execution of tool calls */
+  disableParallelToolsExecution?: boolean;
+  /** Streaming mode */
+  stream?: 'on' | 'off';
   /** Enable autopilot mode */
   autopilot?: boolean;
+  /** Maximum continuation messages in autopilot mode */
+  maxAutopilotContinues?: number;
   /** Context providers to apply to the worker worktree (symlinks, env, files, prompt sections) */
   contextProviders?: WorkerContextProvider[];
 }
