@@ -16,7 +16,7 @@ import { createBacklogAPI } from "./backlog-api.js";
 import { executeCode } from "./sandbox/index.js";
 import { startServer } from "./serve/server.js";
 import { MultiRootBacklogStore } from "./storage/multi-root-store.js";
-import { discoverProjects } from "./storage/project-discovery.js";
+import { discoverProjects, parseProjectConfig, findGitRoot } from "./storage/project-discovery.js";
 import type { Folder } from "./types.js";
 
 interface CLIOptions {
@@ -194,8 +194,15 @@ export async function main() {
       process.exit(0);
     }
 
-    // Discover projects
-    const scanDir = (args.root as string) || process.cwd();
+    // Discover projects — strategy:
+    // 1. If --root is explicit, use it directly
+    // 2. Try config file (.backlog-projects.json) at cwd or git root
+    // 3. Scan from cwd (downward, 2 levels)
+    // 4. Fallback: check if cwd itself is a project root
+    // 5. Walk up to git root and scan from there
+    const explicitRoot = args.root as string | undefined;
+    const cwd = process.cwd();
+    const scanDir = explicitRoot || cwd;
     let projects = await discoverProjects(scanDir);
 
     // If no projects found, check if scanDir itself has a .backlog/ folder
@@ -212,11 +219,37 @@ export async function main() {
       }
     }
 
+    // If still empty and no explicit --root, try git root as scan anchor
+    if (projects.length === 0 && !explicitRoot) {
+      const gitRoot = await findGitRoot(cwd);
+      if (gitRoot && gitRoot !== cwd) {
+        // Try config file at git root first
+        const configPath = path.join(gitRoot, ".backlog-projects.json");
+        try {
+          projects = await parseProjectConfig(configPath);
+        } catch {
+          // No config file — scan from git root
+          projects = await discoverProjects(gitRoot);
+        }
+        // If git root itself is a project root
+        if (projects.length === 0) {
+          const backlogDir = path.join(gitRoot, ".backlog");
+          try {
+            const stat = await fs.stat(backlogDir);
+            if (stat.isDirectory()) {
+              projects = [{ name: path.basename(gitRoot), root: backlogDir }];
+            }
+          } catch { /* not found */ }
+        }
+      }
+    }
+
     if (projects.length === 0) {
+      const gitRoot = await findGitRoot(cwd);
       console.error(JSON.stringify({
         error: "No .backlog/ directories found",
-        searched: scanDir,
-        hint: "Create a .backlog/ directory or run from a workspace with project folders"
+        searched: [scanDir, ...(gitRoot && gitRoot !== scanDir ? [gitRoot] : [])],
+        hint: "Create a .backlog/ directory, use --root <path>, or add a .backlog-projects.json config file at your git root"
       }, null, 2));
       process.exit(1);
     }

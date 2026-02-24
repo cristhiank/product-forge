@@ -372,10 +372,14 @@ export function createBacklogAPI(store: MultiRootBacklogStore) {
       const next = await api.list({ project: opts?.project, folder: "next", limit: 10 });
       const statsResult = await api.stats({ project: opts?.project });
 
+      // Items with status/folder mismatches (e.g., Status=Done but still in next/)
+      const mismatchIds = new Set(hygieneResult.status_folder_mismatches.map(m => m.id));
+
       // Resolve dependency status for next items
       const allItems = await api.list({ project: opts?.project });
       const doneIds = new Set(allItems.filter(i => i.folder === "done" || i.folder === "archive").map(i => i.id));
       const unblocked = next.filter(item => {
+        if (mismatchIds.has(item.id)) return false; // exclude mismatched items from recommendations
         if (!item.depends_on || item.depends_on.length === 0) return true;
         return item.depends_on.every(dep => doneIds.has(dep));
       });
@@ -383,9 +387,10 @@ export function createBacklogAPI(store: MultiRootBacklogStore) {
       return {
         health: hygieneResult.health_score,
         issues: hygieneResult.stale_in_next.length + hygieneResult.stuck_in_working.length + hygieneResult.old_in_done.length + hygieneResult.status_folder_mismatches.length,
+        mismatches: hygieneResult.status_folder_mismatches,
         wip: working.map(i => ({ id: i.id, title: i.title, priority: i.priority })),
         next_unblocked: unblocked.map(i => ({ id: i.id, title: i.title, priority: i.priority })),
-        next_blocked: next.filter(i => !unblocked.includes(i)).map(i => ({ id: i.id, title: i.title, priority: i.priority, blocked_by: i.depends_on })),
+        next_blocked: next.filter(i => !unblocked.includes(i) && !mismatchIds.has(i.id)).map(i => ({ id: i.id, title: i.title, priority: i.priority, blocked_by: i.depends_on })),
         stats: statsResult,
       };
     },

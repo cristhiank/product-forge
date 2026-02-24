@@ -220,4 +220,29 @@ describe("backlog API", () => {
       await cleanup();
     }
   });
+
+  test("brief surfaces status/folder mismatches and excludes them from next_unblocked", async () => {
+    const { root, cleanup } = await makeTempBacklogRootFromFixture();
+    try {
+      const store = singleProjectStore(root);
+      const backlog = createBacklogAPI(store);
+
+      // Manually set B-001's Status to "Done" while it stays in next/ folder
+      // This simulates a cross-session stale state: agent completed work but forgot to call complete()
+      const item = await backlog.get({ id: "B-001" });
+      const body = item.body.replace("**Status:** Not Started", "**Status:** Done");
+      await backlog.updateBody({ id: "B-001", body });
+
+      const brief = await backlog.brief();
+      // Mismatches should be surfaced
+      expect(Array.isArray(brief.mismatches)).toBe(true);
+      expect(brief.mismatches.length).toBeGreaterThan(0);
+      expect(brief.mismatches.some(m => m.id === "B-001")).toBe(true);
+
+      // Mismatched item should NOT appear in next_unblocked
+      expect(brief.next_unblocked.some(i => i.id === "B-001")).toBe(false);
+    } finally {
+      await cleanup();
+    }
+  });
 });

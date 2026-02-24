@@ -15,6 +15,23 @@ export interface ProjectEntry {
 }
 
 /**
+ * Walk up from `startDir` to find the nearest directory containing `.git`.
+ * Returns the git root path, or null if not inside a git repo.
+ */
+export async function findGitRoot(startDir: string): Promise<string | null> {
+  let dir = path.resolve(startDir);
+  const root = path.parse(dir).root;
+  while (dir !== root) {
+    try {
+      const stat = await fs.stat(path.join(dir, ".git"));
+      if (stat.isDirectory() || stat.isFile()) return dir; // .git can be a file in worktrees
+    } catch { /* not found, keep going */ }
+    dir = path.dirname(dir);
+  }
+  return null;
+}
+
+/**
  * Scan a directory for subdirectories containing a `.backlog/` folder.
  * Searches up to `maxDepth` levels deep (default: 2) to find nested projects
  * like `pet_boarding_services/app/.backlog/`.

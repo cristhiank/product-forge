@@ -63,6 +63,7 @@ export function isFolder(value: unknown): value is Folder {
 export interface BriefResult {
   health: HygieneResult["health_score"];
   issues: number;
+  mismatches: HygieneResult["status_folder_mismatches"];
   wip: Array<{ id: string; title: string; priority?: string }>;
   next_unblocked: Array<{ id: string; title: string; priority?: string }>;
   next_blocked: Array<{ id: string; title: string; priority?: string; blocked_by?: string[] }>;

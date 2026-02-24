@@ -19,9 +19,12 @@ Patterns and conventions for using the backlog CLI to manage work items, track p
 
 When this skill loads, do these immediately:
 
-1. **Get a briefing** — `$BACKLOG brief --format summary` — see health, WIP, what's next
-2. **Check working items** — `$BACKLOG list --folder working` — see what's in progress
-3. **Find unblocked work** — `$BACKLOG list --folder next --unblocked` — see what's ready to pick up
+1. **Fence stale state** — `$BACKLOG hygiene --fix` — auto-repair status/folder mismatches from prior sessions
+2. **Get a briefing** — `$BACKLOG brief --format summary` — see health, WIP, what's next
+3. **Check working items** — `$BACKLOG list --folder working` — see what's in progress
+4. **Find unblocked work** — `$BACKLOG list --folder next --unblocked` — see what's ready to pick up
+
+> ⚠️ **Always run hygiene --fix first.** Items completed in other sessions may still be in `next/` if the completing agent forgot to call `complete()`. The hygiene fence detects status/folder mismatches and auto-repairs them.
 
 ## ⛔ CRITICAL: Never Browse .backlog/ Directly
 
@@ -50,7 +53,7 @@ Use this skill whenever the user asks about their backlog, tasks, or work items 
 
 ## Quick Start
 
-The CLI auto-discovers `.backlog/` directories (up to 2 levels deep) from the current working directory. It supports **CLI commands** for simple operations and **exec** for JavaScript composition. All output is JSON.
+The CLI auto-discovers `.backlog/` directories from the current working directory or git root. It supports **CLI commands** for simple operations and **exec** for JavaScript composition. All output is JSON.
 
 ```bash
 BACKLOG="node <skill-dir>/scripts/index.js"
@@ -95,20 +98,36 @@ $BACKLOG serve --port 3000
 
 ### Project Discovery
 
-The CLI automatically discovers projects by scanning for subdirectories containing a `.backlog/` folder:
+The CLI discovers projects using a multi-step strategy:
+
+1. **Scan down from cwd** — looks for `<child>/.backlog/` up to 2 levels deep
+2. **Check cwd itself** — if cwd has a `.backlog/` directory
+3. **Walk up to git root** — if nothing found yet, finds the nearest `.git` ancestor and scans from there
+4. **Config file** — checks for `.backlog-projects.json` at the git root for explicit project definitions
 
 ```
-workspace/
+workspace/                      ← git root
 ├── frontend/
-│   └── .backlog/           → project: "frontend"
+│   └── .backlog/               → project: "frontend"
 ├── api/
-│   └── .backlog/           → project: "api"
+│   └── .backlog/               → project: "api"
 └── services/
     └── payments/
-        └── .backlog/       → project: "services-payments" (nested, auto-named)
+        └── .backlog/           → project: "services-payments" (nested, auto-named)
 ```
 
-If run from `workspace/`, it discovers all projects. Nested directories get hyphenated names (e.g., `services-payments`).
+**Running from nested directories works.** If you run the CLI from `workspace/api/src/`, it walks up to find `workspace/` (git root) and discovers all projects.
+
+**Explicit override:** Use `--root <path>` to point at a specific directory, or create a `.backlog-projects.json` at your git root:
+
+```json
+{
+  "projects": [
+    { "name": "frontend", "path": "frontend/.backlog" },
+    { "name": "api", "path": "services/api/.backlog" }
+  ]
+}
+```
 
 ## Core Concepts
 
@@ -177,6 +196,8 @@ $BACKLOG brief [--project X]
 # Human-readable output
 $BACKLOG brief --format summary
 ```
+
+> **`brief` now surfaces mismatches.** If items have a Status field that doesn't match their folder (e.g., Status=Done but file is in `next/`), they appear in the `mismatches` array and are excluded from `next_unblocked`. Run `$BACKLOG hygiene --fix` to auto-repair them.
 
 ### Read Operations
 

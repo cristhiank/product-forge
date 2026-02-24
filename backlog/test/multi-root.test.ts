@@ -1,8 +1,11 @@
 import { describe, expect, test } from "vitest";
+import * as fs from "node:fs/promises";
+import * as os from "node:os";
+import * as path from "node:path";
 
 import { createBacklogAPI } from "../src/backlog-api.js";
 import { parseQualifiedId, toQualifiedId, isValidLocalId, isValidProjectName } from "../src/id-utils.js";
-import { discoverProjects } from "../src/storage/project-discovery.js";
+import { discoverProjects, findGitRoot } from "../src/storage/project-discovery.js";
 import { MultiRootBacklogStore } from "../src/storage/multi-root-store.js";
 import { makeTempMultiProjectFixture } from "./test-helpers.js";
 
@@ -46,6 +49,61 @@ describe("project discovery", () => {
       expect(projects[1].root).toContain("frontend/.backlog");
     } finally {
       await cleanup();
+    }
+  });
+
+  test("findGitRoot walks up directory tree to find .git", async () => {
+    // Create a temp dir simulating a git repo with nested subdirectories
+    const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "backlog-gitroot-"));
+    try {
+      // Create fake .git dir at the root
+      await fs.mkdir(path.join(tmp, ".git"));
+      // Create nested subdirectory: tmp/api/src/components/
+      const nested = path.join(tmp, "api", "src", "components");
+      await fs.mkdir(nested, { recursive: true });
+
+      // findGitRoot from deep nested dir should find tmp
+      const result = await findGitRoot(nested);
+      expect(result).toBe(tmp);
+
+      // findGitRoot from the root itself should find tmp
+      const resultRoot = await findGitRoot(tmp);
+      expect(resultRoot).toBe(tmp);
+    } finally {
+      await fs.rm(tmp, { recursive: true, force: true });
+    }
+  });
+
+  test("findGitRoot returns null when not in a git repo", async () => {
+    const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "backlog-nogit-"));
+    try {
+      const result = await findGitRoot(tmp);
+      expect(result).toBeNull();
+    } finally {
+      await fs.rm(tmp, { recursive: true, force: true });
+    }
+  });
+
+  test("discovers projects from nested cwd via git root fallback", async () => {
+    // Simulate: git root has api/.backlog/ but cwd is api/src/ (no direct discovery)
+    const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "backlog-nested-"));
+    try {
+      await fs.mkdir(path.join(tmp, ".git"));
+      await fs.mkdir(path.join(tmp, "api", ".backlog", "next"), { recursive: true });
+      await fs.mkdir(path.join(tmp, "api", "src"), { recursive: true });
+
+      // From api/src/, direct scan finds nothing
+      const direct = await discoverProjects(path.join(tmp, "api", "src"));
+      expect(direct.length).toBe(0);
+
+      // But git root scan finds the project
+      const gitRoot = await findGitRoot(path.join(tmp, "api", "src"));
+      expect(gitRoot).toBe(tmp);
+      const fromGitRoot = await discoverProjects(gitRoot!);
+      expect(fromGitRoot.length).toBe(1);
+      expect(fromGitRoot[0].name).toBe("api");
+    } finally {
+      await fs.rm(tmp, { recursive: true, force: true });
     }
   });
 });
