@@ -34,10 +34,48 @@ const tryAutoCommit = () => {
   }
 };
 
+const gatherGitReport = () => {
+  const report = { commits: [], filesChanged: [], hasDirtyWorkingTree: false };
+  try {
+    const log = execSync('git log --oneline upstream..HEAD', { encoding: 'utf-8', timeout: 10000 }).trim();
+    if (log) report.commits = log.split('\n').filter(l => l.length > 0);
+  } catch {
+    // upstream ref may not exist — try origin/main, main, or skip
+    try {
+      const log = execSync('git log --oneline @{upstream}..HEAD', { encoding: 'utf-8', timeout: 10000 }).trim();
+      if (log) report.commits = log.split('\n').filter(l => l.length > 0);
+    } catch {
+      // No upstream tracking — skip commits
+    }
+  }
+  try {
+    const diff = execSync('git diff --name-only upstream..HEAD', { encoding: 'utf-8', timeout: 10000 }).trim();
+    if (diff) report.filesChanged = diff.split('\n').filter(l => l.length > 0);
+  } catch {
+    try {
+      const diff = execSync('git diff --name-only @{upstream}..HEAD', { encoding: 'utf-8', timeout: 10000 }).trim();
+      if (diff) report.filesChanged = diff.split('\n').filter(l => l.length > 0);
+    } catch {
+      // No upstream tracking — skip filesChanged
+    }
+  }
+  try {
+    const status = execSync('git status --porcelain', { encoding: 'utf-8', timeout: 10000 }).trim();
+    report.hasDirtyWorkingTree = status.length > 0;
+  } catch {
+    // Best-effort
+  }
+  return report;
+};
+
 const writeExitJson = (exitCode) => {
+  const gitReport = gatherGitReport();
   const data = {
     exitCode,
     completedAt: new Date().toISOString(),
+    commits: gitReport.commits,
+    filesChanged: gitReport.filesChanged,
+    hasDirtyWorkingTree: gitReport.hasDirtyWorkingTree,
   };
   writeFileSync(join(workerStateDir, 'exit.json'), `${JSON.stringify(data, null, 2)}\n`);
 };

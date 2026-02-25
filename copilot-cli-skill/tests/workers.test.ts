@@ -555,3 +555,85 @@ test('getStatus includes copilotPid in returned status', () => {
 
   rmSync(repoRoot, { recursive: true, force: true });
 });
+
+// ──────────────────────────────────────────────────
+// Enhanced exit.json git report tests
+// ──────────────────────────────────────────────────
+
+test('getStatus surfaces commits and filesChanged from enhanced exit.json', () => {
+  const repoRoot = makeRepoRoot('exit-git-report');
+  const workerId = 'w-git-report';
+  const stateDir = writeWorkerState(repoRoot, workerId, { status: 'running' }, 999999);
+  const exitData = {
+    exitCode: 0,
+    completedAt: new Date().toISOString(),
+    commits: ['abc1234 feat: add login', 'def5678 fix: token expiry'],
+    filesChanged: ['src/auth/login.ts', 'src/auth/token.ts'],
+    hasDirtyWorkingTree: false,
+  };
+  writeFileSync(join(stateDir, 'exit.json'), JSON.stringify(exitData));
+
+  const manager = new WorkerManager(repoRoot);
+  const status = manager.getStatus(workerId);
+  assert.equal(status.status, 'completed');
+  assert.deepEqual(status.commits, ['abc1234 feat: add login', 'def5678 fix: token expiry']);
+  assert.deepEqual(status.filesChanged, ['src/auth/login.ts', 'src/auth/token.ts']);
+  assert.equal(status.hasDirtyWorkingTree, false);
+
+  rmSync(repoRoot, { recursive: true, force: true });
+});
+
+test('getStatus handles exit.json with hasDirtyWorkingTree=true', () => {
+  const repoRoot = makeRepoRoot('exit-dirty');
+  const workerId = 'w-dirty';
+  const stateDir = writeWorkerState(repoRoot, workerId, { status: 'running' }, 999999);
+  const exitData = {
+    exitCode: 1,
+    completedAt: new Date().toISOString(),
+    commits: [],
+    filesChanged: [],
+    hasDirtyWorkingTree: true,
+  };
+  writeFileSync(join(stateDir, 'exit.json'), JSON.stringify(exitData));
+
+  const manager = new WorkerManager(repoRoot);
+  const status = manager.getStatus(workerId);
+  assert.equal(status.status, 'failed');
+  assert.deepEqual(status.commits, []);
+  assert.deepEqual(status.filesChanged, []);
+  assert.equal(status.hasDirtyWorkingTree, true);
+
+  rmSync(repoRoot, { recursive: true, force: true });
+});
+
+test('getStatus is backward compatible with old exit.json without git fields', () => {
+  const repoRoot = makeRepoRoot('exit-old-format');
+  const workerId = 'w-old-format';
+  const stateDir = writeWorkerState(repoRoot, workerId, { status: 'running' }, 999999);
+  const exitData = { exitCode: 0, completedAt: new Date().toISOString() };
+  writeFileSync(join(stateDir, 'exit.json'), JSON.stringify(exitData));
+
+  const manager = new WorkerManager(repoRoot);
+  const status = manager.getStatus(workerId);
+  assert.equal(status.status, 'completed');
+  assert.deepEqual(status.commits, []);
+  assert.deepEqual(status.filesChanged, []);
+  assert.equal(status.hasDirtyWorkingTree, false);
+
+  rmSync(repoRoot, { recursive: true, force: true });
+});
+
+test('getStatus defaults git fields when worker has no exit.json', () => {
+  const repoRoot = makeRepoRoot('exit-no-file');
+  const workerId = 'w-no-exit';
+  writeWorkerState(repoRoot, workerId, { status: 'running' }, 999999);
+
+  const manager = new WorkerManager(repoRoot);
+  const status = manager.getStatus(workerId);
+  assert.equal(status.status, 'completed_no_exit');
+  assert.deepEqual(status.commits, []);
+  assert.deepEqual(status.filesChanged, []);
+  assert.equal(status.hasDirtyWorkingTree, false);
+
+  rmSync(repoRoot, { recursive: true, force: true });
+});

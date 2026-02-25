@@ -241,6 +241,9 @@ export class WorkerManager {
     // Read exit.json if process is not running
     let exitCode: number | null = null;
     let completedAt: string | null = null;
+    let commits: string[] = [];
+    let filesChanged: string[] = [];
+    let hasDirtyWorkingTree = false;
     let logTail: string[] = [];
     let errorSummary: string | null = null;
     const exitPath = join(stateDir, 'exit.json');
@@ -251,6 +254,9 @@ export class WorkerManager {
           const exitData = JSON.parse(readFileSync(exitPath, 'utf-8'));
           exitCode = exitData.exitCode ?? null;
           completedAt = exitData.completedAt ?? null;
+          if (Array.isArray(exitData.commits)) commits = exitData.commits;
+          if (Array.isArray(exitData.filesChanged)) filesChanged = exitData.filesChanged;
+          if (typeof exitData.hasDirtyWorkingTree === 'boolean') hasDirtyWorkingTree = exitData.hasDirtyWorkingTree;
           
           // Set status based on exit code
           if (exitCode === 0) {
@@ -310,6 +316,9 @@ export class WorkerManager {
       completedAt,
       logTail,
       errorSummary,
+      commits,
+      filesChanged,
+      hasDirtyWorkingTree,
     };
   }
 
