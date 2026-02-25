@@ -80,6 +80,12 @@ export interface WorkerStatus extends WorkerInfo {
   completedAt: string | null;
   logTail: string[];
   errorSummary: string | null;
+  /** Commit messages on the worker branch (from exit.json git report) */
+  commits: string[];
+  /** Files changed on the worker branch (from exit.json git report) */
+  filesChanged: string[];
+  /** Whether the worker had uncommitted changes at exit time */
+  hasDirtyWorkingTree: boolean;
 }
 
 /** Result of cleaning up a worker */
