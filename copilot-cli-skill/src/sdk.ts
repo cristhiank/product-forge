@@ -105,9 +105,9 @@ export class WorkerSDK {
     return this.manager.awaitCompletion(workerId, opts);
   }
 
-  /** List all workers */
-  listAll(): Array<{ workerId: string; pid: number; status: string }> {
-    return this.manager.listWorkers();
+  /** List all workers. Pass autoCleanup: true to remove non-running workers before returning. */
+  listAll(opts?: { autoCleanup?: boolean }): Array<{ workerId: string; pid: number; status: string }> {
+    return this.manager.listWorkers(opts);
   }
 
   /** Clean up a single worker */
