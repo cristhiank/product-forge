@@ -9,7 +9,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync, rmSync, readdirSync
 import { join, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
-import type { SpawnOptions, WorkerInfo, WorkerStatus, CleanupResult, WorkerMeta } from './types.js';
+import type { SpawnOptions, WorkerInfo, WorkerStatus, CleanupResult, WorkerMeta, ValidateWorkerOptions, ValidationResult } from './types.js';
 import { applyContext } from './context-providers.js';
 
 export class WorkerManager {
@@ -407,6 +407,124 @@ export class WorkerManager {
 
       sleepMs(pollInterval);
     }
+  }
+
+  /** Validate a worker's actual output: commits, file scope, build result */
+  validateWorker(workerId: string, opts: ValidateWorkerOptions = {}): ValidationResult {
+    const stateDir = join(this.workersDir, workerId);
+    if (!existsSync(stateDir)) {
+      throw new Error(`Worker not found: ${workerId}`);
+    }
+
+    const metaPath = join(stateDir, 'meta.json');
+    if (!existsSync(metaPath)) {
+      throw new Error(`Worker metadata not found: ${workerId}`);
+    }
+
+    const meta: WorkerMeta = JSON.parse(readFileSync(metaPath, 'utf-8'));
+    const requireCommits = opts.requireCommits !== false;
+
+    const result: ValidationResult = {
+      valid: true,
+      hasCommits: false,
+      commitCount: 0,
+      commitMessages: [],
+      filesChanged: [],
+      scopeViolations: [],
+      buildPassed: null,
+      buildOutput: '',
+      errors: [],
+    };
+
+    // 1. Get commits on worker branch vs HEAD
+    try {
+      const commitLog = execSync(
+        `git log --oneline HEAD..${meta.branch_name}`,
+        { cwd: this.repoRoot, stdio: 'pipe', encoding: 'utf-8' }
+      ).trim();
+      if (commitLog.length > 0) {
+        const lines = commitLog.split('\n').filter(l => l.trim().length > 0);
+        result.hasCommits = true;
+        result.commitCount = lines.length;
+        result.commitMessages = lines.map(l => l.replace(/^[a-f0-9]+ /, ''));
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      result.errors.push(`Failed to read commits: ${msg}`);
+      result.valid = false;
+    }
+
+    if (requireCommits && !result.hasCommits) {
+      result.valid = false;
+      result.errors.push('No commits found on worker branch');
+    }
+
+    // 2. Get changed files
+    try {
+      const diffOutput = execSync(
+        `git diff --name-only HEAD...${meta.branch_name}`,
+        { cwd: this.repoRoot, stdio: 'pipe', encoding: 'utf-8' }
+      ).trim();
+      if (diffOutput.length > 0) {
+        result.filesChanged = diffOutput.split('\n').filter(l => l.trim().length > 0);
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      result.errors.push(`Failed to read changed files: ${msg}`);
+      result.valid = false;
+    }
+
+    // 3. Check path scope
+    if (result.filesChanged.length > 0) {
+      for (const file of result.filesChanged) {
+        // Check required prefixes (file must match at least one)
+        if (opts.requiredPathPrefixes && opts.requiredPathPrefixes.length > 0) {
+          const matchesRequired = opts.requiredPathPrefixes.some(prefix => file.startsWith(prefix));
+          if (!matchesRequired) {
+            result.scopeViolations.push(file);
+          }
+        }
+        // Check forbidden prefixes (file must not match any)
+        if (opts.forbiddenPathPrefixes && opts.forbiddenPathPrefixes.length > 0) {
+          const matchesForbidden = opts.forbiddenPathPrefixes.some(prefix => file.startsWith(prefix));
+          if (matchesForbidden && !result.scopeViolations.includes(file)) {
+            result.scopeViolations.push(file);
+          }
+        }
+      }
+      if (result.scopeViolations.length > 0) {
+        result.valid = false;
+      }
+    }
+
+    // 4. Run build command in worktree if provided
+    if (opts.buildCommand && meta.worktree_path && existsSync(meta.worktree_path)) {
+      try {
+        const buildOutput = execSync(opts.buildCommand, {
+          cwd: meta.worktree_path,
+          stdio: 'pipe',
+          encoding: 'utf-8',
+          timeout: 120000,
+        });
+        result.buildPassed = true;
+        result.buildOutput = buildOutput;
+      } catch (err: unknown) {
+        result.buildPassed = false;
+        const execErr = err as { stdout?: string; stderr?: string; message?: string };
+        result.buildOutput = (execErr.stdout ?? '') + (execErr.stderr ?? '');
+        if (!result.buildOutput) {
+          result.buildOutput = execErr.message ?? 'Build failed';
+        }
+        result.valid = false;
+      }
+    } else if (opts.buildCommand && (!meta.worktree_path || !existsSync(meta.worktree_path))) {
+      result.buildPassed = false;
+      result.buildOutput = 'Worktree does not exist';
+      result.errors.push('Cannot run build: worktree does not exist');
+      result.valid = false;
+    }
+
+    return result;
   }
 
   /** Clean up a worker: kill process, remove worktree, delete state */

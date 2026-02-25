@@ -5,7 +5,7 @@
  */
 
 import { WorkerManager } from './workers.js';
-import type { SpawnOptions, WorkerInfo, WorkerStatus, CleanupResult, AwaitOptions } from './types.js';
+import type { SpawnOptions, WorkerInfo, WorkerStatus, CleanupResult, AwaitOptions, ValidateWorkerOptions, ValidationResult } from './types.js';
 
 export interface WorkerSDKOptions {
   /** Default agent for spawned workers */
@@ -113,6 +113,11 @@ export class WorkerSDK {
   /** Clean up a single worker */
   cleanupWorker(workerId: string, force = false): CleanupResult {
     return this.manager.cleanup(workerId, force);
+  }
+
+  /** Validate a worker's output: commits, file scope, build result */
+  validateWorker(workerId: string, opts?: ValidateWorkerOptions): ValidationResult {
+    return this.manager.validateWorker(workerId, opts);
   }
 
   /** Clean up all stopped workers */

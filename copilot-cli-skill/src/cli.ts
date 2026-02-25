@@ -187,6 +187,31 @@ export function runCli(): void {
       }
     });
 
+  // ============ validate command ============
+  program
+    .command('validate')
+    .description('Validate a worker\'s output: commits, file scope, build result')
+    .argument('<worker-id>', 'Worker ID to validate')
+    .option('--build-command <cmd>', 'Build command to run in the worktree')
+    .option('--required-path-prefix <prefix>', 'Files must be under these prefixes (repeatable)', collectStringOption, [])
+    .option('--forbidden-path-prefix <prefix>', 'Files must NOT be under these prefixes (repeatable)', collectStringOption, [])
+    .option('--no-require-commits', 'Do not require commits on the worker branch')
+    .action((workerId, opts) => {
+      try {
+        const repoRoot = resolve(program.opts().repoRoot);
+        const manager = new WorkerManager(repoRoot);
+        const result = manager.validateWorker(workerId, {
+          buildCommand: opts.buildCommand,
+          requiredPathPrefixes: opts.requiredPathPrefix?.length ? opts.requiredPathPrefix : undefined,
+          forbiddenPathPrefixes: opts.forbiddenPathPrefix?.length ? opts.forbiddenPathPrefix : undefined,
+          requireCommits: opts.requireCommits,
+        });
+        output(result, program.opts().pretty);
+      } catch (err) {
+        handleError(err);
+      }
+    });
+
   // ============ cleanup-all command ============
   program
     .command('cleanup-all')
