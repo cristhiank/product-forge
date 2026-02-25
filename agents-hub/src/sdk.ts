@@ -365,6 +365,16 @@ export class HubSDK {
   syncAll(): WorkerSyncResult[] {
     return this.hub.workerSyncAll();
   }
+
+  /** Deregister a worker — marks it as completed (preserves history) */
+  deregisterWorker(id: string): boolean {
+    return this.hub.workerDeregister(id);
+  }
+
+  /** Prune stale workers with dead PIDs */
+  pruneWorkers(): { pruned: string[] } {
+    return this.hub.workerPrune();
+  }
 }
 
 /** Merge base tags with optional additional tags, deduplicated */

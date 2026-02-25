@@ -718,6 +718,37 @@ export function runCli(): void {
       }
     });
 
+  worker
+    .command('deregister')
+    .description('Deregister a worker (mark as completed)')
+    .requiredOption('--id <id>', 'Worker ID to deregister')
+    .action((opts) => {
+      try {
+        const dbPath = program.opts().db;
+        const hub = new Hub(dbPath);
+        const result = hub.workerDeregister(opts.id);
+        hub.close();
+        output({ id: opts.id, deregistered: result }, program.opts().pretty);
+      } catch (err) {
+        handleError(err);
+      }
+    });
+
+  worker
+    .command('prune')
+    .description('Prune stale workers with dead PIDs')
+    .action(() => {
+      try {
+        const dbPath = program.opts().db;
+        const hub = new Hub(dbPath);
+        const result = hub.workerPrune();
+        hub.close();
+        output(result, program.opts().pretty);
+      } catch (err) {
+        handleError(err);
+      }
+    });
+
   // ============ serve command ============
   program
     .command('serve')

@@ -15,6 +15,8 @@ import {
   listWorkers,
   updateWorker,
   removeWorker,
+  deregisterWorker,
+  pruneWorkers,
 } from '../../src/core/workers.js';
 
 describe('workers module', () => {
@@ -377,6 +379,126 @@ describe('workers module', () => {
       } finally {
         rmSync(sessionStateDir, { recursive: true, force: true });
       }
+    });
+  });
+
+  describe('deregisterWorker', () => {
+    it('should mark active worker as completed', () => {
+      registerWorker(db, { id: 'worker-1', agentType: 'Executor' });
+
+      const result = deregisterWorker(db, 'worker-1');
+      expect(result).toBe(true);
+
+      const worker = getWorker(db, 'worker-1');
+      expect(worker).not.toBeNull();
+      expect(worker!.status).toBe('completed');
+      expect(worker!.completedAt).toBeDefined();
+      expect(worker!.completedAt).not.toBeNull();
+    });
+
+    it('should return false for non-existent worker', () => {
+      const result = deregisterWorker(db, 'non-existent');
+      expect(result).toBe(false);
+    });
+
+    it('should return false for already completed worker', () => {
+      registerWorker(db, { id: 'worker-1', agentType: 'Executor' });
+      updateWorker(db, 'worker-1', { status: 'completed', completedAt: '2024-01-15T10:00:00Z' });
+
+      const result = deregisterWorker(db, 'worker-1');
+      expect(result).toBe(false);
+    });
+
+    it('should return false for failed worker', () => {
+      registerWorker(db, { id: 'worker-1', agentType: 'Executor' });
+      updateWorker(db, 'worker-1', { status: 'failed' });
+
+      const result = deregisterWorker(db, 'worker-1');
+      expect(result).toBe(false);
+    });
+
+    it('should not affect other workers', () => {
+      registerWorker(db, { id: 'worker-1', agentType: 'Executor' });
+      registerWorker(db, { id: 'worker-2', agentType: 'Scout' });
+
+      deregisterWorker(db, 'worker-1');
+
+      const worker2 = getWorker(db, 'worker-2');
+      expect(worker2!.status).toBe('active');
+    });
+
+    it('should preserve worker data (not delete)', () => {
+      registerWorker(db, {
+        id: 'worker-1',
+        agentType: 'Executor',
+        agentName: 'exec-1',
+        metadata: { task: 'auth' },
+      });
+
+      deregisterWorker(db, 'worker-1');
+
+      const worker = getWorker(db, 'worker-1');
+      expect(worker).not.toBeNull();
+      expect(worker!.agentType).toBe('Executor');
+      expect(worker!.agentName).toBe('exec-1');
+      expect(worker!.metadata).toEqual({ task: 'auth' });
+    });
+  });
+
+  describe('pruneWorkers', () => {
+    it('should prune workers with dead PIDs', () => {
+      // Use a PID that is certainly not running (very high number)
+      registerWorker(db, { id: 'worker-1', agentType: 'Executor', pid: 99999999 });
+
+      const result = pruneWorkers(db);
+      expect(result.pruned).toContain('worker-1');
+
+      const worker = getWorker(db, 'worker-1');
+      expect(worker!.status).toBe('completed');
+      expect(worker!.completedAt).not.toBeNull();
+    });
+
+    it('should not prune workers without PIDs', () => {
+      registerWorker(db, { id: 'worker-1', agentType: 'Executor' });
+
+      const result = pruneWorkers(db);
+      expect(result.pruned).toEqual([]);
+
+      const worker = getWorker(db, 'worker-1');
+      expect(worker!.status).toBe('active');
+    });
+
+    it('should not prune already completed workers', () => {
+      registerWorker(db, { id: 'worker-1', agentType: 'Executor', pid: 99999999 });
+      updateWorker(db, 'worker-1', { status: 'completed', completedAt: '2024-01-15T10:00:00Z' });
+
+      const result = pruneWorkers(db);
+      expect(result.pruned).toEqual([]);
+    });
+
+    it('should not prune workers with alive PIDs', () => {
+      // Use the current process PID (definitely alive)
+      registerWorker(db, { id: 'worker-1', agentType: 'Executor', pid: process.pid });
+
+      const result = pruneWorkers(db);
+      expect(result.pruned).toEqual([]);
+
+      const worker = getWorker(db, 'worker-1');
+      expect(worker!.status).toBe('active');
+    });
+
+    it('should return all pruned worker IDs', () => {
+      registerWorker(db, { id: 'worker-1', agentType: 'Executor', pid: 99999999 });
+      registerWorker(db, { id: 'worker-2', agentType: 'Scout', pid: 99999998 });
+      registerWorker(db, { id: 'worker-3', agentType: 'Planner', pid: process.pid }); // alive
+
+      const result = pruneWorkers(db);
+      expect(result.pruned).toHaveLength(2);
+      expect(result.pruned).toContain('worker-1');
+      expect(result.pruned).toContain('worker-2');
+
+      const worker3 = getWorker(db, 'worker-3');
+      expect(worker3!.status).toBe('active');
     });
   });
 });

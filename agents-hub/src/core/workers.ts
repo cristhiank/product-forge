@@ -388,3 +388,45 @@ export function removeWorker(db: Database, id: string): boolean {
   const result = db.prepare('DELETE FROM workers WHERE id = ?').run(id);
   return result.changes > 0;
 }
+
+/** Deregister a worker by marking it as completed (preserves telemetry history) */
+export function deregisterWorker(db: Database, id: string): boolean {
+  const completedAt = now();
+  const result = db.prepare(
+    `UPDATE workers SET status = 'completed', completed_at = ? WHERE id = ? AND status = 'active'`
+  ).run(completedAt, id);
+  return result.changes > 0;
+}
+
+/** Check if a PID is alive */
+function isPidAlive(pid: number): boolean {
+  if (!Number.isFinite(pid) || pid <= 0) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Prune stale workers: mark active workers with dead PIDs as completed */
+export function pruneWorkers(db: Database): { pruned: string[] } {
+  const completedAt = now();
+  const rows = db.prepare(
+    `SELECT id, pid FROM workers WHERE status = 'active' AND pid IS NOT NULL`
+  ).all() as Array<{ id: string; pid: number }>;
+
+  const pruned: string[] = [];
+  const stmt = db.prepare(
+    `UPDATE workers SET status = 'completed', completed_at = ? WHERE id = ?`
+  );
+
+  for (const row of rows) {
+    if (!isPidAlive(row.pid)) {
+      stmt.run(completedAt, row.id);
+      pruned.push(row.id);
+    }
+  }
+
+  return { pruned };
+}

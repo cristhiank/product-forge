@@ -530,6 +530,9 @@ export class WorkerManager {
       execSync('git worktree prune', { cwd: this.repoRoot, stdio: 'pipe' });
     } catch { /* ignore */ }
 
+    // Best-effort: deregister worker from agents-hub so it doesn't persist as active
+    tryDeregisterFromHub(workerId, this.repoRoot);
+
     return {
       workerId,
       status: 'cleaned',
@@ -583,4 +586,31 @@ function writeSyntheticExitMetadata(exitPath: string, terminatedBy: string): voi
     terminatedBy,
   };
   writeFileSync(exitPath, `${JSON.stringify(exitData, null, 2)}\n`);
+}
+
+/**
+ * Best-effort deregister a worker from agents-hub.
+ * Uses git to resolve the hub DB path and sqlite3 CLI to update the record.
+ * Swallows all errors — cleanup must never fail due to hub unavailability.
+ */
+function tryDeregisterFromHub(workerId: string, repoRoot: string): void {
+  try {
+    const gitCommonDir = execSync('git rev-parse --git-common-dir', {
+      cwd: repoRoot,
+      encoding: 'utf8',
+      stdio: ['pipe', 'pipe', 'pipe'],
+    }).trim();
+    const dbPath = resolve(repoRoot, gitCommonDir, 'devpartner', 'hub.db');
+    if (!existsSync(dbPath)) return;
+
+    // Use sqlite3 CLI for zero-dependency hub interaction
+    const sql = `UPDATE workers SET status='completed', completed_at=datetime('now') WHERE id='${workerId.replace(/'/g, "''")}' AND status='active';`;
+    execSync(`sqlite3 "${dbPath}" "${sql}"`, {
+      cwd: repoRoot,
+      stdio: 'pipe',
+      timeout: 5000,
+    });
+  } catch {
+    // Best-effort: silently ignore if hub DB or sqlite3 is unavailable
+  }
 }
