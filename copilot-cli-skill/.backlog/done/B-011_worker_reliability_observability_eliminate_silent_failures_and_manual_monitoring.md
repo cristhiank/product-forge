@@ -1,10 +1,11 @@
 # B-011: Worker Reliability & Observability — Eliminate Silent Failures and Manual Monitoring
 
 **Created:** 2026-02-25  
+**Completed:** 2026-02-25  
 **Updated:** 2026-02-25  
 **Type:** Epic  
 **Priority:** High  
-**Status:** Not Started  
+**Status:** Done  
 **Estimate:** TBD  
 **Verified-By:** N/A  
 **Parent:** N/A  
