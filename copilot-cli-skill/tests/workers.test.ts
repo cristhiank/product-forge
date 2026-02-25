@@ -182,6 +182,7 @@ test('sdk.spawnWorker forwards taskId into manager.spawn options', () => {
       return {
         workerId: 'w1',
         pid: 1,
+        copilotPid: 0,
         worktreePath: '/tmp/w1',
         branchName: 'worker/w1',
         stateDir: '/tmp/state',
@@ -492,4 +493,65 @@ test('sdk.validateWorker delegates to manager.validateWorker', () => {
   const result = sdk.validateWorker('w1', { requiredPathPrefixes: ['src/'] });
   assert.deepEqual(result, mockResult);
   assert.deepEqual(capturedOpts?.requiredPathPrefixes, ['src/']);
+});
+
+// ──────────────────────────────────────────────────
+// Dual-PID tracking tests (copilot.pid)
+// ──────────────────────────────────────────────────
+
+test('getStatus returns running when only copilot.pid process is alive', () => {
+  const repoRoot = makeRepoRoot('copilot-pid-alive');
+  const workerId = 'w-copilot-alive';
+  const stateDir = writeWorkerState(repoRoot, workerId, { status: 'running' }, 999999);
+  // wrapper PID 999999 is dead; write copilot.pid with current process PID (alive)
+  writeFileSync(join(stateDir, 'copilot.pid'), String(process.pid));
+
+  const manager = new WorkerManager(repoRoot);
+  const status = manager.getStatus(workerId);
+  assert.equal(status.status, 'running', 'should be running because copilot PID is alive');
+  assert.equal(status.copilotPid, process.pid);
+
+  rmSync(repoRoot, { recursive: true, force: true });
+});
+
+test('getStatus returns completed_no_exit when both wrapper and copilot PIDs are dead', () => {
+  const repoRoot = makeRepoRoot('both-pids-dead');
+  const workerId = 'w-both-dead';
+  const stateDir = writeWorkerState(repoRoot, workerId, { status: 'running' }, 999999);
+  // Both PIDs are dead (999998 and 999999 don't exist)
+  writeFileSync(join(stateDir, 'copilot.pid'), '999998');
+
+  const manager = new WorkerManager(repoRoot);
+  const status = manager.getStatus(workerId);
+  assert.equal(status.status, 'completed_no_exit', 'should be completed_no_exit when both PIDs are dead');
+  assert.equal(status.copilotPid, 999998);
+
+  rmSync(repoRoot, { recursive: true, force: true });
+});
+
+test('getStatus returns copilotPid=0 when copilot.pid file does not exist', () => {
+  const repoRoot = makeRepoRoot('no-copilot-pid');
+  const workerId = 'w-no-copilot-pid';
+  writeWorkerState(repoRoot, workerId, { status: 'running' }, process.pid);
+  // No copilot.pid file written
+
+  const manager = new WorkerManager(repoRoot);
+  const status = manager.getStatus(workerId);
+  assert.equal(status.status, 'running', 'wrapper PID alive means running');
+  assert.equal(status.copilotPid, 0, 'copilotPid should be 0 when file does not exist');
+
+  rmSync(repoRoot, { recursive: true, force: true });
+});
+
+test('getStatus includes copilotPid in returned status', () => {
+  const repoRoot = makeRepoRoot('copilot-pid-field');
+  const workerId = 'w-copilot-field';
+  const stateDir = writeWorkerState(repoRoot, workerId, { status: 'running' }, process.pid);
+  writeFileSync(join(stateDir, 'copilot.pid'), '12345');
+
+  const manager = new WorkerManager(repoRoot);
+  const status = manager.getStatus(workerId);
+  assert.equal(status.copilotPid, 12345, 'copilotPid should reflect file content');
+
+  rmSync(repoRoot, { recursive: true, force: true });
 });

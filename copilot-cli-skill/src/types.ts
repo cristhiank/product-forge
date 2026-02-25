@@ -58,6 +58,8 @@ export interface SpawnOptions {
 export interface WorkerInfo {
   workerId: string;
   pid: number;
+  /** PID of the actual copilot process spawned by the wrapper (0 if unknown) */
+  copilotPid: number;
   worktreePath: string;
   branchName: string;
   stateDir: string;

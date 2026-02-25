@@ -192,6 +192,7 @@ export class WorkerManager {
     return {
       workerId,
       pid,
+      copilotPid: 0,
       worktreePath,
       branchName,
       stateDir,
@@ -217,16 +218,22 @@ export class WorkerManager {
 
     // Check PID
     let pid = 0;
+    let copilotPid = 0;
     let status: WorkerStatus['status'] = metaStatus === 'spawn_failed' ? 'spawn_failed' : 'unknown';
     const pidPath = join(stateDir, 'worker.pid');
+    const copilotPidPath = join(stateDir, 'copilot.pid');
     if (status !== 'spawn_failed' && existsSync(pidPath)) {
       pid = parseInt(readFileSync(pidPath, 'utf-8').trim(), 10);
-      const isRunning = isProcessRunning(pid);
+      if (existsSync(copilotPidPath)) {
+        copilotPid = parseInt(readFileSync(copilotPidPath, 'utf-8').trim(), 10);
+      }
+      const wrapperRunning = isProcessRunning(pid);
+      const copilotRunning = copilotPid > 0 && isProcessRunning(copilotPid);
       
-      if (isRunning) {
+      if (wrapperRunning || copilotRunning) {
         status = 'running';
       } else {
-        // Process not running, default to unknown (will check exit.json below)
+        // Neither process running, default to unknown (will check exit.json below)
         status = 'unknown';
       }
     }
@@ -286,6 +293,7 @@ export class WorkerManager {
     return {
       workerId,
       pid,
+      copilotPid,
       worktreePath: meta.worktree_path,
       branchName: meta.branch_name,
       stateDir,
@@ -555,66 +563,83 @@ export class WorkerManager {
 
     // Kill process if running
     const pidPath = join(stateDir, 'worker.pid');
+    const copilotPidPath = join(stateDir, 'copilot.pid');
     const exitPath = join(stateDir, 'exit.json');
     if (existsSync(pidPath)) {
       const pid = parseInt(readFileSync(pidPath, 'utf-8').trim(), 10);
-      if (isProcessRunning(pid)) {
+      let copilotPid = 0;
+      if (existsSync(copilotPidPath)) {
+        copilotPid = parseInt(readFileSync(copilotPidPath, 'utf-8').trim(), 10);
+      }
+
+      // Helper: terminate a single PID with SIGTERM, wait, escalate to group/force
+      const terminatePid = (targetPid: number): void => {
+        if (!isProcessRunning(targetPid)) return;
+
         const lifecycleStatus = meta.status ?? 'running';
         if (!force && lifecycleStatus === 'spawning') {
           throw new Error(`Worker ${workerId} is still spawning; cleanup requires force=true.`);
         }
         try {
-          process.kill(pid, 'SIGTERM');
+          process.kill(targetPid, 'SIGTERM');
         } catch { /* ignore */ }
 
         // Wait for graceful shutdown (max 5s)
         const deadline = Date.now() + 5000;
-        while (Date.now() < deadline && isProcessRunning(pid)) {
+        while (Date.now() < deadline && isProcessRunning(targetPid)) {
           sleepMs(500);
         }
 
         // Escalate to process tree TERM for any remaining descendants.
-        if (isProcessRunning(pid)) {
+        if (isProcessRunning(targetPid)) {
           if (process.platform === 'win32') {
             try {
-              execSync(`taskkill /PID ${pid} /T`, { stdio: 'ignore' });
+              execSync(`taskkill /PID ${targetPid} /T`, { stdio: 'ignore' });
             } catch { /* ignore */ }
           } else {
             try {
-              process.kill(-pid, 'SIGTERM');
+              process.kill(-targetPid, 'SIGTERM');
             } catch { /* ignore */ }
           }
 
           const groupDeadline = Date.now() + 5000;
-          while (Date.now() < groupDeadline && isProcessRunning(pid)) {
+          while (Date.now() < groupDeadline && isProcessRunning(targetPid)) {
             sleepMs(500);
           }
         }
 
         // Force kill if still running
-        if (isProcessRunning(pid)) {
+        if (isProcessRunning(targetPid)) {
           if (!force) {
-            throw new Error(`Process ${pid} still running. Use force=true to kill.`);
+            throw new Error(`Process ${targetPid} still running. Use force=true to kill.`);
           }
           if (process.platform === 'win32') {
             try {
-              execSync(`taskkill /PID ${pid} /T /F`, { stdio: 'ignore' });
+              execSync(`taskkill /PID ${targetPid} /T /F`, { stdio: 'ignore' });
             } catch { /* ignore */ }
           } else {
             try {
-              process.kill(-pid, 'SIGKILL');
+              process.kill(-targetPid, 'SIGKILL');
             } catch { /* ignore */ }
           }
 
           const killDeadline = Date.now() + 2000;
-          while (Date.now() < killDeadline && isProcessRunning(pid)) {
+          while (Date.now() < killDeadline && isProcessRunning(targetPid)) {
             sleepMs(500);
           }
         }
 
-        if (isProcessRunning(pid)) {
-          throw new Error(`Process ${pid} still running after force cleanup.`);
+        if (isProcessRunning(targetPid)) {
+          throw new Error(`Process ${targetPid} still running after force cleanup.`);
         }
+      };
+
+      // Terminate wrapper first, then copilot child
+      if (isProcessRunning(pid)) {
+        terminatePid(pid);
+      }
+      if (copilotPid > 0 && isProcessRunning(copilotPid)) {
+        terminatePid(copilotPid);
       }
 
       if (force && !isProcessRunning(pid) && !existsSync(exitPath)) {
