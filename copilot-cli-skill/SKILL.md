@@ -14,9 +14,9 @@ Manage autonomous Copilot CLI workers in isolated git worktrees.
 
 When this skill loads, do these immediately:
 
-1. **Check existing workers** — `$WORKER exec 'return sdk.listAll()'` — see if any workers are running
-2. **Check worker status** — `$WORKER exec 'return sdk.checkWorker("<id>")'` — get details on specific worker
-3. **Clean up stale workers** — `$WORKER exec 'return sdk.cleanupAll()'` — remove completed/failed workers
+1. **Clean up stale workers** — `$WORKER exec 'return sdk.cleanupAll()'` — remove completed/failed workers
+2. **Check existing workers** — `$WORKER exec 'return sdk.listAll()'` — see if any workers are running (or use `sdk.listAll({ autoCleanup: true })` to auto-clean stale workers before listing)
+3. **Check worker status** — `$WORKER exec 'return sdk.checkWorker("<id>")'` — get details on specific worker
 
 ## Quick Reference — SDK (Preferred)
 

@@ -305,8 +305,8 @@ export class WorkerManager {
     };
   }
 
-  /** List all workers with basic info */
-  listWorkers(): Array<{ workerId: string; pid: number; status: WorkerStatus['status']; taskId?: string }> {
+  /** List all workers with basic info. When autoCleanup is true, non-running workers are cleaned up before returning. */
+  listWorkers(opts?: { autoCleanup?: boolean }): Array<{ workerId: string; pid: number; status: WorkerStatus['status']; taskId?: string }> {
     if (!existsSync(this.workersDir)) return [];
 
     const entries = readdirSync(this.workersDir, { withFileTypes: true });
@@ -365,6 +365,18 @@ export class WorkerManager {
       }
 
       workers.push({ workerId, pid, status, taskId });
+    }
+
+    if (opts?.autoCleanup) {
+      const stale = workers.filter(w => w.status !== 'running' && w.status !== 'spawning');
+      for (const w of stale) {
+        try {
+          this.cleanup(w.workerId, true);
+        } catch {
+          // Skip workers that fail to clean up
+        }
+      }
+      return workers.filter(w => !stale.some(s => s.workerId === w.workerId));
     }
 
     return workers;

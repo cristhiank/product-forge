@@ -126,6 +126,54 @@ test('listWorkers surfaces spawn_failed and completed_no_exit status from meta',
   rmSync(repoRoot, { recursive: true, force: true });
 });
 
+test('listWorkers with autoCleanup removes non-running workers and returns only running', () => {
+  const repoRoot = makeRepoRoot('list-autocleanup');
+  // spawn_failed worker (should be cleaned)
+  writeWorkerState(repoRoot, 'w-dead', { status: 'spawn_failed' }, 0);
+  // "running" worker (pid=process.pid so it looks alive)
+  writeWorkerState(repoRoot, 'w-alive', { status: 'running' }, process.pid);
+  const manager = new WorkerManager(repoRoot);
+
+  const workers = manager.listWorkers({ autoCleanup: true });
+  // Only the running worker should remain
+  assert.equal(workers.length, 1);
+  assert.equal(workers[0]?.workerId, 'w-alive');
+
+  rmSync(repoRoot, { recursive: true, force: true });
+});
+
+test('listWorkers without autoCleanup returns all workers including stale', () => {
+  const repoRoot = makeRepoRoot('list-no-autocleanup');
+  writeWorkerState(repoRoot, 'w-dead2', { status: 'spawn_failed' }, 0);
+  writeWorkerState(repoRoot, 'w-alive2', { status: 'running' }, process.pid);
+  const manager = new WorkerManager(repoRoot);
+
+  const workers = manager.listWorkers();
+  assert.equal(workers.length, 2);
+
+  rmSync(repoRoot, { recursive: true, force: true });
+});
+
+test('sdk.listAll passes autoCleanup option to manager', () => {
+  let capturedOpts: { autoCleanup?: boolean } | undefined;
+  const manager = {
+    spawn() { throw new Error('not used'); },
+    getStatus() { throw new Error('not used'); },
+    listWorkers(opts?: { autoCleanup?: boolean }) {
+      capturedOpts = opts;
+      return [{ workerId: 'w1', pid: 1, status: 'running' as const }];
+    },
+    cleanup() { throw new Error('not used'); },
+    awaitCompletion() { throw new Error('not used'); },
+    validateWorker() { throw new Error('not used'); },
+  } as unknown as WorkerManager;
+  const sdk = new WorkerSDK(manager);
+
+  const result = sdk.listAll({ autoCleanup: true });
+  assert.equal(result.length, 1);
+  assert.deepEqual(capturedOpts, { autoCleanup: true });
+});
+
 test('sdk.spawnWorker forwards taskId into manager.spawn options', () => {
   let capturedTaskId: string | undefined;
   const manager = {
