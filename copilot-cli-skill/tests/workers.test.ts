@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 import { WorkerManager } from '../src/workers.js';
 import { WorkerSDK } from '../src/sdk.js';
@@ -219,4 +219,229 @@ test('sdk.awaitWorker delegates to manager.awaitCompletion', () => {
   const result = sdk.awaitWorker('sdk-aw');
   assert.equal(result.status, 'completed');
   rmSync(root, { recursive: true, force: true });
+});
+
+// ──────────────────────────────────────────────────
+// validateWorker tests
+// ──────────────────────────────────────────────────
+
+import { execSync } from 'node:child_process';
+import type { ValidateWorkerOptions, ValidationResult } from '../src/types.js';
+
+function makeGitRepo(testName: string): string {
+  const root = join(tmpdir(), `validate-test-${testName}-${Date.now()}-${Math.random()}`);
+  mkdirSync(root, { recursive: true });
+  execSync('git init', { cwd: root, stdio: 'pipe' });
+  execSync('git config user.email "test@test.com"', { cwd: root, stdio: 'pipe' });
+  execSync('git config user.name "Test"', { cwd: root, stdio: 'pipe' });
+  writeFileSync(join(root, 'README.md'), 'init');
+  execSync('git add -A && git commit -m "init"', { cwd: root, stdio: 'pipe' });
+  mkdirSync(join(root, '.copilot-workers'), { recursive: true });
+  return root;
+}
+
+function createWorkerBranch(repoRoot: string, workerId: string, branchName: string, files: Record<string, string>): string {
+  const stateDir = join(repoRoot, '.copilot-workers', workerId);
+  mkdirSync(stateDir, { recursive: true });
+  // Create branch and add commits
+  execSync(`git checkout -b "${branchName}"`, { cwd: repoRoot, stdio: 'pipe' });
+  for (const [filePath, content] of Object.entries(files)) {
+    const fullPath = join(repoRoot, filePath);
+    mkdirSync(dirname(fullPath), { recursive: true });
+    writeFileSync(fullPath, content);
+  }
+  execSync('git add -A', { cwd: repoRoot, stdio: 'pipe' });
+  execSync(`git commit -m "worker changes"`, { cwd: repoRoot, stdio: 'pipe' });
+  execSync('git checkout -', { cwd: repoRoot, stdio: 'pipe' });
+  // Write meta
+  const meta: WorkerMeta = {
+    worker_id: workerId,
+    pid: 0,
+    worktree_path: repoRoot,
+    branch_name: branchName,
+    prompt: 'test',
+    agent: '',
+    model: '',
+    started_at: new Date().toISOString(),
+    status: 'completed',
+  };
+  writeFileSync(join(stateDir, 'meta.json'), JSON.stringify(meta, null, 2));
+  writeFileSync(join(stateDir, 'worker.pid'), '0');
+  writeFileSync(join(stateDir, 'output.log'), '');
+  return stateDir;
+}
+
+test('validateWorker detects commits and files within required scope', () => {
+  const root = makeGitRepo('validate-pass');
+  createWorkerBranch(root, 'v-pass', 'worker/v-pass', { 'src/auth/login.ts': 'export const login = () => {};' });
+
+  const manager = new WorkerManager(root);
+  const result = manager.validateWorker('v-pass', {
+    requiredPathPrefixes: ['src/auth/'],
+  });
+
+  assert.equal(result.valid, true);
+  assert.equal(result.hasCommits, true);
+  assert.equal(result.commitCount, 1);
+  assert.deepEqual(result.scopeViolations, []);
+  assert.ok(result.filesChanged.includes('src/auth/login.ts'));
+
+  rmSync(root, { recursive: true, force: true });
+});
+
+test('validateWorker reports scope violations for files outside required prefix', () => {
+  const root = makeGitRepo('validate-scope-fail');
+  createWorkerBranch(root, 'v-scope', 'worker/v-scope', {
+    'src/auth/login.ts': 'export const login = () => {};',
+    'verticals-forms-api/handler.ts': 'bad scope',
+  });
+
+  const manager = new WorkerManager(root);
+  const result = manager.validateWorker('v-scope', {
+    requiredPathPrefixes: ['src/auth/'],
+  });
+
+  assert.equal(result.valid, false);
+  assert.ok(result.scopeViolations.includes('verticals-forms-api/handler.ts'));
+  assert.ok(!result.scopeViolations.includes('src/auth/login.ts'));
+
+  rmSync(root, { recursive: true, force: true });
+});
+
+test('validateWorker reports scope violations for forbidden prefixes', () => {
+  const root = makeGitRepo('validate-forbidden');
+  createWorkerBranch(root, 'v-forbidden', 'worker/v-forbidden', {
+    'src/auth/login.ts': 'ok',
+    'node_modules/pkg/index.js': 'forbidden',
+  });
+
+  const manager = new WorkerManager(root);
+  const result = manager.validateWorker('v-forbidden', {
+    forbiddenPathPrefixes: ['node_modules/'],
+  });
+
+  assert.equal(result.valid, false);
+  assert.ok(result.scopeViolations.includes('node_modules/pkg/index.js'));
+
+  rmSync(root, { recursive: true, force: true });
+});
+
+test('validateWorker fails when no commits and requireCommits is true', () => {
+  const root = makeGitRepo('validate-no-commits');
+  // Create branch with no commits (same as HEAD)
+  execSync('git checkout -b "worker/v-nocommit"', { cwd: root, stdio: 'pipe' });
+  execSync('git checkout -', { cwd: root, stdio: 'pipe' });
+  const stateDir = join(root, '.copilot-workers', 'v-nocommit');
+  mkdirSync(stateDir, { recursive: true });
+  const meta: WorkerMeta = {
+    worker_id: 'v-nocommit',
+    pid: 0,
+    worktree_path: root,
+    branch_name: 'worker/v-nocommit',
+    prompt: 'test',
+    agent: '',
+    model: '',
+    started_at: new Date().toISOString(),
+    status: 'completed',
+  };
+  writeFileSync(join(stateDir, 'meta.json'), JSON.stringify(meta, null, 2));
+  writeFileSync(join(stateDir, 'worker.pid'), '0');
+  writeFileSync(join(stateDir, 'output.log'), '');
+
+  const manager = new WorkerManager(root);
+  const result = manager.validateWorker('v-nocommit');
+
+  assert.equal(result.valid, false);
+  assert.equal(result.hasCommits, false);
+  assert.equal(result.commitCount, 0);
+  assert.ok(result.errors.some(e => e.includes('No commits found')));
+
+  rmSync(root, { recursive: true, force: true });
+});
+
+test('validateWorker succeeds with no commits when requireCommits is false', () => {
+  const root = makeGitRepo('validate-no-commits-ok');
+  execSync('git checkout -b "worker/v-nocommit2"', { cwd: root, stdio: 'pipe' });
+  execSync('git checkout -', { cwd: root, stdio: 'pipe' });
+  const stateDir = join(root, '.copilot-workers', 'v-nocommit2');
+  mkdirSync(stateDir, { recursive: true });
+  const meta: WorkerMeta = {
+    worker_id: 'v-nocommit2',
+    pid: 0,
+    worktree_path: root,
+    branch_name: 'worker/v-nocommit2',
+    prompt: 'test',
+    agent: '',
+    model: '',
+    started_at: new Date().toISOString(),
+    status: 'completed',
+  };
+  writeFileSync(join(stateDir, 'meta.json'), JSON.stringify(meta, null, 2));
+  writeFileSync(join(stateDir, 'worker.pid'), '0');
+  writeFileSync(join(stateDir, 'output.log'), '');
+
+  const manager = new WorkerManager(root);
+  const result = manager.validateWorker('v-nocommit2', { requireCommits: false });
+
+  assert.equal(result.valid, true);
+  assert.equal(result.hasCommits, false);
+
+  rmSync(root, { recursive: true, force: true });
+});
+
+test('validateWorker runs build command and captures pass', () => {
+  const root = makeGitRepo('validate-build-pass');
+  createWorkerBranch(root, 'v-build-pass', 'worker/v-build-pass', { 'src/index.ts': 'ok' });
+
+  const manager = new WorkerManager(root);
+  const result = manager.validateWorker('v-build-pass', {
+    buildCommand: 'echo "build ok"',
+    requireCommits: false,
+  });
+
+  assert.equal(result.buildPassed, true);
+  assert.ok(result.buildOutput.includes('build ok'));
+
+  rmSync(root, { recursive: true, force: true });
+});
+
+test('validateWorker runs build command and captures failure', () => {
+  const root = makeGitRepo('validate-build-fail');
+  createWorkerBranch(root, 'v-build-fail', 'worker/v-build-fail', { 'src/index.ts': 'bad' });
+
+  const manager = new WorkerManager(root);
+  const result = manager.validateWorker('v-build-fail', {
+    buildCommand: 'echo "compile error" && exit 1',
+    requireCommits: false,
+  });
+
+  assert.equal(result.valid, false);
+  assert.equal(result.buildPassed, false);
+  assert.ok(result.buildOutput.includes('compile error'));
+
+  rmSync(root, { recursive: true, force: true });
+});
+
+test('sdk.validateWorker delegates to manager.validateWorker', () => {
+  let capturedOpts: ValidateWorkerOptions | undefined;
+  const mockResult: ValidationResult = {
+    valid: true, hasCommits: true, commitCount: 1, commitMessages: ['test'],
+    filesChanged: ['a.ts'], scopeViolations: [], buildPassed: null, buildOutput: '', errors: [],
+  };
+  const manager = {
+    spawn() { throw new Error('not used'); },
+    getStatus() { throw new Error('not used'); },
+    listWorkers() { return []; },
+    cleanup() { throw new Error('not used'); },
+    awaitCompletion() { throw new Error('not used'); },
+    validateWorker(_id: string, opts?: ValidateWorkerOptions) {
+      capturedOpts = opts;
+      return mockResult;
+    },
+  } as unknown as WorkerManager;
+  const sdk = new WorkerSDK(manager);
+
+  const result = sdk.validateWorker('w1', { requiredPathPrefixes: ['src/'] });
+  assert.deepEqual(result, mockResult);
+  assert.deepEqual(capturedOpts?.requiredPathPrefixes, ['src/']);
 });

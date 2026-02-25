@@ -141,6 +141,40 @@ export interface WorkerContextProvider {
   };
 }
 
+/** Options for validateWorker */
+export interface ValidateWorkerOptions {
+  /** Build command to run in the worktree (e.g. "dotnet build Kania.slnx -v minimal") */
+  buildCommand?: string;
+  /** Changed files must be under at least one of these path prefixes */
+  requiredPathPrefixes?: string[];
+  /** Changed files must NOT be under any of these path prefixes */
+  forbiddenPathPrefixes?: string[];
+  /** Require at least one commit on the worker branch (default: true) */
+  requireCommits?: boolean;
+}
+
+/** Result of validateWorker */
+export interface ValidationResult {
+  /** Overall pass/fail */
+  valid: boolean;
+  /** Whether the worker branch has commits beyond HEAD */
+  hasCommits: boolean;
+  /** Number of commits on the worker branch */
+  commitCount: number;
+  /** Commit messages on the worker branch */
+  commitMessages: string[];
+  /** Files changed on the worker branch */
+  filesChanged: string[];
+  /** Files outside required prefixes or inside forbidden prefixes */
+  scopeViolations: string[];
+  /** Build pass/fail (null if no buildCommand provided) */
+  buildPassed: boolean | null;
+  /** Build stdout+stderr output */
+  buildOutput: string;
+  /** Error messages encountered during validation */
+  errors: string[];
+}
+
 /** Result of applying context providers */
 export interface ContextProviderResult {
   /** Providers that were discovered and applied */

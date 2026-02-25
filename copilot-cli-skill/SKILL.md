@@ -105,6 +105,7 @@ The dedup check considers workers in `running` or `spawning` status as active. W
 | `sdk.listAll()` | List all workers with basic info (id, pid, status) |
 | `sdk.cleanupWorker(workerId, force?)` | Kill process, remove worktree, clean state |
 | `sdk.cleanupAll(force?)` | Clean up all non-running workers (or all if force=true) |
+| `sdk.validateWorker(workerId, opts?)` | Validate worker output: commits, file scope, build. opts: `{ buildCommand?, requiredPathPrefixes?, forbiddenPathPrefixes?, requireCommits? (default true) }`. Returns `ValidationResult`. |
 
 **Worker Status Values:**
 
@@ -146,6 +147,7 @@ The `manager` object is also in scope:
 | `manager.getStatus(workerId)` | Detailed WorkerStatus |
 | `manager.listWorkers()` | List basic worker info |
 | `manager.cleanup(workerId, force?)` | Clean up single worker |
+| `manager.validateWorker(workerId, opts?)` | Validate worker output (low-level) |
 
 ---
 
@@ -376,6 +378,58 @@ tail -f .copilot-workers/<id>/output.log
 - **"What is it doing?"** → Git (primary): `git -C <worktree> diff --stat` to see current changes, `git log --oneline -5` for recent commits. Log (secondary): `tail -100 output.log` — but beware buffering delays.
 - **"Is it stuck?"** → Git: check if new commits appear over time (`git log --oneline -1`, wait, repeat). Log: `wc -l output.log` comparisons may be misleading due to buffering.
 - **"I need real-time updates"** → Git: poll `git log --oneline -1` every 30s for reliable progress. Log: `tail -f output.log` via async bash — but output may appear frozen due to buffering even when the worker is active.
+- **"Did it do the right thing?"** → SDK: `sdk.validateWorker(id, opts)`. Checks commits, file scope, and build.
+
+---
+
+## Validating Worker Output
+
+After a worker completes, use `validateWorker()` to verify it actually did what it was supposed to — check commits exist, files are in the right scope, and the build passes. This catches "silent scope leaks" where a worker succeeds at the wrong thing.
+
+```bash
+# Basic validation — just check for commits
+$WORKER exec 'return sdk.validateWorker("<worker-id>")'
+
+# Validate scope — files must be under src/auth/
+$WORKER exec 'return sdk.validateWorker("<worker-id>", {
+  requiredPathPrefixes: ["src/auth/", "tests/auth/"]
+})'
+
+# Validate scope with forbidden paths
+$WORKER exec 'return sdk.validateWorker("<worker-id>", {
+  requiredPathPrefixes: ["verticals/pet_boarding/"],
+  forbiddenPathPrefixes: ["verticals-forms-api/"]
+})'
+
+# Full validation with build
+$WORKER exec 'return sdk.validateWorker("<worker-id>", {
+  requiredPathPrefixes: ["src/"],
+  buildCommand: "npm run build"
+})'
+```
+
+**ValidationResult fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `valid` | boolean | Overall pass/fail |
+| `hasCommits` | boolean | Whether the branch has commits beyond HEAD |
+| `commitCount` | number | Number of commits on the branch |
+| `commitMessages` | string[] | Commit messages |
+| `filesChanged` | string[] | Files changed on the branch |
+| `scopeViolations` | string[] | Files outside required or inside forbidden prefixes |
+| `buildPassed` | boolean \| null | Build result (null if no buildCommand) |
+| `buildOutput` | string | Build stdout+stderr |
+| `errors` | string[] | Error messages encountered |
+
+**CLI usage:**
+
+```bash
+# Validate with CLI
+$WORKER validate <worker-id> --required-path-prefix src/auth/ --required-path-prefix tests/auth/
+$WORKER validate <worker-id> --build-command "npm run build" --forbidden-path-prefix node_modules/
+$WORKER validate <worker-id> --no-require-commits
+```
 
 ---
 
