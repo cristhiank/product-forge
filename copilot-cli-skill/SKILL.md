@@ -270,6 +270,8 @@ $WORKER exec 'return sdk.cleanupAll()'
 
 For monitoring worker progress, **use shell tools directly** instead of the SDK. Shell gives you more context, real-time streaming, and flexible filtering. The SDK's `checkWorker()` only returns the last 20 log lines — often not enough to understand what a worker is doing.
 
+> **⚠️ output.log buffering caveat:** Copilot CLI heavily buffers `output.log` — file size can stay static for minutes even while the worker is actively making changes. **Git-based monitoring is far more reliable** for checking actual progress, because commits and file changes are written immediately to the worktree.
+
 ### SDK vs Shell Decision Matrix
 
 | Operation | Use SDK | Use Shell |
@@ -277,14 +279,56 @@ For monitoring worker progress, **use shell tools directly** instead of the SDK.
 | Spawn a worker | ✅ `sdk.spawnWorker()` | ❌ |
 | List workers | ✅ `sdk.listAll()` | ❌ |
 | Quick status (running/completed/failed) | ✅ `sdk.checkWorker(id)` | ✅ `cat .copilot-workers/<id>/exit.json` |
-| Read worker logs | ❌ (20 lines only) | ✅ `tail -100 output.log` |
-| Search logs for errors | ❌ (not supported) | ✅ `grep -i 'error\|fail' output.log` |
-| Real-time log streaming | ❌ (not possible) | ✅ `tail -f output.log` (async bash) |
+| Check actual progress | ❌ | ✅ `git -C <worktree> log --oneline -5` |
+| See what files changed | ❌ | ✅ `git -C <worktree> diff --stat` |
+| Read worker logs (buffered) | ❌ (20 lines only) | ⚠️ `tail -100 output.log` (buffered — may lag) |
+| Search logs for errors | ❌ (not supported) | ⚠️ `grep -i 'error\|fail' output.log` (buffered) |
+| Real-time log streaming | ❌ (not possible) | ⚠️ `tail -f output.log` (buffered — may appear stuck) |
 | Clean up workers | ✅ `sdk.cleanupWorker(id)` | ❌ |
 
 ### Shell Monitoring Patterns
 
-**Quick status check** — is it running, done, or failed?
+#### Git-Based Progress Check (Preferred)
+
+Git operations reflect actual worker progress immediately — no buffering delays. **Always try git-based checks first** before falling back to output.log.
+
+**See what the worker has done** — commits are the most reliable progress signal:
+```bash
+# Recent commits in the worker's worktree (immediate, no buffering)
+git -C .copilot-workers/<id>/worktree log --oneline -10
+
+# Commits with timestamps (see pacing)
+git -C .copilot-workers/<id>/worktree log --oneline --format="%h %ar %s" -10
+```
+
+**See what files were changed** — understand scope of work:
+```bash
+# Files changed (committed)
+git -C .copilot-workers/<id>/worktree diff --stat HEAD~3
+
+# Files currently being edited (uncommitted changes)
+git -C .copilot-workers/<id>/worktree diff --stat
+
+# Full diff of recent changes
+git -C .copilot-workers/<id>/worktree diff HEAD~1
+```
+
+**Multi-worker git scan** — check all workers' progress at once:
+```bash
+# Quick progress check across all workers
+for d in .copilot-workers/*/; do
+  id=$(basename "$d")
+  wt="$d/worktree"
+  [ -d "$wt/.git" ] || [ -f "$wt/.git" ] || continue
+  commits=$(git -C "$wt" rev-list --count HEAD 2>/dev/null || echo 0)
+  last=$(git -C "$wt" log --oneline -1 2>/dev/null || echo "no commits")
+  echo "$id: $commits commits | last: $last"
+done
+```
+
+#### Quick Status Check
+
+Is it running, done, or failed?
 ```bash
 # Check if process is alive
 cat .copilot-workers/<id>/worker.pid | xargs ps -p 2>/dev/null && echo "RUNNING" || echo "STOPPED"
@@ -293,9 +337,13 @@ cat .copilot-workers/<id>/worker.pid | xargs ps -p 2>/dev/null && echo "RUNNING"
 cat .copilot-workers/<id>/exit.json 2>/dev/null || echo "Still running (no exit.json)"
 ```
 
+#### Log-Based Monitoring (Secondary — Subject to Buffering)
+
+> **Note:** `output.log` is heavily buffered by Copilot CLI. The file may not update for minutes at a time, even while the worker is actively running. Use git-based monitoring (above) to verify actual progress. Logs are still useful for error searching and debugging after the worker completes.
+
 **Read recent log output** — more context than SDK's 20 lines:
 ```bash
-# Last 100 lines
+# Last 100 lines (may be stale due to buffering)
 tail -100 .copilot-workers/<id>/output.log
 
 # Last 200 lines with line numbers
@@ -304,41 +352,30 @@ tail -200 .copilot-workers/<id>/output.log | cat -n
 
 **Search for errors or patterns:**
 ```bash
-# Find errors
+# Find errors (best used after worker completes, when log is fully flushed)
 grep -i 'error\|failed\|exception\|blocked\|stuck' .copilot-workers/<id>/output.log
 
 # Find tool calls and results
 grep -i 'tool\|function\|calling' .copilot-workers/<id>/output.log | tail -20
 
-# Count total lines (rough progress indicator)
+# Count total lines (rough progress indicator — may lag due to buffering)
 wc -l .copilot-workers/<id>/output.log
 ```
 
 **Real-time streaming** (async bash mode — for active monitoring):
 ```bash
 # Stream live output (use async bash + read_bash to check periodically)
+# ⚠️ May appear stuck for minutes due to buffering — check git log to confirm actual progress
 tail -f .copilot-workers/<id>/output.log
-```
-
-**Multi-worker scan** — check all workers at once:
-```bash
-# Quick health check across all workers
-for d in .copilot-workers/*/; do
-  id=$(basename "$d")
-  status="running"
-  [ -f "$d/exit.json" ] && status=$(cat "$d/exit.json" | head -1)
-  lines=$(wc -l < "$d/output.log" 2>/dev/null || echo 0)
-  echo "$id: $status ($lines log lines)"
-done
 ```
 
 ### When to Use Each
 
 - **Spawning/Cleanup** → Always SDK (`sdk.spawnWorker()`, `sdk.cleanupWorker()`). These manage worktrees, branches, and PIDs — don't replicate that logic.
 - **"Is it done?"** → Shell is faster: `cat .copilot-workers/<id>/exit.json`. No Node process overhead.
-- **"What is it doing?"** → Shell: `tail -100 .copilot-workers/<id>/output.log`. SDK only gives 20 lines.
-- **"Is it stuck?"** → Shell: `grep -i 'error\|blocked' output.log` or check if log size is growing: `wc -l output.log`, wait, `wc -l output.log` again.
-- **"I need real-time updates"** → Shell: `tail -f output.log` via async bash. SDK cannot stream.
+- **"What is it doing?"** → Git (primary): `git -C <worktree> diff --stat` to see current changes, `git log --oneline -5` for recent commits. Log (secondary): `tail -100 output.log` — but beware buffering delays.
+- **"Is it stuck?"** → Git: check if new commits appear over time (`git log --oneline -1`, wait, repeat). Log: `wc -l output.log` comparisons may be misleading due to buffering.
+- **"I need real-time updates"** → Git: poll `git log --oneline -1` every 30s for reliable progress. Log: `tail -f output.log` via async bash — but output may appear frozen due to buffering even when the worker is active.
 
 ---
 
