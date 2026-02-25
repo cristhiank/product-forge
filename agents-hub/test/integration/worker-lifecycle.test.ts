@@ -654,4 +654,73 @@ describe('worker lifecycle integration', () => {
       expect(result.syncStatus).toBe('parse_error');
     });
   });
+
+  // ── 10. Worker deregister and prune via Hub ──────────────────────────
+
+  describe('workerDeregister', () => {
+    it('should mark active worker as completed via Hub', () => {
+      mockDiscoverSession.mockReturnValue(null);
+      hub.workerRegister({ id: 'dereg-worker', agentType: 'Executor' });
+
+      const result = hub.workerDeregister('dereg-worker');
+      expect(result).toBe(true);
+
+      const worker = hub.workerGet('dereg-worker');
+      expect(worker).not.toBeNull();
+      expect(worker!.status).toBe('completed');
+      expect(worker!.completedAt).not.toBeNull();
+    });
+
+    it('should not appear in active worker list after deregister', () => {
+      mockDiscoverSession.mockReturnValue(null);
+      hub.workerRegister({ id: 'dereg-list-worker', agentType: 'Executor' });
+
+      hub.workerDeregister('dereg-list-worker');
+
+      const active = hub.workerList({ status: 'active' });
+      expect(active.find(w => w.id === 'dereg-list-worker')).toBeUndefined();
+
+      const completed = hub.workerList({ status: 'completed' });
+      expect(completed.find(w => w.id === 'dereg-list-worker')).not.toBeUndefined();
+    });
+
+    it('should not be included in workerSyncAll after deregister', () => {
+      const eventsPath = join(tempDir, 'events-dereg-sync.jsonl');
+      writeEvents(eventsPath, [
+        evt('session.start', {}, '2026-01-15T10:00:00Z'),
+      ]);
+
+      mockDiscoverSession.mockReturnValue({ sessionId: 'session-dereg-sync', eventsPath });
+      hub.workerRegister({ id: 'dereg-sync-worker', agentType: 'Executor' });
+
+      hub.workerDeregister('dereg-sync-worker');
+
+      const results = hub.workerSyncAll();
+      expect(results.find(r => r.workerId === 'dereg-sync-worker')).toBeUndefined();
+    });
+  });
+
+  describe('workerPrune', () => {
+    it('should prune workers with dead PIDs via Hub', () => {
+      mockDiscoverSession.mockReturnValue(null);
+      hub.workerRegister({ id: 'prune-worker', agentType: 'Executor', pid: 99999999 });
+
+      const result = hub.workerPrune();
+      expect(result.pruned).toContain('prune-worker');
+
+      const worker = hub.workerGet('prune-worker');
+      expect(worker!.status).toBe('completed');
+    });
+
+    it('should not prune workers with alive PIDs via Hub', () => {
+      mockDiscoverSession.mockReturnValue(null);
+      hub.workerRegister({ id: 'alive-worker', agentType: 'Executor', pid: process.pid });
+
+      const result = hub.workerPrune();
+      expect(result.pruned).toEqual([]);
+
+      const worker = hub.workerGet('alive-worker');
+      expect(worker!.status).toBe('active');
+    });
+  });
 });

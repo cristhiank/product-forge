@@ -31,6 +31,8 @@ import {
   listWorkers,
   updateWorker,
   removeWorker,
+  deregisterWorker,
+  pruneWorkers,
   discoverSession,
 } from './core/workers.js';
 import {
@@ -1304,6 +1306,20 @@ export class Hub {
    */
   workerRemove(id: string): boolean {
     return removeWorker(this.db, id);
+  }
+
+  /**
+   * Deregister a worker — marks it as completed (preserves telemetry history)
+   */
+  workerDeregister(id: string): boolean {
+    return deregisterWorker(this.db, id);
+  }
+
+  /**
+   * Prune stale workers — marks active workers with dead PIDs as completed
+   */
+  workerPrune(): { pruned: string[] } {
+    return pruneWorkers(this.db);
   }
 
   /**
