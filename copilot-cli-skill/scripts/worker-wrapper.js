@@ -74,6 +74,11 @@ child = spawn(copilotCommand, process.argv.slice(2), {
   stdio: ['ignore', 'pipe', 'pipe'],
 });
 
+// Write copilot child PID so lifecycle detection tracks the real process
+if (child.pid) {
+  writeFileSync(join(workerStateDir, 'copilot.pid'), String(child.pid));
+}
+
 child.stdout?.pipe(process.stdout);
 child.stderr?.pipe(process.stderr);
 
