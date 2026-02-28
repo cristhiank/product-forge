@@ -129,6 +129,17 @@ workspace/                      ← git root
 }
 ```
 
+### Discovery Troubleshooting
+
+Auto-scan only goes 2 levels deep from git root. Deeper backlogs (e.g., `verticals/pet_boarding/app/.backlog` = 3 levels) won't be found automatically.
+
+**Fix:** Add a `.backlog-projects.json` at the git root to register deep-nested backlogs:
+```json
+{ "projects": [{ "name": "pet-boarding", "path": "verticals/pet_boarding/app/.backlog" }] }
+```
+
+If a user asks about a project and it's not discovered, check depth and suggest adding it to `.backlog-projects.json` before retrying. Never tell the user "project not found" without checking for deep nesting first.
+
 ## Core Concepts
 
 ### Folder Model (Kanban)
@@ -186,6 +197,35 @@ Implement JWT-based authentication...
 
 **Required Fields:** Created, Type, Priority, Status  
 **Optional Fields:** Updated, Completed, Archived, Estimate, Parent, Depends On, Related, Tags
+
+### Acceptance Criteria (Done When)
+
+Every item — especially items destined for parallel worker execution — **must** include a `## Done When` section with verifiable conditions:
+
+```markdown
+## Done When
+- [ ] [specific, testable condition]
+- [ ] [specific, testable condition]
+- [ ] Tests pass: [test name or command]
+- [ ] No files modified outside: [scope boundary]
+```
+
+**For worker-destined items**, always include:
+- **Scope boundary** — which files/directories the worker should modify
+- **Interface contract** — if other items depend on types/APIs this item creates, define them
+- **Exclusions** — what this item explicitly does NOT cover (prevents scope overlap between parallel workers)
+
+**Example:**
+```markdown
+## Done When
+- [ ] `src/components/ui/form.tsx` wraps react-hook-form + zod with typed `FormField`
+- [ ] `src/features/pricing/components/shared/entity-drawer.tsx` — reusable Sheet-based CRUD drawer
+- [ ] `src/features/pricing/hooks/use-mutation.ts` — optimistic mutation hooks
+- [ ] Does NOT modify any tab components (rate-cards-tab, discounts-tab, etc.)
+- [ ] TypeScript compiles with zero errors
+```
+
+Items without `## Done When` are acceptable only for exploratory/research tasks.
 
 ## Essential Commands
 
@@ -298,6 +338,51 @@ $BACKLOG list | jq '.[] | select(.priority == "High")'
 # Check stats
 $BACKLOG stats | jq '.default.next'
 ```
+
+## Post-Completion Workflow
+
+After completing an item or epic via `complete`, ALWAYS perform these follow-up steps:
+
+### For Individual Items
+1. Commit backlog changes: `git add .backlog/ && git commit -m "chore(backlog): [id] done"`
+2. Check if this unblocks siblings: `$BACKLOG list --folder next --unblocked`
+3. If unblocked items exist, present them: "Unblocked: [list]. Pick one up?"
+
+### For Epics (all children done)
+1. Commit all backlog changes
+2. Run verification: suggest test/build/Playwright check appropriate to the epic's domain
+3. Show newly unblocked items across ALL projects: `$BACKLOG brief --format summary`
+4. Surface discovered work: list any bugs, gaps, or new requirements found during implementation
+5. **Bridge to next action** — never end with just a summary table. Always end with:
+   "**Next options:** [unblocked items] | Create new items | Review/verify | Different direction"
+
+### For Parked/Deferred Work
+When the user decides to park or defer an epic/item:
+1. Update the item body with a dated note: `**[YYYY-MM-DD] Parked:** [reason]`
+2. Move back to `next/`: `$BACKLOG move <id> --to next`
+3. Commit with context: `git commit -m "chore(backlog): park [id] — [reason]"`
+4. This creates a traceable audit trail visible to future sessions.
+
+## Post-Epic Continuation
+
+When an epic is completed mid-session and the user continues making changes to the same codebase:
+
+1. **Track the pivot** — After epic completion, if the user requests further changes to the same feature area, prompt: *"This work isn't tracked in the backlog. Want me to create items under [epic] or a new epic?"*
+2. **Batch capture** — If the user declines individual tracking, at session end, offer to create a single "cleanup" or "refinement" item capturing all untracked changes with a summary of what was done.
+3. **Never let 3+ untracked changes accumulate** — If 3 or more significant untracked changes have been made in a session (each modifying 3+ files), proactively suggest backlog capture before continuing.
+
+## Session Continuity
+
+### Stale Worker Detection
+After any worker-based epic execution, run reconciliation:
+- Check if any `working/` items have no active worker or recent commits (>24h)
+- Flag them: *"⚠️ [id] has been in working for [N] days with no commits. Stale?"*
+- Offer to move stale items back to `next/` or archive them
+
+### Session Start
+The "First Actions" section already runs hygiene. Additionally:
+- If `working/` has items, check their git branch activity. Items with no recent commits are likely stale from a prior session.
+- Present a brief: "Resuming. In progress: [items]. Last activity: [date]. Continue or park?"
 
 ## Best Practices & Hygiene
 
