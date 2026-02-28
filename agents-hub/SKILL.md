@@ -22,6 +22,15 @@ When this skill loads, do these immediately:
 1. **Check hub status** — `$HUB exec 'return sdk.status()'` — see if a hub exists and what's been posted
 2. **Search for prior context** — `$HUB exec 'return sdk.search("<your-topic>")'` — find what other agents already discovered
 3. **Post your arrival** — `$HUB exec --author <role> 'return sdk.postProgress(0, 1, "Starting work on <task>")'`
+4. **Register active workers** (multi-worker/orchestrator only) — After each worker spawn:
+   `$HUB exec --author orchestrator 'return sdk.registerWorker({ id: "<worker-id>", agentType: "<role>", worktreePath: "<path>", pid: <pid> })'`
+5. **Sync before any status check** (multi-worker only) — Before checking worker health:
+   `$HUB exec 'return sdk.syncAll()'`
+
+> ⚠️ **Steps 4-5 are mandatory for multi-worker orchestration.** Without hub registration,
+> the reactive hub cannot detect silent worker failures. copilot-cli-skill's `checkWorker`
+> only sees process exit — the hub's reactor reads `events.jsonl` and can detect stale workers
+> (no events for N minutes), workers with unreported errors, and workers that completed silently.
 
 ## Quick Reference — SDK (Preferred)
 
@@ -248,7 +257,11 @@ When workers run in git worktrees, they automatically share the hub database. Th
 
 ## Worker Observability (Reactive Hub)
 
-The hub can track worker processes deterministically by reading their Copilot CLI session events. This provides guaranteed visibility even when workers don't post to the hub voluntarily.
+The hub tracks worker processes deterministically by reading their Copilot CLI session events. This provides **guaranteed** visibility even when workers don't post to the hub voluntarily.
+
+> ⚠️ **Worker registration is mandatory for multi-worker orchestration.** Every spawned
+> worker must be registered via `sdk.registerWorker()`. Without registration, the hub has
+> zero visibility into worker health. This is the #1 cause of undetected worker failures.
 
 ### How It Works
 
@@ -318,6 +331,37 @@ $HUB exec '
 $HUB exec 'return sdk.getWorkerStatus("abc123")'
 ```
 
+### Agent Type Conventions
+
+`agentType` is a **display label** (the DevPartner role name: executor, scout, orchestrator, etc.), NOT a runtime identifier. The hub auto-detects the telemetry source format from the worker's `eventsPath` — Copilot CLI sessions are detected by their path pattern (`~/.copilot/session-state/`). Custom agent names work without any additional configuration.
+
+### Silence Detection
+
+After `syncAll()`, check for workers that are active but haven't posted to the hub. A "silent" worker has tool calls progressing (from events.jsonl) but zero hub messages. Silent workers may be working fine, but if silent AND showing errors, they need intervention.
+
+```bash
+# Detect silent workers (active with tool calls but no hub posts)
+$HUB exec '
+  const workers = sdk.listWorkers({ status: "active" });
+  const silent = workers.filter(w => w.toolCalls > 10 && w.hubMessages === 0);
+  return { silent: silent.map(w => ({ id: w.id, toolCalls: w.toolCalls, errors: w.errors })) };
+'
+```
+
+### Orchestrator Monitoring Loop
+
+After spawning a batch of workers, the orchestrator should run this loop:
+
+```
+1. Register all workers: sdk.registerWorker({ id, agentType, worktreePath, pid })
+2. Every 30-60s: sdk.syncAll()
+3. Check: any failed? any lost? any silent with errors?
+4. Act: retry failed workers, investigate silent+errored workers
+5. After all done: final syncAll() + verify all completed
+```
+
+This replaces ad-hoc `checkWorker` polling with deterministic, events-based monitoring.
+
 ---
 
 ## When to Use the Hub
@@ -336,4 +380,25 @@ $HUB exec 'return sdk.getWorkerStatus("abc123")'
 - **Large binary data** — Hub is for text messages only
 - **Secret storage** — Never post tokens, credentials, private keys
 
+---
 
+## Dashboard vs CLI
+
+The web dashboard (`$HUB serve`) provides read-only monitoring. For interactive debugging, use the CLI:
+
+| Need | Tool | Command |
+|------|------|---------|
+| Overview / live monitoring | Dashboard | `$HUB serve --port 3000` |
+| Search messages | CLI | `$HUB exec 'return sdk.search("blocked timeout")'` |
+| Filter by channel | CLI | `$HUB exec --channel '#worker-B042' 'return sdk.getFindings()'` |
+| Worker event details | CLI | `$HUB exec 'return sdk.getWorkerStatus("<id>", true)'` |
+| Unresolved requests | CLI | `$HUB exec 'return sdk.getUnresolved()'` |
+
+## After Modifying Hub Code
+
+After any code change to `agents-hub/src/`:
+1. `npm run build` — verifies TypeScript compiles AND ncc bundles correctly
+2. `npm test` — runs all unit + integration tests
+3. Restart `$HUB serve` — verify the dashboard renders
+4. **Check for orphan files**: every exported function in `src/` should be imported somewhere
+   — orphan files won't be included in the ncc bundle and will silently fail at runtime
