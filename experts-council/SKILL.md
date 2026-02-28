@@ -48,6 +48,21 @@ Invoke the council **on your own initiative** — no user prompt required — wh
 - Always add this line at the top of every delegated prompt:
   - `Execution context: experts-council internal run. Do not invoke experts-council or any multi-model council process.`
 
+### Stage 0: Pre-flight Validation (Mandatory)
+
+Before spawning any council members, verify ALL of the following:
+
+1. **Context availability** — Every file, code snippet, or document referenced in the prompt exists and is readable. Attempt to `view` or `glob` them. If any are missing, STOP.
+2. **Tool dependencies** — If the task requires runtime tools (Playwright, web fetch, running services), verify they work BEFORE spawning. For Playwright: confirm the page loads. For APIs: confirm the endpoint responds.
+3. **Scope clarity** — The question must have a clear, answerable scope. If ambiguous, ask the user ONE clarifying question before proceeding.
+4. **Re-review detection** — If the user is asking to review something that was previously reviewed in this session (same codebase, same module), gather the prior council verdict and include it as `## Previous Council Findings` context in the council prompt. This triggers the **Delta Review** task type for the chairman (see Task Types).
+
+If any pre-flight check fails, STOP and report:
+```
+⚠️ Council pre-flight failed: [reason]. Please [specific fix action] before I proceed.
+```
+Do NOT spawn council members until all pre-flight checks pass.
+
 ### Stage 1: Parallel Council
 
 Spawn **3 parallel `task` calls** — one per council member:
@@ -117,16 +132,22 @@ You are synthesizing responses from 3 independent experts who answered the same 
 Synthesize these 3 expert responses into a single, comprehensive answer. Structure your output as:
 
 1. **Consensus** — Findings all 3 experts agree on. Present as a table:
-   | # | Finding | Detail |
+   | # | Finding | Detail | Severity | Effort |
+   Severity scale: P0 (critical, blocks usage) · P1 (high, ship-blocker) · P2 (medium) · P3 (low/nice-to-have)
+   Effort scale: S (<1hr) · M (half-day) · L (1-2 days) · XL (3+ days)
 
 2. **Majority View** — Where 2 agree and 1 dissents. Present as:
-   | # | Majority Position | Dissenting View |
+   | # | Majority Position | Dissenting View | Severity |
 
-3. **Unique Insights** — Novel findings from only 1 expert that others missed.
+3. **Unique Insights** — Novel findings from only 1 expert that others missed. Include severity.
 
-4. **Conflicts** — Direct contradictions between experts. Note both positions.
+4. **Conflicts** — Direct contradictions between experts. Note both positions and which evidence supports each.
 
 5. **Recommendation** — Your synthesized recommendation incorporating the strongest elements from all responses. Be decisive.
+
+6. **Proposed Actions** — A prioritized action table derived from ALL findings above. Each row = one concrete, implementable action. Order by severity desc, then effort asc.
+   | # | Action | Severity | Effort | Blocks |
+   Only include actions clearly supported by the expert findings. Do not invent actions not grounded in the responses.
 
 Do NOT identify which response is "best" — synthesize the collective wisdom.
 ```
@@ -148,6 +169,9 @@ Review this code/implementation for:
 - Alternative approaches that could be simpler or more robust
 
 Be comprehensive and specific. Reference exact lines/files.
+For each bug found, include a minimal failing test stub (in the project's test
+framework) that demonstrates the issue. The test should FAIL on the current code
+and PASS after a correct fix.
 ```
 
 ### Approach Evaluation
@@ -187,6 +211,38 @@ Answer this question thoroughly:
 - If multiple valid answers exist, present them with tradeoffs
 ```
 
+### Delta Review (Re-review after implementation)
+
+Use this task type when **Stage 0 re-review detection** identified prior council findings for the same codebase/module. Include the previous findings as context and use this prompt ending:
+
+```
+This is a RE-REVIEW after implementation. The previous review found the issues
+listed in "Previous Council Findings" below.
+
+For EACH previous finding, assess:
+- ✅ FIXED — cite the file/line/test that proves it
+- ❌ NOT FIXED — explain what's still wrong and what's needed
+- 🔄 PARTIALLY FIXED — what was done, what remains
+- 🆕 Then list any NET-NEW issues not present in the previous review
+
+Format your response in two sections:
+1. **Regression Check** — table with: | # | Original Finding | Status | Evidence |
+2. **New Findings** — any issues introduced by the implementation or previously undetected
+
+For each new bug found, include a minimal failing test stub.
+Be comprehensive and specific. Reference exact lines/files.
+```
+
+**Chairman synthesis for Delta Reviews** uses the same chairman prompt template, but replace section 1 (Consensus) with:
+
+```
+1. **Regression Check** — Cross-reference all previous findings against the 3 expert assessments. Present as:
+   | # | Original Finding | Status (✅/❌/🔄/🆕) | Expert Agreement | Evidence |
+   Status: ✅ FIXED · ❌ NOT FIXED · 🔄 PARTIAL · 🆕 NEW (not in original review)
+```
+
+Sections 2-6 remain the same (Majority View, Unique Insights, Conflicts, Recommendation, Proposed Actions).
+
 ## Output Format
 
 Present the chairman's synthesis to the user as:
@@ -195,39 +251,85 @@ Present the chairman's synthesis to the user as:
 ## 🏛️ Council Verdict: [topic summary]
 
 ### ✅ Consensus (all 3 agree)
-| # | Finding | Detail |
-|---|---------|--------|
-| 1 | ... | ... |
+| # | Finding | Detail | Severity | Effort |
+|---|---------|--------|----------|--------|
+| 1 | ... | ... | P0 | S |
 
 ### ⚖️ Majority View (2 vs 1)
-| # | Majority Position | Dissenting View |
-|---|-------------------|-----------------|
-| 1 | ... | ... |
+| # | Majority Position | Dissenting View | Severity |
+|---|-------------------|-----------------|----------|
+| 1 | ... | ... | P1 |
 
 ### 💡 Unique Insights
-- **[Model]**: [finding no one else caught]
+- **[Model]**: [finding no one else caught] *(Severity: P#)*
 
 ### ⚠️ Conflicts
-- [description of contradiction, if any]
+- [description of contradiction, with evidence for each position]
 
 ### 🎯 Recommendation
 [Chairman's synthesized recommendation]
+
+### 🎬 Proposed Actions
+| # | Action | Severity | Effort | Blocks |
+|---|--------|----------|--------|--------|
+| 1 | [concrete, implementable action] | P0 | S | — |
+| 2 | ... | P1 | M | #1 |
+
+*Severity: P0 (critical) · P1 (high) · P2 (medium) · P3 (low)*
+*Effort: S (<1hr) · M (half-day) · L (1-2 days) · XL (3+ days)*
 
 ---
 *Council: Gemini 3 Pro · Opus 4.6 · GPT-5.3 Codex | Chairman: [model]*
 *Responses were anonymized during synthesis to prevent bias*
 ```
 
+### Delta Review Output Format
+
+When re-reviewing after implementation, use this variant:
+
+```markdown
+## 🏛️ Council Verdict: [topic] — Delta Review
+
+### 📋 Regression Check
+| # | Original Finding | Status | Agreement | Evidence |
+|---|-----------------|--------|-----------|----------|
+| 1 | [finding from previous review] | ✅ FIXED | 3/3 | [file:line or test name] |
+| 2 | [finding from previous review] | ❌ NOT FIXED | 2/3 | [what's still wrong] |
+| 3 | [new issue] | 🆕 NEW | 3/3 | [file:line] |
+
+### ⚖️ Majority View (2 vs 1)
+[same as standard format]
+
+### 💡 Unique Insights
+[same as standard format]
+
+### ⚠️ Conflicts
+[same as standard format]
+
+### 🎯 Recommendation
+[same as standard format]
+
+### 🎬 Proposed Actions
+[same as standard format]
+
+---
+*Council: Gemini 3 Pro · Opus 4.6 · GPT-5.3 Codex | Chairman: [model]*
+*Delta review against [N] previous findings*
+```
+
 ## Caller Checklist
 
-1. ☐ Construct the council prompt with full context inline
-2. ☐ Spawn 3 parallel `task` calls (all `general-purpose`, different `model`)
-3. ☐ Wait for all 3 to complete
-4. ☐ Anonymize responses (A, B, C) — keep private mapping
-5. ☐ Select chairman (best response's model, or default opus)
-6. ☐ Spawn chairman synthesis with anonymized responses
-7. ☐ De-anonymize in final output
-8. ☐ Present using output format above
+1. ☐ **Pre-flight**: Verify context exists, tools work, scope is clear
+2. ☐ **Re-review detection**: Check if prior council findings exist for this target — if so, include them and use Delta Review task type
+3. ☐ Construct the council prompt with full context inline
+4. ☐ Spawn 3 parallel `task` calls (all `general-purpose`, different `model`)
+5. ☐ Wait for all 3 to complete
+6. ☐ Anonymize responses (A, B, C) — keep private mapping
+7. ☐ Select chairman (best response's model, or default opus)
+8. ☐ Spawn chairman synthesis with anonymized responses
+9. ☐ De-anonymize in final output
+10. ☐ Present using output format above (standard or delta review)
+11. ☐ Verify Proposed Actions table is present and has Severity + Effort
 
 ## Example: Full Invocation
 
