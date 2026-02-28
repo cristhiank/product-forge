@@ -14,9 +14,10 @@ Manage autonomous Copilot CLI workers in isolated git worktrees.
 
 When this skill loads, do these immediately:
 
-1. **Clean up stale workers** — `$WORKER exec 'return sdk.cleanupAll()'` — remove completed/failed workers
-2. **Check existing workers** — `$WORKER exec 'return sdk.listAll()'` — see if any workers are running (or use `sdk.listAll({ autoCleanup: true })` to auto-clean stale workers before listing)
-3. **Check worker status** — `$WORKER exec 'return sdk.checkWorker("<id>")'` — get details on specific worker
+1. **Check for running workers** — `$WORKER exec 'return sdk.listAll()'` — see if any workers are active
+2. **If workers exist and are running**, present their status and ask: "Found [N] workers: [ids/status]. Resume monitoring, or clean up?"
+3. **Clean up stale workers** — `$WORKER exec 'return sdk.cleanupAll()'` — remove completed/failed workers (only non-running)
+4. **Check worker status** — `$WORKER exec 'return sdk.checkWorker("<id>")'` — get details on specific worker
 
 ## Quick Reference — SDK (Preferred)
 
@@ -61,6 +62,19 @@ The `--agent`, `--model`, and `--autopilot` flags set SDK defaults.
 - **Delegate long-running work** — Spawn a worker for extensive refactoring
 - **Isolate risky changes** — Test experimental approaches in separate worktrees
 - **Background processing** — Let a worker handle time-consuming tasks autonomously
+
+### When NOT to Use Workers
+
+| Criteria | Use Workers | Do Directly |
+|----------|-------------|-------------|
+| Items per batch | 3+ independent items | 1-2 items |
+| Change size per item | 50+ lines, multiple files | <20 lines, 1-2 files |
+| Isolation needed | Different modules, conflict risk | Same module, sequential edits |
+| Total estimated time | >5 min per item | <2 min per item |
+
+**Rule of thumb:** If the fix is "open file, change N lines, save" and N < 20, do it directly. Worker spawn overhead (~15-30s per worker) exceeds the fix time.
+
+**Batch threshold:** Only spawn workers when you have 3+ truly independent items that would benefit from parallel execution. A single-item worker wastes overhead on worktree/branch/startup for no parallelism gain.
 
 ---
 
@@ -255,6 +269,85 @@ $WORKER exec 'return [
   sdk.spawnWorker("implement auth refactor", { agent: "Orchestrator", model: "gemini-3-pro-preview" })
 ]'
 ```
+
+### Spawn → Await → Validate → Merge (Canonical Lifecycle)
+
+This is the recommended pattern for every worker. Use it instead of manual polling.
+
+```bash
+# 1. Spawn with taskId for dedup + autoCommit to preserve changes
+$WORKER exec --agent Orchestrator --autopilot \
+  'return sdk.spawnWorker("implement B-042 magic link auth", {
+    taskId: "B-042", autoCommit: true, addDirs: ["src/auth/", "tests/auth/"]
+  })'
+
+# 2. Wait for completion (blocks until terminal state — replaces manual polling)
+$WORKER exec 'return sdk.awaitWorker("<worker-id>", { pollIntervalMs: 5000 })'
+
+# 3. Validate output before merging (catches scope leaks, verifies build)
+$WORKER exec 'return sdk.validateWorker("<worker-id>", {
+  requiredPathPrefixes: ["src/auth/", "tests/auth/"],
+  buildCommand: "npm run build"
+})'
+
+# 4. Merge the worker branch
+git merge worker/<worker-id> --no-ff -m "feat: implement B-042 magic link auth"
+
+# 5. Clean up (removes worktree + branch)
+$WORKER exec 'return sdk.cleanupWorker("<worker-id>")'
+```
+
+### Merging Worker Output
+
+After a worker completes, merge its branch and clean up:
+
+```bash
+# Merge with --no-ff to preserve branch history
+git merge worker/<worker-id> --no-ff -m "merge: <description>"
+
+# If conflicts, resolve manually then:
+git add -A && git commit --no-edit
+
+# ⚠️ Always run build/tests after EACH merge, not after all merges.
+# This catches which specific merge introduced a conflict.
+
+# Clean up after successful merge
+$WORKER exec 'return sdk.cleanupWorker("<worker-id>")'
+```
+
+### Batch Orchestration Pattern
+
+For parallel workers in a batch:
+
+```bash
+# Phase 1: Spawn all workers
+for task in B-042 B-043 B-044; do
+  $WORKER exec "return sdk.spawnWorker('implement $task', {
+    taskId: '$task', agent: 'Orchestrator', autoCommit: true
+  })"
+done
+
+# Phase 2: Await all
+$WORKER exec 'return Promise.all([
+  sdk.awaitWorker("worker-id-1"),
+  sdk.awaitWorker("worker-id-2"),
+  sdk.awaitWorker("worker-id-3")
+])'
+
+# Phase 3: Validate each before merging
+for id in worker-id-1 worker-id-2 worker-id-3; do
+  $WORKER exec "return sdk.validateWorker('$id')"
+done
+
+# Phase 4: Merge in dependency order + clean up
+for id in worker-id-1 worker-id-2 worker-id-3; do
+  git merge "worker/$id" --no-ff -m "merge: $id"
+  # Build check after each merge
+  $WORKER exec "return sdk.cleanupWorker('$id')"
+done
+```
+
+**Grouping heuristic:** Group items by file ownership to minimize merge conflicts. Items touching different directories can run in parallel safely. Items touching the same file should be in different batches (sequential).
 
 ### Monitor & Cleanup
 
