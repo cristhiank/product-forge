@@ -4,6 +4,7 @@
  */
 
 import * as http from 'node:http';
+import { execFileSync } from 'node:child_process';
 import type { Hub } from '../hub.js';
 import type { ChannelInfo } from '../core/types.js';
 import { CSS } from './styles.js';
@@ -303,7 +304,11 @@ export async function startServer(opts: ServeOptions): Promise<void> {
             });
             return sendJson(res, { error: 'Stop action requires an active worker with a PID' }, 409);
           }
-          process.kill(worker.pid, 'SIGTERM');
+          if (process.platform === 'win32') {
+            try { execFileSync('taskkill', ['/PID', String(worker.pid), '/T'], { stdio: 'ignore' }); } catch { /* ignore */ }
+          } else {
+            process.kill(worker.pid, 'SIGTERM');
+          }
           const syncResult = hub.workerSync(workerId);
           hub.recordOperatorAction({
             workerId,

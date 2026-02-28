@@ -474,5 +474,108 @@ describe('Hub integration', () => {
       expect(worker?.usage?.totalTokens).toBe(1350);
       expect(metadata.opsTelemetry).toBeDefined();
     });
+
+    it('tracks model request activity when token deltas are unavailable', () => {
+      const eventsPath = join(tempDir, 'ops-requests-only.events.jsonl');
+      const events = [
+        {
+          type: 'session.model_change',
+          timestamp: '2026-02-23T00:00:00.000Z',
+          data: {
+            newModel: 'gpt-5.3-codex',
+          },
+        },
+        {
+          type: 'assistant.message',
+          timestamp: '2026-02-23T00:00:01.000Z',
+          data: {
+            content: '',
+            toolRequests: [{ name: 'view' }],
+          },
+        },
+      ];
+      writeFileSync(eventsPath, `${events.map(event => JSON.stringify(event)).join('\n')}\n`);
+
+      hub.workerRegister({
+        id: 'ops-worker-requests-only',
+        channel: '#worker-ops-worker-requests-only',
+      });
+
+      const db = openDatabase(dbPath);
+      try {
+        updateWorker(db, 'ops-worker-requests-only', {
+          eventsPath,
+          eventsOffset: 0,
+        });
+      } finally {
+        db.close();
+      }
+
+      const sync = hub.workerSync('ops-worker-requests-only');
+      const worker = hub.workerGet('ops-worker-requests-only');
+      const modelSummary = sync.modelUsage?.['gpt-5.3-codex'];
+      const providerSummary = sync.providerUsage?.openai;
+
+      expect(sync.ok).toBe(true);
+      expect(sync.usage?.totalTokens).toBe(0);
+      expect(modelSummary).toBeDefined();
+      expect(modelSummary?.requests).toBe(1);
+      expect(providerSummary).toBeDefined();
+      expect(providerSummary?.requests).toBe(1);
+      expect(worker?.modelUsage?.['gpt-5.3-codex']?.requests).toBe(1);
+    });
+
+    it('parses nested token usage payloads from tool results', () => {
+      const eventsPath = join(tempDir, 'ops-nested-usage.events.jsonl');
+      const events = [
+        {
+          type: 'session.model_change',
+          timestamp: '2026-02-23T00:00:00.000Z',
+          data: {
+            newModel: 'gpt-5.3-codex',
+          },
+        },
+        {
+          type: 'tool.execution_complete',
+          timestamp: '2026-02-23T00:00:01.000Z',
+          data: {
+            toolCallId: 'call-1',
+            success: true,
+            result: {
+              tokenUsage: {
+                inputTokens: 120,
+                outputTokens: 30,
+              },
+            },
+          },
+        },
+      ];
+      writeFileSync(eventsPath, `${events.map(event => JSON.stringify(event)).join('\n')}\n`);
+
+      hub.workerRegister({
+        id: 'ops-worker-nested-usage',
+        channel: '#worker-ops-worker-nested-usage',
+      });
+
+      const db = openDatabase(dbPath);
+      try {
+        updateWorker(db, 'ops-worker-nested-usage', {
+          eventsPath,
+          eventsOffset: 0,
+        });
+      } finally {
+        db.close();
+      }
+
+      const sync = hub.workerSync('ops-worker-nested-usage');
+      const worker = hub.workerGet('ops-worker-nested-usage');
+
+      expect(sync.ok).toBe(true);
+      expect(sync.usage?.inputTokens).toBe(120);
+      expect(sync.usage?.outputTokens).toBe(30);
+      expect(sync.usage?.totalTokens).toBe(150);
+      expect(sync.modelUsage?.['gpt-5.3-codex']?.totalTokens).toBe(150);
+      expect(worker?.usage?.totalTokens).toBe(150);
+    });
   });
 });

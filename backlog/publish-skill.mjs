@@ -13,6 +13,7 @@ console.log('📦 Publishing backlog skill...');
 console.log(`   Source: ${scriptDir}`);
 console.log(`   Target: ${target}`);
 
+runInstall(scriptDir);
 runBuild(scriptDir);
 
 console.log('→ Preparing target...');
@@ -30,6 +31,14 @@ console.log('');
 console.log('Files:');
 for (const file of listFiles(target)) {
   console.log(`   ${file}`);
+}
+
+function runInstall(cwd) {
+  const npmCmd = process.platform === 'win32' ? 'npm.cmd' : 'npm';
+  const result = spawnSync(npmCmd, ['install', '--prefer-offline'], { cwd, stdio: 'inherit' });
+  if (result.status !== 0) {
+    process.exit(result.status ?? 1);
+  }
 }
 
 function runBuild(cwd) {

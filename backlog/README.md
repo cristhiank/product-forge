@@ -18,7 +18,7 @@ This skill provides agents with the ability to:
 backlog/
 ├── SKILL.md              # Agent instructions (read this to learn the skill)
 ├── README.md             # This file
-├── publish-skill.sh      # Publish to ~/.copilot/skills/backlog/
+├── publish-skill.mjs     # Cross-platform publish to ~/.copilot/skills/backlog/
 ├── scripts/
 │   └── backlog.js        # Bundled CLI (single self-contained script)
 ├── references/           # Detailed docs (CLI reference, workflows, integration)

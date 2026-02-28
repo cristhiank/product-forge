@@ -18,7 +18,7 @@ export interface PaginatedEventsResult {
 }
 
 export interface ConversationItem {
-  type: 'user_message' | 'assistant_message' | 'tool_lifecycle' | 'error' | 'unknown';
+  type: 'user_message' | 'assistant_message' | 'tool_lifecycle' | 'session_event' | 'error' | 'unknown';
   timestamp: string;
   content: string;
   data?: Record<string, unknown>;
@@ -98,39 +98,95 @@ class CopilotTelemetryReader implements TelemetryReader {
 
   toConversation(events: WorkerEvent[]): ConversationItem[] {
     const items: ConversationItem[] = [];
+    const toolNamesByCallId = new Map<string, string>();
     
     for (const event of events) {
+      const data = event.data ?? {};
       const timestamp = event.timestamp;
       
       switch (event.type) {
         case 'user.message':
-        case 'turn.user_message':
+        case 'turn.user_message': {
+          const content = toContent(data.message, data.content);
+          if (!content) break;
           items.push({
             type: 'user_message',
             timestamp,
-            content: toContent(event.data.message, event.data.content),
-            data: event.data,
+            content,
+            data,
           });
           break;
+        }
 
         case 'assistant.message':
-        case 'turn.assistant_message':
+        case 'turn.assistant_message': {
+          const content = summarizeAssistantMessage(data);
+          if (!content) break;
           items.push({
             type: 'assistant_message',
             timestamp,
-            content: toContent(event.data.message, event.data.content),
-            data: event.data,
+            content,
+            data,
           });
           break;
+        }
 
-        case 'tool.execution_start':
-        case 'tool.execution_complete':
-        case 'tool.error':
+        case 'tool.execution_start': {
+          const toolCallId = toContent(data.toolCallId, data.tool_call_id);
+          const toolName = toContent(data.toolName, data.tool_name, asRecord(data.tool)?.name, data.tool, 'unknown');
+          if (toolCallId && toolName) toolNamesByCallId.set(toolCallId, toolName);
           items.push({
             type: 'tool_lifecycle',
             timestamp,
-            content: `${event.type}: ${toContent(event.data.toolName, event.data.tool_name, event.data.tool, 'unknown')}`,
-            data: event.data,
+            content: `start: ${toolName}${toolCallId ? ` (${toolCallId})` : ''}`,
+            data,
+          });
+          break;
+        }
+
+        case 'tool.execution_complete': {
+          const toolCallId = toContent(data.toolCallId, data.tool_call_id);
+          const resolvedName = (toolCallId && toolNamesByCallId.get(toolCallId))
+            ?? toContent(data.toolName, data.tool_name, asRecord(data.tool)?.name, data.tool, 'unknown');
+          const status = data.success === false ? 'failed' : 'completed';
+          const detail = summarizeToolResult(data);
+          items.push({
+            type: 'tool_lifecycle',
+            timestamp,
+            content: `${status}: ${resolvedName}${detail ? ` — ${detail}` : ''}${toolCallId ? ` (${toolCallId})` : ''}`,
+            data,
+          });
+          break;
+        }
+
+        case 'tool.error': {
+          const toolCallId = toContent(data.toolCallId, data.tool_call_id);
+          const resolvedName = (toolCallId && toolNamesByCallId.get(toolCallId))
+            ?? toContent(data.toolName, data.tool_name, asRecord(data.tool)?.name, data.tool, 'unknown');
+          const detail = toContent(data.message, data.error, asRecord(data.result)?.error, asRecord(data.result)?.message, 'Tool error');
+          items.push({
+            type: 'error',
+            timestamp,
+            content: `${resolvedName}: ${truncateText(detail, 220)}`,
+            data,
+          });
+          break;
+        }
+
+        case 'session.start':
+        case 'session.model_change':
+        case 'session.mode_changed':
+        case 'session.compaction_start':
+        case 'session.compaction_complete':
+        case 'session.plan_changed':
+        case 'subagent.started':
+        case 'subagent.completed':
+        case 'skill.invoked':
+          items.push({
+            type: 'session_event',
+            timestamp,
+            content: summarizeSessionEvent(event.type, data),
+            data,
           });
           break;
 
@@ -138,18 +194,27 @@ class CopilotTelemetryReader implements TelemetryReader {
           items.push({
             type: 'error',
             timestamp,
-            content: String(event.data.message ?? event.data.error ?? 'Unknown error'),
-            data: event.data,
+            content: String(data.message ?? data.error ?? 'Unknown error'),
+            data,
           });
           break;
 
-        default:
+        default: {
+          if (
+            event.type === 'assistant.turn_start' ||
+            event.type === 'assistant.turn_end' ||
+            event.type === 'turn.start' ||
+            event.type === 'turn.end'
+          ) {
+            break;
+          }
           items.push({
             type: 'unknown',
             timestamp,
             content: event.type,
-            data: event.data,
+            data,
           });
+        }
       }
     }
     
@@ -238,7 +303,108 @@ function readPageLines(
 
 function toContent(...values: unknown[]): string {
   for (const value of values) {
-    if (typeof value === 'string' && value.trim().length > 0) return value;
+    const extracted = extractString(value);
+    if (extracted) return extracted;
   }
   return '';
+}
+
+function extractString(value: unknown, depth = 0): string {
+  if (depth > 3 || value === null || value === undefined) return '';
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : '';
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const extracted = extractString(item, depth + 1);
+      if (extracted) return extracted;
+    }
+    return '';
+  }
+  if (typeof value === 'object') {
+    const record = value as Record<string, unknown>;
+    const candidates = [record.content, record.text, record.message, record.value, record.summary];
+    for (const candidate of candidates) {
+      const extracted = extractString(candidate, depth + 1);
+      if (extracted) return extracted;
+    }
+  }
+  return '';
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== 'object') return null;
+  return value as Record<string, unknown>;
+}
+
+function truncateText(value: string, max = 160): string {
+  const normalized = value.replace(/\s+/g, ' ').trim();
+  if (normalized.length <= max) return normalized;
+  return `${normalized.slice(0, max - 3)}...`;
+}
+
+function summarizeAssistantMessage(data: Record<string, unknown>): string {
+  const content = toContent(data.message, data.content);
+  if (content) return content;
+
+  const reasoning = toContent(data.reasoningText, data.reasoning);
+  const toolRequests = Array.isArray(data.toolRequests) ? data.toolRequests : [];
+  const toolNames = Array.from(new Set(
+    toolRequests
+      .map((item) => (typeof item === 'object' && item ? toContent((item as Record<string, unknown>).name) : ''))
+      .filter(Boolean),
+  ));
+  const toolsSummary = toolNames.length > 0 ? `Tool requests: ${toolNames.join(', ')}` : '';
+
+  if (reasoning && toolsSummary) return `${truncateText(reasoning, 180)}\n${toolsSummary}`;
+  if (reasoning) return truncateText(reasoning, 220);
+  if (toolsSummary) return toolsSummary;
+  return '(assistant content is encrypted in telemetry)';
+}
+
+function summarizeToolResult(data: Record<string, unknown>): string {
+  if (data.success === false) {
+    return truncateText(toContent(data.error, asRecord(data.result)?.error, asRecord(data.result)?.message, 'error'), 220);
+  }
+  const result = asRecord(data.result);
+  const content = toContent(result?.content, result?.message, result?.detailedContent);
+  if (!content) return '';
+  return truncateText(content, 220);
+}
+
+function summarizeSessionEvent(type: string, data: Record<string, unknown>): string {
+  switch (type) {
+    case 'session.start': {
+      const context = asRecord(data.context);
+      const branch = toContent(context?.branch);
+      const repository = toContent(context?.repository);
+      const details = [branch && `branch ${branch}`, repository && repository].filter(Boolean);
+      return details.length > 0 ? `session started (${details.join(' · ')})` : 'session started';
+    }
+    case 'session.model_change': {
+      const next = toContent(data.newModel, data.selectedModel, data.model, 'unknown');
+      const previous = toContent(data.previousModel);
+      return previous ? `model changed ${previous} -> ${next}` : `model selected ${next}`;
+    }
+    case 'session.mode_changed': {
+      const previous = toContent(data.previousMode, 'unknown');
+      const next = toContent(data.newMode, 'unknown');
+      return `mode changed ${previous} -> ${next}`;
+    }
+    case 'session.compaction_start':
+      return 'compaction started';
+    case 'session.compaction_complete':
+      return 'compaction completed';
+    case 'session.plan_changed':
+      return 'plan changed';
+    case 'subagent.started':
+      return `subagent started: ${toContent(data.agentName, 'unknown')}`;
+    case 'subagent.completed':
+      return `subagent completed: ${toContent(data.agentName, 'unknown')}`;
+    case 'skill.invoked':
+      return `skill invoked: ${toContent(data.name, 'unknown')}`;
+    default:
+      return type;
+  }
 }

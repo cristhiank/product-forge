@@ -1442,6 +1442,10 @@ export function workerDetailPage(
     compactionReclaimedTokens: 0,
     totalTokens: 0,
   };
+  const tokenTelemetryMissing = usage.totalTokens === 0 && worker.toolCalls > 0;
+  const tokenTelemetryHint = tokenTelemetryMissing
+    ? `<div class="worker-detail-empty">Token telemetry was not emitted by this session source; model/provider request activity is shown where available.</div>`
+    : '';
   const modelDistribution = Object.values(worker.modelUsage ?? {})
     .sort((a, b) => b.totalTokens - a.totalTokens || b.costUsd - a.costUsd || a.model.localeCompare(b.model));
   const providerDistribution = Object.values(worker.providerUsage ?? {})
@@ -1603,6 +1607,7 @@ export function workerDetailPage(
             <div class="worker-detail-event-time">${formatTokens(usage.compactionReclaimedTokens)} reclaimed</div>
           </li>
         </ul>
+        ${tokenTelemetryHint}
       </section>
       <section class="worker-detail-section">
         <h2>Model Usage</h2>
@@ -1726,6 +1731,9 @@ export function workerDetailPage(
           } else if (item.type === 'tool_lifecycle') {
             icon = '🔧';
             color = '#fbbf24';
+          } else if (item.type === 'session_event') {
+            icon = '⚙️';
+            color = '#a78bfa';
           } else if (item.type === 'error') {
             icon = '❌';
             color = '#ff6b6b';

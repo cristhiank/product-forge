@@ -1,10 +1,10 @@
 # B-019: Rewrite SKILL.md for Code-Generation Approach
 
 **Created:** 2026-02-21  
-**Updated:** 2026-02-21  
+**Updated:** 2026-02-25  
 **Type:** Feature  
 **Priority:** High  
-**Status:** Next  
+**Status:** Done  
 **Estimate:** TBD  
 **Verified-By:** N/A  
 **Parent:** N/A  

@@ -6,7 +6,7 @@
  * Usage: node worker-wrapper.js <copilot-args>
  * Environment: WORKER_STATE_DIR must be set
  */
-import { spawn, execSync } from 'node:child_process';
+import { spawn, execSync, spawnSync } from 'node:child_process';
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -28,7 +28,8 @@ const tryAutoCommit = () => {
     if (!status) return; // nothing to commit
     execSync('git add -A', { timeout: 10000 });
     const msg = process.env.WORKER_COMMIT_MSG || 'chore: auto-commit worker changes';
-    execSync(`git commit -m "${msg}"`, { timeout: 30000 });
+    // Use spawnSync with args array to avoid cmd.exe shell interpolation on Windows
+    spawnSync('git', ['commit', '-m', msg], { timeout: 30000, stdio: 'pipe' });
   } catch {
     // Best-effort — don't fail the wrapper if commit fails
   }

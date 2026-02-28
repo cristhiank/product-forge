@@ -14,6 +14,7 @@ console.log(`📦 Publishing ${skillName} skill...`);
 console.log(`   Source: ${scriptDir}`);
 console.log(`   Target: ${target}`);
 
+runInstall(scriptDir);
 runBuild(scriptDir);
 
 rmSync(target, { recursive: true, force: true });
@@ -24,6 +25,14 @@ cpSync(join(scriptDir, 'references'), join(target, 'references'), { recursive: t
 cpSync(join(scriptDir, 'scripts'), join(target, 'scripts'), { recursive: true });
 
 console.log(`✅ Published to ${target}`);
+
+function runInstall(cwd) {
+  const npmCmd = process.platform === 'win32' ? 'npm.cmd' : 'npm';
+  const result = spawnSync(npmCmd, ['install', '--prefer-offline'], { cwd, stdio: 'inherit' });
+  if (result.status !== 0) {
+    process.exit(result.status ?? 1);
+  }
+}
 
 function runBuild(cwd) {
   const npmCmd = process.platform === 'win32' ? 'npm.cmd' : 'npm';

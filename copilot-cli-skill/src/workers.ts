@@ -4,7 +4,7 @@
  * Manages Copilot CLI worker processes in isolated git worktrees.
  */
 
-import { execSync, spawn } from 'node:child_process';
+import { execSync, execFileSync, spawn } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync, rmSync, readdirSync, statSync, createWriteStream } from 'node:fs';
 import { join, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -63,7 +63,7 @@ export class WorkerManager {
 
     // Create git worktree
     try {
-      execSync(`git worktree add -b "${branchName}" "${worktreePath}" HEAD`, {
+      execFileSync('git', ['worktree', 'add', '-b', branchName, worktreePath, 'HEAD'], {
         cwd: this.repoRoot,
         stdio: 'pipe',
       });
@@ -660,7 +660,7 @@ export class WorkerManager {
     let worktreeRemoved = false;
     if (meta.worktree_path && existsSync(meta.worktree_path)) {
       try {
-        execSync(`git worktree remove "${meta.worktree_path}" --force`, {
+        execFileSync('git', ['worktree', 'remove', meta.worktree_path, '--force'], {
           cwd: this.repoRoot,
           stdio: 'pipe',
         });
@@ -676,7 +676,7 @@ export class WorkerManager {
     let branchDeleted = false;
     if (meta.branch_name) {
       try {
-        execSync(`git branch -D "${meta.branch_name}"`, {
+        execFileSync('git', ['branch', '-D', meta.branch_name], {
           cwd: this.repoRoot,
           stdio: 'pipe',
         });
@@ -691,7 +691,7 @@ export class WorkerManager {
 
     // Prune worktrees
     try {
-      execSync('git worktree prune', { cwd: this.repoRoot, stdio: 'pipe' });
+      execFileSync('git', ['worktree', 'prune'], { cwd: this.repoRoot, stdio: 'pipe' });
     } catch { /* ignore */ }
 
     // Best-effort: deregister worker from agents-hub so it doesn't persist as active
@@ -758,6 +758,9 @@ function writeSyntheticExitMetadata(exitPath: string, terminatedBy: string): voi
  * Swallows all errors — cleanup must never fail due to hub unavailability.
  */
 function tryDeregisterFromHub(workerId: string, repoRoot: string): void {
+  // sqlite3 CLI is not available on Windows — skip deregistration there.
+  // Workers will remain 'active' until the next hub sync or prune cycle.
+  if (process.platform === 'win32') return;
   try {
     const gitCommonDir = execSync('git rev-parse --git-common-dir', {
       cwd: repoRoot,

@@ -13,7 +13,9 @@ console.log('📦 Publishing agents-hub skill...');
 console.log(`   Source: ${scriptDir}`);
 console.log(`   Target: ${target}`);
 
+runInstall(scriptDir);
 runBuild(scriptDir);
+runDownloadBinaries(scriptDir);
 
 rmSync(target, { recursive: true, force: true });
 mkdirSync(join(target, 'references'), { recursive: true });
@@ -30,9 +32,25 @@ for (const file of listFiles(target).slice(0, 20)) {
   console.log(`   ${file}`);
 }
 
+function runInstall(cwd) {
+  const npmCmd = process.platform === 'win32' ? 'npm.cmd' : 'npm';
+  const result = spawnSync(npmCmd, ['install', '--prefer-offline'], { cwd, stdio: 'inherit' });
+  if (result.status !== 0) {
+    process.exit(result.status ?? 1);
+  }
+}
+
 function runBuild(cwd) {
   const npmCmd = process.platform === 'win32' ? 'npm.cmd' : 'npm';
   const result = spawnSync(npmCmd, ['run', 'build', '--silent'], { cwd, stdio: 'inherit' });
+  if (result.status !== 0) {
+    process.exit(result.status ?? 1);
+  }
+}
+
+function runDownloadBinaries(cwd) {
+  const npmCmd = process.platform === 'win32' ? 'node.cmd' : 'node';
+  const result = spawnSync(process.execPath, ['download-binaries.mjs'], { cwd, stdio: 'inherit' });
   if (result.status !== 0) {
     process.exit(result.status ?? 1);
   }

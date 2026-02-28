@@ -6,3 +6,7 @@ dist/
 temp/
 coverage/
 .DS_Store
+
+# Native addon binaries — platform-specific, rebuilt at publish time
+scripts/build/
+scripts/binaries/

@@ -173,20 +173,43 @@ describe('telemetry module', () => {
         expect(items[0].content).toBe('Hi there');
       });
 
+      it('should summarize assistant steps when content is empty', () => {
+        const reader = getTelemetryReader(COPILOT_EVENTS_PATH)!;
+        const events = [
+          {
+            id: 'e1',
+            type: 'assistant.message',
+            data: {
+              content: '',
+              reasoningText: 'Inspecting worker telemetry payloads',
+              toolRequests: [{ name: 'view' }, { name: 'rg' }],
+            },
+            timestamp: '2024-01-01T10:01:00Z',
+            parentId: null,
+          },
+        ];
+
+        const items = reader.toConversation(events);
+        expect(items.length).toBe(1);
+        expect(items[0].type).toBe('assistant_message');
+        expect(items[0].content).toContain('Inspecting worker telemetry payloads');
+        expect(items[0].content).toContain('Tool requests: view, rg');
+      });
+
       it('should convert tool lifecycle events', () => {
         const reader = getTelemetryReader(COPILOT_EVENTS_PATH)!;
         const events = [
           {
             id: 'e1',
             type: 'tool.execution_start',
-            data: { tool_name: 'view', parameters: { path: '/test' } },
+            data: { toolCallId: 'call-1', tool_name: 'view', parameters: { path: '/test' } },
             timestamp: '2024-01-01T10:02:00Z',
             parentId: null,
           },
           {
             id: 'e2',
             type: 'tool.execution_complete',
-            data: { toolName: 'view', success: true },
+            data: { toolCallId: 'call-1', success: true },
             timestamp: '2024-01-01T10:02:05Z',
             parentId: null,
           },
@@ -195,9 +218,30 @@ describe('telemetry module', () => {
         const items = reader.toConversation(events);
         expect(items.length).toBe(2);
         expect(items[0].type).toBe('tool_lifecycle');
-        expect(items[0].content).toContain('tool.execution_start');
+        expect(items[0].content).toContain('start: view');
+        expect(items[0].content).toContain('call-1');
+        expect(items[1].content).toContain('completed: view');
         expect(items[0].content).toContain('view');
         expect(items[1].type).toBe('tool_lifecycle');
+      });
+
+      it('should convert session lifecycle events', () => {
+        const reader = getTelemetryReader(COPILOT_EVENTS_PATH)!;
+        const events = [
+          {
+            id: 'e1',
+            type: 'session.model_change',
+            data: { previousModel: 'gpt-4.1', newModel: 'gpt-5.3-codex' },
+            timestamp: '2024-01-01T10:02:05Z',
+            parentId: null,
+          },
+        ];
+
+        const items = reader.toConversation(events);
+        expect(items.length).toBe(1);
+        expect(items[0].type).toBe('session_event');
+        expect(items[0].content).toContain('model changed');
+        expect(items[0].content).toContain('gpt-5.3-codex');
       });
 
       it('should convert error events', () => {
@@ -255,6 +299,13 @@ describe('telemetry module', () => {
           },
           {
             id: 'e3',
+            type: 'assistant.turn_start',
+            data: { turnId: 't1' },
+            timestamp: '2024-01-01T10:00:01Z',
+            parentId: null,
+          },
+          {
+            id: 'e4',
             type: 'turn.assistant_message',
             data: { message: 'Done' },
             timestamp: '2024-01-01T10:00:02Z',

@@ -4,7 +4,7 @@
  * The caller is responsible for assembling providers — this module only applies them.
  */
 
-import { existsSync, symlinkSync, writeFileSync, mkdirSync } from 'node:fs';
+import { existsSync, symlinkSync, writeFileSync, mkdirSync, statSync, cpSync } from 'node:fs';
 import { join, dirname, resolve } from 'node:path';
 import type { WorkerContextProvider, ContextProviderResult } from './types.js';
 
@@ -71,7 +71,19 @@ export function applyContext(
             continue;
           }
           
-          symlinkSync(source, target);
+          if (process.platform === 'win32') {
+            // On Windows, junction points work for directories without elevated privileges.
+            // For files, fall back to copying since file symlinks require Developer Mode.
+            let isDir = false;
+            try { isDir = statSync(source).isDirectory(); } catch { /* ignore */ }
+            if (isDir) {
+              symlinkSync(source, target, 'junction');
+            } else {
+              cpSync(source, target);
+            }
+          } else {
+            symlinkSync(source, target);
+          }
           result.symlinksCreated++;
         } catch (err) {
           result.warnings.push(`Failed to create symlink ${target}: ${err}`);

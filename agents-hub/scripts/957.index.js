@@ -13,6 +13,8 @@ __webpack_require__.d(__webpack_exports__, {
 
 // EXTERNAL MODULE: external "node:http"
 var external_node_http_ = __webpack_require__(67);
+// EXTERNAL MODULE: external "node:child_process"
+var external_node_child_process_ = __webpack_require__(421);
 ;// CONCATENATED MODULE: ./src/serve/styles.ts
 /** Dark theme CSS for agents-hub dashboard (dev-tool aesthetic) */
 const CSS = /* css */ `
@@ -2349,6 +2351,10 @@ function workerDetailPage(worker, relatedMessages, sync, actionHistory = []) {
         compactionReclaimedTokens: 0,
         totalTokens: 0,
     };
+    const tokenTelemetryMissing = usage.totalTokens === 0 && worker.toolCalls > 0;
+    const tokenTelemetryHint = tokenTelemetryMissing
+        ? `<div class="worker-detail-empty">Token telemetry was not emitted by this session source; model/provider request activity is shown where available.</div>`
+        : '';
     const modelDistribution = Object.values(worker.modelUsage ?? {})
         .sort((a, b) => b.totalTokens - a.totalTokens || b.costUsd - a.costUsd || a.model.localeCompare(b.model));
     const providerDistribution = Object.values(worker.providerUsage ?? {})
@@ -2509,6 +2515,7 @@ function workerDetailPage(worker, relatedMessages, sync, actionHistory = []) {
             <div class="worker-detail-event-time">${formatTokens(usage.compactionReclaimedTokens)} reclaimed</div>
           </li>
         </ul>
+        ${tokenTelemetryHint}
       </section>
       <section class="worker-detail-section">
         <h2>Model Usage</h2>
@@ -2632,6 +2639,9 @@ function workerDetailPage(worker, relatedMessages, sync, actionHistory = []) {
           } else if (item.type === 'tool_lifecycle') {
             icon = '🔧';
             color = '#fbbf24';
+          } else if (item.type === 'session_event') {
+            icon = '⚙️';
+            color = '#a78bfa';
           } else if (item.type === 'error') {
             icon = '❌';
             color = '#ff6b6b';
@@ -2814,52 +2824,115 @@ class CopilotTelemetryReader {
     }
     toConversation(events) {
         const items = [];
+        const toolNamesByCallId = new Map();
         for (const event of events) {
+            const data = event.data ?? {};
             const timestamp = event.timestamp;
             switch (event.type) {
                 case 'user.message':
-                case 'turn.user_message':
+                case 'turn.user_message': {
+                    const content = toContent(data.message, data.content);
+                    if (!content)
+                        break;
                     items.push({
                         type: 'user_message',
                         timestamp,
-                        content: toContent(event.data.message, event.data.content),
-                        data: event.data,
+                        content,
+                        data,
                     });
                     break;
+                }
                 case 'assistant.message':
-                case 'turn.assistant_message':
+                case 'turn.assistant_message': {
+                    const content = summarizeAssistantMessage(data);
+                    if (!content)
+                        break;
                     items.push({
                         type: 'assistant_message',
                         timestamp,
-                        content: toContent(event.data.message, event.data.content),
-                        data: event.data,
+                        content,
+                        data,
                     });
                     break;
-                case 'tool.execution_start':
-                case 'tool.execution_complete':
-                case 'tool.error':
+                }
+                case 'tool.execution_start': {
+                    const toolCallId = toContent(data.toolCallId, data.tool_call_id);
+                    const toolName = toContent(data.toolName, data.tool_name, asRecord(data.tool)?.name, data.tool, 'unknown');
+                    if (toolCallId && toolName)
+                        toolNamesByCallId.set(toolCallId, toolName);
                     items.push({
                         type: 'tool_lifecycle',
                         timestamp,
-                        content: `${event.type}: ${toContent(event.data.toolName, event.data.tool_name, event.data.tool, 'unknown')}`,
-                        data: event.data,
+                        content: `start: ${toolName}${toolCallId ? ` (${toolCallId})` : ''}`,
+                        data,
+                    });
+                    break;
+                }
+                case 'tool.execution_complete': {
+                    const toolCallId = toContent(data.toolCallId, data.tool_call_id);
+                    const resolvedName = (toolCallId && toolNamesByCallId.get(toolCallId))
+                        ?? toContent(data.toolName, data.tool_name, asRecord(data.tool)?.name, data.tool, 'unknown');
+                    const status = data.success === false ? 'failed' : 'completed';
+                    const detail = summarizeToolResult(data);
+                    items.push({
+                        type: 'tool_lifecycle',
+                        timestamp,
+                        content: `${status}: ${resolvedName}${detail ? ` — ${detail}` : ''}${toolCallId ? ` (${toolCallId})` : ''}`,
+                        data,
+                    });
+                    break;
+                }
+                case 'tool.error': {
+                    const toolCallId = toContent(data.toolCallId, data.tool_call_id);
+                    const resolvedName = (toolCallId && toolNamesByCallId.get(toolCallId))
+                        ?? toContent(data.toolName, data.tool_name, asRecord(data.tool)?.name, data.tool, 'unknown');
+                    const detail = toContent(data.message, data.error, asRecord(data.result)?.error, asRecord(data.result)?.message, 'Tool error');
+                    items.push({
+                        type: 'error',
+                        timestamp,
+                        content: `${resolvedName}: ${truncateText(detail, 220)}`,
+                        data,
+                    });
+                    break;
+                }
+                case 'session.start':
+                case 'session.model_change':
+                case 'session.mode_changed':
+                case 'session.compaction_start':
+                case 'session.compaction_complete':
+                case 'session.plan_changed':
+                case 'subagent.started':
+                case 'subagent.completed':
+                case 'skill.invoked':
+                    items.push({
+                        type: 'session_event',
+                        timestamp,
+                        content: summarizeSessionEvent(event.type, data),
+                        data,
                     });
                     break;
                 case 'session.error':
                     items.push({
                         type: 'error',
                         timestamp,
-                        content: String(event.data.message ?? event.data.error ?? 'Unknown error'),
-                        data: event.data,
+                        content: String(data.message ?? data.error ?? 'Unknown error'),
+                        data,
                     });
                     break;
-                default:
+                default: {
+                    if (event.type === 'assistant.turn_start' ||
+                        event.type === 'assistant.turn_end' ||
+                        event.type === 'turn.start' ||
+                        event.type === 'turn.end') {
+                        break;
+                    }
                     items.push({
                         type: 'unknown',
                         timestamp,
                         content: event.type,
-                        data: event.data,
+                        data,
                     });
+                }
             }
         }
         return items;
@@ -2941,10 +3014,111 @@ function readPageLines(eventsPath, end, limit, fileSize) {
 }
 function toContent(...values) {
     for (const value of values) {
-        if (typeof value === 'string' && value.trim().length > 0)
-            return value;
+        const extracted = extractString(value);
+        if (extracted)
+            return extracted;
     }
     return '';
+}
+function extractString(value, depth = 0) {
+    if (depth > 3 || value === null || value === undefined)
+        return '';
+    if (typeof value === 'string') {
+        const trimmed = value.trim();
+        return trimmed.length > 0 ? trimmed : '';
+    }
+    if (Array.isArray(value)) {
+        for (const item of value) {
+            const extracted = extractString(item, depth + 1);
+            if (extracted)
+                return extracted;
+        }
+        return '';
+    }
+    if (typeof value === 'object') {
+        const record = value;
+        const candidates = [record.content, record.text, record.message, record.value, record.summary];
+        for (const candidate of candidates) {
+            const extracted = extractString(candidate, depth + 1);
+            if (extracted)
+                return extracted;
+        }
+    }
+    return '';
+}
+function asRecord(value) {
+    if (!value || typeof value !== 'object')
+        return null;
+    return value;
+}
+function truncateText(value, max = 160) {
+    const normalized = value.replace(/\s+/g, ' ').trim();
+    if (normalized.length <= max)
+        return normalized;
+    return `${normalized.slice(0, max - 3)}...`;
+}
+function summarizeAssistantMessage(data) {
+    const content = toContent(data.message, data.content);
+    if (content)
+        return content;
+    const reasoning = toContent(data.reasoningText, data.reasoning);
+    const toolRequests = Array.isArray(data.toolRequests) ? data.toolRequests : [];
+    const toolNames = Array.from(new Set(toolRequests
+        .map((item) => (typeof item === 'object' && item ? toContent(item.name) : ''))
+        .filter(Boolean)));
+    const toolsSummary = toolNames.length > 0 ? `Tool requests: ${toolNames.join(', ')}` : '';
+    if (reasoning && toolsSummary)
+        return `${truncateText(reasoning, 180)}\n${toolsSummary}`;
+    if (reasoning)
+        return truncateText(reasoning, 220);
+    if (toolsSummary)
+        return toolsSummary;
+    return '(assistant content is encrypted in telemetry)';
+}
+function summarizeToolResult(data) {
+    if (data.success === false) {
+        return truncateText(toContent(data.error, asRecord(data.result)?.error, asRecord(data.result)?.message, 'error'), 220);
+    }
+    const result = asRecord(data.result);
+    const content = toContent(result?.content, result?.message, result?.detailedContent);
+    if (!content)
+        return '';
+    return truncateText(content, 220);
+}
+function summarizeSessionEvent(type, data) {
+    switch (type) {
+        case 'session.start': {
+            const context = asRecord(data.context);
+            const branch = toContent(context?.branch);
+            const repository = toContent(context?.repository);
+            const details = [branch && `branch ${branch}`, repository && repository].filter(Boolean);
+            return details.length > 0 ? `session started (${details.join(' · ')})` : 'session started';
+        }
+        case 'session.model_change': {
+            const next = toContent(data.newModel, data.selectedModel, data.model, 'unknown');
+            const previous = toContent(data.previousModel);
+            return previous ? `model changed ${previous} -> ${next}` : `model selected ${next}`;
+        }
+        case 'session.mode_changed': {
+            const previous = toContent(data.previousMode, 'unknown');
+            const next = toContent(data.newMode, 'unknown');
+            return `mode changed ${previous} -> ${next}`;
+        }
+        case 'session.compaction_start':
+            return 'compaction started';
+        case 'session.compaction_complete':
+            return 'compaction completed';
+        case 'session.plan_changed':
+            return 'plan changed';
+        case 'subagent.started':
+            return `subagent started: ${toContent(data.agentName, 'unknown')}`;
+        case 'subagent.completed':
+            return `subagent completed: ${toContent(data.agentName, 'unknown')}`;
+        case 'skill.invoked':
+            return `skill invoked: ${toContent(data.name, 'unknown')}`;
+        default:
+            return type;
+    }
 }
 
 ;// CONCATENATED MODULE: ./src/serve/server.ts
@@ -2952,6 +3126,7 @@ function toContent(...values) {
  * Lightweight HTTP server for the agents-hub dashboard.
  * Uses node:http (zero deps), SSE for real-time message streaming.
  */
+
 
 
 
@@ -3196,7 +3371,15 @@ async function startServer(opts) {
                         });
                         return sendJson(res, { error: 'Stop action requires an active worker with a PID' }, 409);
                     }
-                    process.kill(worker.pid, 'SIGTERM');
+                    if (process.platform === 'win32') {
+                        try {
+                            (0,external_node_child_process_.execFileSync)('taskkill', ['/PID', String(worker.pid), '/T'], { stdio: 'ignore' });
+                        }
+                        catch { /* ignore */ }
+                    }
+                    else {
+                        process.kill(worker.pid, 'SIGTERM');
+                    }
                     const syncResult = hub.workerSync(workerId);
                     hub.recordOperatorAction({
                         workerId,
