@@ -250,14 +250,18 @@ export function renderBacklogStats(
     archive: String(counts.archive),
   }));
 
+  const stale = hygiene.stale ?? [];
+  const oldDone = hygiene.old_done ?? [];
+  const warnings = hygiene.warnings ?? [];
+
   const alerts: string[] = [];
-  if (hygiene.stale.length > 0) {
-    alerts.push(`${hygiene.stale.length} stale item${hygiene.stale.length === 1 ? '' : 's'} need attention.`);
+  if (stale.length > 0) {
+    alerts.push(`${stale.length} stale item${stale.length === 1 ? '' : 's'} need attention.`);
   }
-  if (hygiene.old_done.length > 0) {
-    alerts.push(`${hygiene.old_done.length} old done item${hygiene.old_done.length === 1 ? '' : 's'} can be archived.`);
+  if (oldDone.length > 0) {
+    alerts.push(`${oldDone.length} old done item${oldDone.length === 1 ? '' : 's'} can be archived.`);
   }
-  alerts.push(...hygiene.warnings);
+  alerts.push(...warnings);
 
   const alertsHtml = alerts.length === 0
     ? statusBadge('No hygiene alerts', 'success')

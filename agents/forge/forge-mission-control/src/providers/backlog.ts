@@ -129,7 +129,12 @@ export class BacklogProvider {
       args.push('--done-days', String(opts.doneDays));
     }
 
-    return this.run(args) as BacklogHygiene;
+    const raw = this.run(args) as Record<string, unknown>;
+    return {
+      stale: (raw.stale ?? raw.stale_in_next ?? raw.stuck_in_working ?? []) as BacklogItem[],
+      old_done: (raw.old_done ?? raw.old_in_done ?? []) as BacklogItem[],
+      warnings: (raw.warnings ?? raw.status_folder_mismatches ?? []) as string[],
+    };
   }
 
   getBrief(): BacklogBrief {
