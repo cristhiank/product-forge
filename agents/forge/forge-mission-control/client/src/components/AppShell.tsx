@@ -1,3 +1,4 @@
+import { useState, useCallback } from "react";
 import { NavLink, Outlet } from "react-router-dom";
 import { useSSE } from "@/hooks/use-sse";
 import {
@@ -13,6 +14,7 @@ import {
   Puzzle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { CommandPalette } from "@/components/CommandPalette";
 import type { ComponentType } from "react";
 import type { LucideProps } from "lucide-react";
 
@@ -113,7 +115,7 @@ function Sidebar() {
   );
 }
 
-function Topbar() {
+function Topbar({ onOpenPalette }: { onOpenPalette: () => void }) {
   return (
     <header className="flex h-12 shrink-0 items-center justify-between border-b border-border bg-card px-4">
       <div className="flex items-center gap-2">
@@ -122,7 +124,14 @@ function Topbar() {
           Forge Mission Control
         </span>
       </div>
-      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+      <div className="flex items-center gap-3 text-xs text-muted-foreground">
+        <button
+          type="button"
+          onClick={onOpenPalette}
+          className="flex items-center gap-1 rounded-md border border-border bg-muted/40 px-2 py-1 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+        >
+          ⌘K
+        </button>
         <LayoutDashboard className="h-3.5 w-3.5" />
         <span>forge-mission-control</span>
       </div>
@@ -145,17 +154,20 @@ function StatusBar() {
 
 export function AppShell() {
   useSSE();
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const openPalette = useCallback(() => setPaletteOpen(true), []);
 
   return (
     <div className="flex h-screen bg-background text-foreground">
       <Sidebar />
       <div className="flex flex-1 flex-col overflow-hidden">
-        <Topbar />
+        <Topbar onOpenPalette={openPalette} />
         <main className="flex-1 overflow-auto p-6">
           <Outlet />
         </main>
         <StatusBar />
       </div>
+      <CommandPalette externalOpen={paletteOpen} onOpenChange={setPaletteOpen} />
     </div>
   );
 }
