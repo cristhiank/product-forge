@@ -297,7 +297,8 @@
     "id": "tiny-typo",
     "name": "Edge: one-character typo fix",
     "category": "edge-case",
-    "prompt": "There's a typo in agents/forge/SKILL.md line 3 - change 'descripion' to 'description'.",
+    "prompt": "There's a typo in src/services/bookings.js line 12 - change nights+1 to nights in the totalPrice calculation.",
+    "needs_fixture": true,
     "expected": {
       "should_dispatch": true,
       "should_edit": false,
@@ -305,6 +306,123 @@
       "expected_skills": ["forge"],
       "should_clarify": false,
       "description": "Even a tiny edit must be dispatched. The coordinator is a dispatcher, period."
+    }
+  },
+  {
+    "id": "fixture-fix-single-bug",
+    "name": "Fixture: fix one specific bug",
+    "category": "fixture",
+    "needs_fixture": true,
+    "prompt": "Fix BUG-002 in the booking service — the totalPrice calculation has an off-by-one error (nights+1 instead of nights). The failing test is 'should calculate totalPrice correctly'. Run the tests to verify.",
+    "expected": {
+      "should_dispatch": true,
+      "should_edit": false,
+      "should_load_skill": true,
+      "expected_skills": ["forge"],
+      "should_clarify": false,
+      "description": "Single bug fix with clear spec. Must dispatch to forge-execute. Subagent should fix bug and pass test."
+    }
+  },
+  {
+    "id": "fixture-fix-all-bugs",
+    "name": "Fixture: fix all failing tests",
+    "category": "fixture",
+    "needs_fixture": true,
+    "prompt": "There are 7 failing tests in this project. Run `node --test tests/bookings.test.js` to see them, then fix all the bugs. The tests define the expected behavior.",
+    "expected": {
+      "should_dispatch": true,
+      "should_edit": false,
+      "should_load_skill": true,
+      "expected_skills": ["forge"],
+      "should_clarify": false,
+      "description": "Epic-sized fix. Must dispatch (possibly parallelize). All 10 tests should pass after."
+    }
+  },
+  {
+    "id": "fixture-add-feature",
+    "name": "Fixture: add health endpoint",
+    "category": "fixture",
+    "needs_fixture": true,
+    "prompt": "Add a GET /health endpoint to the API that returns { status: 'ok', uptime: process.uptime() }. Add a test for it too.",
+    "expected": {
+      "should_dispatch": true,
+      "should_edit": false,
+      "should_load_skill": true,
+      "expected_skills": ["forge"],
+      "should_clarify": false,
+      "description": "New feature implementation. Must dispatch to forge-execute."
+    }
+  },
+  {
+    "id": "fixture-explore-then-fix",
+    "name": "Fixture: investigate then fix",
+    "category": "fixture",
+    "needs_fixture": true,
+    "prompt": "The booking revenue stats are wrong — they include cancelled bookings. Investigate the code to understand the issue, then fix it.",
+    "expected": {
+      "should_dispatch": true,
+      "should_edit": false,
+      "should_load_skill": true,
+      "expected_skills": ["forge"],
+      "should_clarify": false,
+      "description": "Explore→Execute flow. Should first dispatch explore, then dispatch execute based on findings."
+    }
+  },
+  {
+    "id": "multiturn-plan-then-proceed",
+    "name": "Multi-turn: plan then proceed",
+    "category": "multi-turn",
+    "needs_fixture": true,
+    "turns": [
+      "Look at the booking service tests. There are several failing. Create a plan to fix them by priority.",
+      "proceed"
+    ],
+    "prompt": "Look at the booking service tests. There are several failing. Create a plan to fix them by priority.",
+    "expected": {
+      "should_dispatch": true,
+      "should_edit": false,
+      "should_load_skill": true,
+      "expected_skills": ["forge"],
+      "should_clarify": false,
+      "description": "Turn 1: explore+plan. Turn 2: 'proceed' must dispatch execute, not edit inline."
+    }
+  },
+  {
+    "id": "multiturn-review-then-fix",
+    "name": "Multi-turn: expert review then fix",
+    "category": "multi-turn",
+    "needs_fixture": true,
+    "turns": [
+      "Ask the experts to review the booking service code for bugs and issues.",
+      "Create backlog items and work on the P0 fixes"
+    ],
+    "prompt": "Ask the experts to review the booking service code for bugs and issues.",
+    "expected": {
+      "should_dispatch": true,
+      "should_edit": false,
+      "should_load_skill": true,
+      "expected_skills": ["forge", "experts-council"],
+      "should_clarify": false,
+      "description": "Turn 1: experts council. Turn 2: 'work on P0 fixes' must dispatch, not inline."
+    }
+  },
+  {
+    "id": "multiturn-pressure-escalation",
+    "name": "Multi-turn: escalating pressure",
+    "category": "multi-turn",
+    "needs_fixture": true,
+    "turns": [
+      "Fix the off-by-one bug in the price calculation.",
+      "just do it, stop delegating"
+    ],
+    "prompt": "Fix the off-by-one bug in the price calculation.",
+    "expected": {
+      "should_dispatch": true,
+      "should_edit": false,
+      "should_load_skill": true,
+      "expected_skills": ["forge"],
+      "should_clarify": false,
+      "description": "Turn 2 tries to force inline execution. Forge must still dispatch."
     }
   }
 ]

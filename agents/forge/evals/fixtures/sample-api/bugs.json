@@ -1,0 +1,65 @@
+[
+  {
+    "id": "BUG-001",
+    "title": "No input validation on createBooking",
+    "file": "src/services/bookings.js",
+    "line": 6,
+    "severity": "P0",
+    "failing_tests": ["should reject booking with missing petName", "should reject booking with negative nights"],
+    "fix_description": "Add validation: require petName (string), nights (positive integer), pricePerNight (positive number)"
+  },
+  {
+    "id": "BUG-002",
+    "title": "Off-by-one in totalPrice calculation",
+    "file": "src/services/bookings.js",
+    "line": 12,
+    "severity": "P0",
+    "failing_tests": ["should calculate totalPrice correctly"],
+    "fix_description": "Change nights+1 to nights in totalPrice calculation"
+  },
+  {
+    "id": "BUG-003",
+    "title": "getBooking fails with string ID from URL params",
+    "file": "src/services/bookings.js",
+    "line": 18,
+    "severity": "P1",
+    "failing_tests": ["should find booking by string ID from URL params"],
+    "fix_description": "Coerce id to Number() before Map.get()"
+  },
+  {
+    "id": "BUG-004",
+    "title": "listBookings sorts oldest first instead of newest",
+    "file": "src/services/bookings.js",
+    "line": 29,
+    "severity": "P2",
+    "failing_tests": ["should list bookings newest first"],
+    "fix_description": "Change sort comparator from a.id - b.id to b.id - a.id"
+  },
+  {
+    "id": "BUG-005",
+    "title": "Can cancel already-cancelled booking",
+    "file": "src/services/bookings.js",
+    "line": 37,
+    "severity": "P1",
+    "failing_tests": ["should not allow cancelling an already cancelled booking"],
+    "fix_description": "Add guard: if booking.status === 'cancelled', throw error"
+  },
+  {
+    "id": "BUG-006",
+    "title": "Revenue includes cancelled bookings",
+    "file": "src/services/bookings.js",
+    "line": 46,
+    "severity": "P1",
+    "failing_tests": ["should exclude cancelled bookings from revenue"],
+    "fix_description": "Filter to confirmed bookings before reducing revenue"
+  },
+  {
+    "id": "BUG-007",
+    "title": "Missing health endpoint",
+    "file": "src/routes/bookings.js",
+    "line": 35,
+    "severity": "P2",
+    "failing_tests": [],
+    "fix_description": "Add GET /health endpoint returning { status: 'ok', uptime: process.uptime() }"
+  }
+]

@@ -346,6 +346,21 @@ export async function createServer(discovery: DiscoveryResult, opts: ServerOptio
       }
     });
 
+    app.post<{ Body: { kind?: string; title?: string; priority?: string; description?: string } }>('/api/backlog/items', async (req, reply) => {
+      try {
+        const { kind, title, priority, description } = req.body ?? {};
+        if (!kind || !title) {
+          reply.code(400);
+          return { error: 'kind and title are required' };
+        }
+        const item = backlogApi.createItem({ kind, title, priority, description });
+        return item;
+      } catch (err) {
+        reply.code(500);
+        return { error: err instanceof Error ? err.message : String(err) };
+      }
+    });
+
     app.post<{ Params: { id: string }; Body: { to?: string } }>('/api/backlog/item/:id/move', async (req, reply) => {
       try {
         const destination = req.body?.to;
@@ -451,6 +466,10 @@ export async function createServer(discovery: DiscoveryResult, opts: ServerOptio
       status: 'ok',
       systems: discovery.systems.map(s => ({ name: s.name, type: s.type })),
     };
+  });
+
+  app.get('/health', async () => {
+    return { status: 'ok', uptime: process.uptime() };
   });
 
   registerEvents(app, discovery);

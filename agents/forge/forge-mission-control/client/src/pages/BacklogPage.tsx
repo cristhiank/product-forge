@@ -1,6 +1,8 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useCallback, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
+import { createPortal } from "react-dom";
+import { Plus } from "lucide-react";
 import {
   DndContext,
   DragOverlay,
@@ -204,10 +206,173 @@ function Column({
   );
 }
 
+// ── New Item Dialog ─────────────────────────────────────────
+
+interface NewItemForm {
+  kind: string;
+  title: string;
+  priority: string;
+  description: string;
+}
+
+const EMPTY_FORM: NewItemForm = { kind: "", title: "", priority: "", description: "" };
+
+function NewItemDialog({
+  open,
+  onClose,
+}: {
+  open: boolean;
+  onClose: () => void;
+}) {
+  const queryClient = useQueryClient();
+  const [form, setForm] = useState<NewItemForm>(EMPTY_FORM);
+  const [errors, setErrors] = useState<Partial<Record<keyof NewItemForm, string>>>({});
+  const titleRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (open) {
+      setForm(EMPTY_FORM);
+      setErrors({});
+      setTimeout(() => titleRef.current?.focus(), 50);
+    }
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, [open, onClose]);
+
+  const createMutation = useMutation({
+    mutationFn: (data: NewItemForm) =>
+      api.post("/api/backlog/items", data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["backlog"] });
+      onClose();
+    },
+  });
+
+  const validate = useCallback((): boolean => {
+    const errs: Partial<Record<keyof NewItemForm, string>> = {};
+    if (!form.title.trim()) errs.title = "Title is required";
+    if (!form.kind) errs.kind = "Kind is required";
+    if (!form.priority) errs.priority = "Priority is required";
+    setErrors(errs);
+    return Object.keys(errs).length === 0;
+  }, [form]);
+
+  const handleSubmit = useCallback(
+    (e: React.FormEvent) => {
+      e.preventDefault();
+      if (!validate()) return;
+      createMutation.mutate(form);
+    },
+    [validate, createMutation, form],
+  );
+
+  if (!open) return null;
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div className="w-full max-w-md rounded-xl border border-border bg-card p-6 shadow-xl">
+        <h2 className="mb-4 text-lg font-semibold text-foreground">New Backlog Item</h2>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Kind */}
+          <div>
+            <label className="mb-1 block text-xs font-medium text-muted-foreground">Kind</label>
+            <select
+              value={form.kind}
+              onChange={(e) => setForm((f) => ({ ...f, kind: e.target.value }))}
+              className="w-full rounded-md border border-border bg-muted px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none"
+            >
+              <option value="">Select kind…</option>
+              <option value="task">Task</option>
+              <option value="story">Story</option>
+              <option value="epic">Epic</option>
+              <option value="bug">Bug</option>
+            </select>
+            {errors.kind && <p className="mt-1 text-xs text-red-400">{errors.kind}</p>}
+          </div>
+
+          {/* Title */}
+          <div>
+            <label className="mb-1 block text-xs font-medium text-muted-foreground">Title</label>
+            <input
+              ref={titleRef}
+              type="text"
+              value={form.title}
+              onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
+              placeholder="Item title…"
+              className="w-full rounded-md border border-border bg-muted px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none"
+            />
+            {errors.title && <p className="mt-1 text-xs text-red-400">{errors.title}</p>}
+          </div>
+
+          {/* Priority */}
+          <div>
+            <label className="mb-1 block text-xs font-medium text-muted-foreground">Priority</label>
+            <select
+              value={form.priority}
+              onChange={(e) => setForm((f) => ({ ...f, priority: e.target.value }))}
+              className="w-full rounded-md border border-border bg-muted px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none"
+            >
+              <option value="">Select priority…</option>
+              <option value="low">Low</option>
+              <option value="medium">Medium</option>
+              <option value="high">High</option>
+            </select>
+            {errors.priority && <p className="mt-1 text-xs text-red-400">{errors.priority}</p>}
+          </div>
+
+          {/* Description */}
+          <div>
+            <label className="mb-1 block text-xs font-medium text-muted-foreground">Description</label>
+            <textarea
+              value={form.description}
+              onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+              rows={3}
+              placeholder="Optional description…"
+              className="w-full rounded-md border border-border bg-muted px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none resize-none"
+            />
+          </div>
+
+          {/* Actions */}
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-md border border-border px-4 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={createMutation.isPending}
+              className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
+            >
+              {createMutation.isPending ? "Creating…" : "Create"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
 // ── Page ───────────────────────────────────────────────────
 
 export function BacklogPage() {
   const queryClient = useQueryClient();
+  const [dialogOpen, setDialogOpen] = useState(false);
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
   );
@@ -296,7 +461,18 @@ export function BacklogPage() {
 
   return (
     <div className="flex flex-col h-full">
-      <h1 className="text-2xl font-bold mb-4">📦 Backlog Board</h1>
+      <div className="flex items-center gap-3 mb-4">
+        <h1 className="text-2xl font-bold">📦 Backlog Board</h1>
+        <button
+          type="button"
+          onClick={() => setDialogOpen(true)}
+          className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+        >
+          <Plus className="h-4 w-4" />
+          New Item
+        </button>
+      </div>
+      <NewItemDialog open={dialogOpen} onClose={() => setDialogOpen(false)} />
       <DndContext
         sensors={sensors}
         collisionDetection={closestCenter}

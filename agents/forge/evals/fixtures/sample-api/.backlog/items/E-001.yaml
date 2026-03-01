@@ -1,0 +1,34 @@
+---
+id: E-001
+title: "Fix booking service bugs"
+status: ready
+priority: high
+items:
+  - id: E-001.1
+    title: "Fix input validation (BUG-001)"
+    status: ready
+    priority: P0
+  - id: E-001.2
+    title: "Fix price calculation off-by-one (BUG-002)"
+    status: ready
+    priority: P0
+  - id: E-001.3
+    title: "Fix string ID coercion (BUG-003)"
+    status: ready
+    priority: P1
+  - id: E-001.4
+    title: "Fix sort order (BUG-004)"
+    status: ready
+    priority: P2
+  - id: E-001.5
+    title: "Add cancel guard (BUG-005)"
+    status: ready
+    priority: P1
+  - id: E-001.6
+    title: "Fix revenue calculation (BUG-006)"
+    status: ready
+    priority: P1
+  - id: E-001.7
+    title: "Add health endpoint (BUG-007)"
+    status: ready
+    priority: P2

@@ -28,10 +28,17 @@ MUTATING_BASH_COMMANDS = [
     "pytest", "cargo build", "cargo test", "make", "go build", "go test",
     "npm install", "pip install", "dotnet add",
 ]
-# Operator patterns can match anywhere in the command string.
+# Operator patterns are checked per-segment (not across the full command)
+# to avoid false positives when operators appear in CLI tool arguments.
 MUTATING_BASH_OPERATORS = [
     "sed -i", "awk -i", "perl -pi", "patch ",
     "echo >", "cat >", "tee ", ">>",
+]
+# Segments starting with these prefixes are known-safe CLI tool invocations
+# (backlog CLI, hub CLI, git, read-only utilities) and skip mutation checks.
+SAFE_SEGMENT_PREFIXES = [
+    "node ", "git ", "grep ", "jq ", "cat ", "head ", "tail ",
+    "ls ", "find ", "wc ", "sort ", "uniq ", "which ", "pwd",
 ]
 DISPATCH_TOOLS = {"task"}
 SKILL_TOOLS = {"skill"}
@@ -45,14 +52,24 @@ def _is_mutating_bash(cmd: str) -> bool:
     """Check if a bash command is mutating, avoiding false positives from arguments."""
     # Neutralize quoted strings so patterns inside args don't trigger matches
     stripped = re.sub(r'"[^"]*"|\'[^\']*\'', '""', cmd)
-    for pattern in MUTATING_BASH_OPERATORS:
-        if pattern in stripped:
-            return True
     for seg in re.split(r'\s*(?:&&|\|\||[;|])\s*', stripped):
         seg = seg.strip()
+        if not seg:
+            continue
+        # Skip known-safe CLI tool invocations (backlog, hub, git, etc.)
+        if any(seg.startswith(p) for p in SAFE_SEGMENT_PREFIXES):
+            continue
+        # Check operator patterns per-segment (not full command) to avoid
+        # false positives from operators inside CLI tool arguments.
+        for pattern in MUTATING_BASH_OPERATORS:
+            if pattern in seg:
+                return True
         for pattern in MUTATING_BASH_COMMANDS:
             if seg.startswith(pattern):
-                return True
+                # Word boundary: pattern must be followed by whitespace or end
+                rest = seg[len(pattern):]
+                if not rest or rest[0].isspace():
+                    return True
     return False
 
 

@@ -157,4 +157,11 @@ export class BacklogProvider {
   moveItem(id: string, to: BacklogFolder): unknown {
     return this.run(['move', id, '--to', to]);
   }
+
+  createItem(opts: { kind: string; title: string; priority?: string; description?: string }): BacklogItem {
+    const args = ['create', '--kind', opts.kind, '--title', opts.title];
+    if (opts.priority) args.push('--priority', opts.priority);
+    if (opts.description) args.push('--description', opts.description);
+    return this.run(args) as BacklogItem;
+  }
 }

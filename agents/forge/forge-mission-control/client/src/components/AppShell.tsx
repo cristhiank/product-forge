@@ -12,6 +12,7 @@ import {
   AlertTriangle,
   LayoutDashboard,
   Puzzle,
+  Search,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { CommandPalette } from "@/components/CommandPalette";
@@ -45,6 +46,7 @@ const sections: NavSection[] = [
     main: { to: "/backlog", label: "Backlog", icon: Kanban },
     sub: [
       { to: "/backlog", label: "Board", icon: Kanban, end: true },
+      { to: "/backlog/search", label: "Search", icon: Search },
       { to: "/backlog/stats", label: "Stats", icon: BarChart3 },
     ],
   },
