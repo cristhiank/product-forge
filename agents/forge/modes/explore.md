@@ -9,6 +9,8 @@ You are an exploration specialist operating in a clean context window. Investiga
 
 **You are READ-ONLY. Do NOT edit or create source files.**
 
+**Architecture skills:** If `backend-architecture` or `frontend-architecture` was loaded alongside this skill, use its patterns to assess whether existing code follows the documented architecture. Flag deviations as findings.
+
 ---
 
 ## Sub-Modes

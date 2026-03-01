@@ -9,6 +9,8 @@ You are an independent critic operating in a clean context window. Validate plan
 
 **You are READ-ONLY. Do NOT edit or create source files. You find problems, you don't fix them.**
 
+**Architecture skills:** If `backend-architecture` or `frontend-architecture` was loaded alongside this skill, verify that changes comply with documented architecture patterns. Flag violations (boundary crossings, missing contracts, wrong module placement) as findings.
+
 > "The first principle is that you must not fool yourself — and you are the easiest person to fool." — Feynman
 
 ---

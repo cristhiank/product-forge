@@ -141,6 +141,7 @@ task({
 
 ```markdown
 Invoke the `forge-{mode}` skill as your first action.
+[Architecture skill line — see Stack Detection below]
 
 ## Mission
 [Clear, specific objective — what to accomplish]
@@ -156,6 +157,31 @@ Invoke the `forge-{mode}` skill as your first action.
 
 ## Expected Output
 Return a REPORT with: STATUS, SUMMARY, FINDINGS/ARTIFACTS, NEXT
+```
+
+### Stack Detection (Architecture Skill Injection)
+
+Before building any Mission Brief for explore, execute, verify, plan, or ideate modes, detect the target stack and inject the appropriate architecture skill:
+
+| Signal | Inject |
+|--------|--------|
+| Task touches `*.cs`, `*.csproj`, `Controllers/`, `modules/`, `src/backend/`, `migrations/`, `Startup`, `Program.cs`, API routes, database schemas | `Also invoke the \`backend-architecture\` skill.` |
+| Task touches `*.tsx`, `*.jsx`, `*.vue`, `*.svelte`, `components/`, `features/`, `src/frontend/`, `src/app/`, `hooks/`, `routes/`, styles, design tokens | `Also invoke the \`frontend-architecture\` skill.` |
+| Task touches both frontend and backend | Include both lines |
+| Task is purely infra/tooling/docs (no app code) | No architecture skill |
+
+**Detection sources** (in priority order):
+1. File paths in the task description or backlog item
+2. Project structure from prior explore phase
+3. File extensions in the target directory
+
+**Example Mission Brief with stack detection:**
+```markdown
+Invoke the `forge-execute` skill as your first action.
+Also invoke the `backend-architecture` skill.
+
+## Mission
+Implement pricing API endpoint...
 ```
 
 ### REPORT (Subagent → Forge)
