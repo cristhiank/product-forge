@@ -320,5 +320,93 @@ body {
   border: 1px solid var(--border);
   padding: 8px 10px;
 }
+
+/* --- Backlog: Kanban --- */
+.kanban { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+.kanban-column { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; }
+.kanban-column-header { font-size: 14px; font-weight: 600; margin-bottom: 12px; display: flex; justify-content: space-between; }
+.kanban-count { color: var(--text-muted); font-weight: 400; }
+.kanban-card { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 12px; margin-bottom: 8px; }
+.kanban-card:hover { border-color: var(--accent); }
+.kanban-card a { color: var(--text); text-decoration: none; }
+.kanban-card-title { font-size: 13px; font-weight: 500; margin-bottom: 4px; }
+.kanban-card-meta { font-size: 11px; color: var(--text-muted); display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* --- Backlog Detail --- */
+.kanban-card-tags,
+.backlog-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.tag-pill {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.tag-pill--muted { opacity: 0.8; }
+.backlog-header-meta { display: flex; gap: 8px; flex-wrap: wrap; }
+.backlog-meta-grid { display: grid; gap: 8px; }
+
+.link-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.link-list li { display: flex; align-items: center; gap: 8px; }
+.link-list a { color: var(--accent); text-decoration: none; }
+.link-list a:hover { text-decoration: underline; }
+
+.alerts-list {
+  margin-left: 18px;
+  color: var(--text-muted);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* --- Search --- */
+.search-form {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.search-input {
+  flex: 1;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 10px;
+}
+
+.search-button {
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 8px 12px;
+  cursor: pointer;
+}
+
+.log-output { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; font-family: var(--font-mono); font-size: 12px; line-height: 1.6; white-space: pre-wrap; word-break: break-all; max-height: 500px; overflow-y: auto; color: var(--text-muted); }
+.action-bar { display: flex; gap: 8px; margin: 16px 0; }
+.btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font-size: 13px; cursor: pointer; text-decoration: none; }
+.btn:hover { border-color: var(--accent); }
+.btn--danger { border-color: var(--danger); color: var(--danger); }
+.btn--danger:hover { background: rgba(248, 81, 73, 0.1); }
+.message-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; margin-bottom: 12px; }
+.message-header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 12px; color: var(--text-muted); }
+.message-content { font-size: 14px; line-height: 1.5; }
+.cost-highlight { font-size: 24px; font-weight: 700; color: var(--warning); }
 `;
 }

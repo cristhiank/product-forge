@@ -36,6 +36,7 @@ export function dataTable(opts: {
   headers: { label: string; key: string; align?: 'left' | 'right' }[];
   rows: Record<string, string>[];
   emptyMessage?: string;
+  rawHtmlKeys?: string[];
 }): string {
   if (opts.rows.length === 0) {
     return `<div class="empty-state">${escapeHtml(opts.emptyMessage ?? 'No data available.')}</div>`;
@@ -48,12 +49,17 @@ export function dataTable(opts: {
     })
     .join('');
 
+  const rawHtmlKeys = new Set(opts.rawHtmlKeys ?? []);
+
   const rowsHtml = opts.rows
     .map((row) => {
       const cells = opts.headers
         .map((header) => {
           const value = row[header.key] ?? '';
           const align = header.align === 'right' ? ' style="text-align: right;"' : '';
+          if (rawHtmlKeys.has(header.key)) {
+            return `<td${align}>${value}</td>`;
+          }
           return `<td${align}>${escapeHtml(value)}</td>`;
         })
         .join('');
