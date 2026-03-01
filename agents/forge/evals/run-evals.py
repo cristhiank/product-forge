@@ -87,7 +87,7 @@ FILE_MUTATION_PATTERNS = [
     "npm install", "pip install", "dotnet add",
 ]
 SAFE_SEGMENT_PREFIXES = [
-    "node ", "git ", "grep ", "jq ", "cat ", "head ", "tail ",
+    "node ", "git ", "grep ", "jq ", "head ", "tail ",
     "ls ", "find ", "wc ", "sort ", "uniq ", "which ", "pwd",
 ]
 

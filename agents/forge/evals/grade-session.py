@@ -37,7 +37,7 @@ MUTATING_BASH_OPERATORS = [
 # Segments starting with these prefixes are known-safe CLI tool invocations
 # (backlog CLI, hub CLI, git, read-only utilities) and skip mutation checks.
 SAFE_SEGMENT_PREFIXES = [
-    "node ", "git ", "grep ", "jq ", "cat ", "head ", "tail ",
+    "node ", "git ", "grep ", "jq ", "head ", "tail ",
     "ls ", "find ", "wc ", "sort ", "uniq ", "which ", "pwd",
 ]
 DISPATCH_TOOLS = {"task"}
