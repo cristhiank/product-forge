@@ -1,0 +1,6 @@
+name: forge-mission-control
+stage: idea
+version: 0.1.0
+description: A local web dashboard for navigating product docs, backlog items, and AI agent interactions across Forge-managed repositories
+north_star: "One browser tab to observe and control everything happening in a Forge project"
+created: "2026-07-13"

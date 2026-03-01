@@ -1,0 +1,28 @@
+{
+  "name": "forge-mission-control",
+  "version": "0.1.0",
+  "description": "Local web dashboard for navigating Forge project artifacts, backlog, and agent activity",
+  "type": "module",
+  "bin": {
+    "forge-ui": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "start": "node dist/cli.js"
+  },
+  "dependencies": {
+    "commander": "^12.0.0",
+    "fastify": "^5.0.0",
+    "open": "^10.0.0",
+    "chokidar": "^4.0.0",
+    "gray-matter": "^4.0.3"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.0",
+    "@types/node": "^22.0.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
