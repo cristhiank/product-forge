@@ -7,7 +7,7 @@
     "forge-ui": "./dist/cli.js"
   },
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && cd client && npx vite build --outDir ../dist/client",
     "build:client": "cd client && npx vite build --outDir ../dist/client",
     "build:server": "tsc",
     "dev": "tsc --watch",
