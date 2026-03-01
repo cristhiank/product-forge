@@ -4,7 +4,7 @@
 **Updated:** 2026-03-01  
 **Type:** Epic  
 **Priority:** High  
-**Status:** Not Started  
+**Status:** In Progress  
 **Estimate:** TBD  
 **Verified-By:** N/A  
 **Parent:** N/A  

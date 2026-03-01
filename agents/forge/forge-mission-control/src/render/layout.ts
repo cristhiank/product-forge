@@ -1,4 +1,5 @@
 import type { DiscoveryResult } from '../discovery.js';
+import { escapeHtml } from './markdown.js';
 
 export function renderHome(discovery: DiscoveryResult): string {
   const nav = renderNav(discovery, 'home');
@@ -83,12 +84,4 @@ function renderDashboard(discovery: DiscoveryResult): string {
       </div>
     </div>
   `;
-}
-
-function escapeHtml(str: string): string {
-  return str
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
 }
