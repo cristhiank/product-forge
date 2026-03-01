@@ -30,6 +30,28 @@ User message
 │   Triggers: "what's next", "backlog", "show tasks", "priorities",
 │             "bookkeeping", "what should I work on"
 │
+├── Product (DISCOVER)
+│   └── Delegate to product subagent + jobs-to-be-done skill
+│   Triggers: "discover", "research", "who are our customers",
+│             "market analysis", "competitive analysis", "JTBD",
+│             "customer segments", "ICP"
+│
+├── Product (DESIGN)
+│   └── Delegate to product subagent + made-to-stick + copywriting
+│   Triggers: "define feature", "feature spec", "product spec",
+│             "vision", "positioning", "brand", "GTM", "strategy",
+│             "pricing strategy", "design tokens"
+│
+├── Product (VALIDATE)
+│   └── Delegate to product subagent
+│   Triggers: "validate", "prototype", "experiment", "test hypothesis",
+│             "A/B test", "user test"
+│
+├── Product (health/maintenance)
+│   └── Delegate to product subagent
+│   Triggers: "product health", "update specs", "what's stale",
+│             "feature overview", "feature lifecycle"
+│
 ├── Explore
 │   └── Delegate to explore subagent
 │   Triggers: "look at", "find", "search for", "investigate",
@@ -159,6 +181,9 @@ SUMMARY: [one-line result]
 
 | Mode | Default Model | Rationale |
 |------|--------------|-----------|
+| product (discover) | `claude-opus-4.6` | Deep research, JTBD analysis needs strong reasoning |
+| product (design) | `claude-sonnet-4.6` | Spec writing, structured output |
+| product (validate) | `claude-sonnet-4.6` | Experiment design, analysis |
 | explore | `claude-haiku-4.5` or `explore` agent | Speed for codebase search |
 | ideate | `claude-opus-4.6` | Creativity needs strong reasoning |
 | plan | `claude-sonnet-4.6` | Structured output, well-defined task |
@@ -172,36 +197,53 @@ For explore tasks, prefer `agent_type: "explore"` (fast Haiku agent) when the ta
 
 ## Phase Machine
 
-The user's natural operating pattern:
+The expanded operating pattern (double diamond + implementation):
 
 ```
-Phase 1: REVIEW ──→ experts-council (3 models)
-Phase 2: PLAN ────→ backlog skill + plan subagent
-Phase 3: EXECUTE ─→ execute subagent or parallel workers
-Phase 4: VERIFY ──→ experts-council (delta review) or verify subagent
-Phase 5: ITERATE ─→ backlog skill (what's next?)
+DISCOVER ──→ DESIGN ──→ VALIDATE ──→ PLAN ──→ BUILD ──→ VERIFY ──→ ITERATE
+    │           │           │          │        │         │          │
+    │ Research  │ Specs     │ Prototype│ Epic   │ Workers │ Experts  │ Backlog
+    │ JTBD      │ Features  │ Experiment│Stories│ Code    │ Delta    │ Next?
+    │ Experts   │ Strategy  │ User test│        │         │          │
 ```
+
+Product phases (DISCOVER → DESIGN → VALIDATE) use `forge-product` subagent.
+Implementation phases (PLAN → BUILD → VERIFY → ITERATE) use existing mode subagents.
 
 ### Phase Transitions
 
 | From | Condition | To |
 |------|-----------|-----|
 | START | Any request | Classify → route |
-| REVIEW | Findings produced | PLAN (if actionable) or report |
-| PLAN | Epic created | EXECUTE (on user "proceed") |
-| EXECUTE | All items done | VERIFY |
+| DISCOVER | Findings produced | DESIGN (if actionable) or report |
+| DESIGN | Feature spec defined | VALIDATE (if hypothesis needs testing) |
+| DESIGN | Feature spec solid | PLAN (if ready to build) |
+| VALIDATE | Experiment confirmed | PLAN → auto-bridge to backlog epic |
+| VALIDATE | Experiment rejected | DISCOVER (back to research) |
+| PLAN | Epic created | BUILD (on user "proceed") |
+| BUILD | All items done | VERIFY |
 | VERIFY | Clean | ITERATE or COMPLETE |
-| VERIFY | Findings | PLAN (new items) → EXECUTE |
+| VERIFY | Findings | PLAN (new items) → BUILD |
 | Any | "What's next?" | Check backlog → present options |
 | Any | Ad-hoc request | Classify and route (may skip phases) |
+
+### Auto-Bridges
+
+| Trigger | Action |
+|---------|--------|
+| Feature reaches `validated` | Prompt: "Create backlog epic from F-XXX?" |
+| Feature reaches `planned` without `epic_id` | Prompt: "Link epic to F-XXX?" |
+| Feature reaches `shipped` | Prompt: "Create experiment to measure impact?" |
+| 3+ ad-hoc changes without backlog items | Prompt: "Track these changes?" |
 
 ### Post-Completion
 
 After any phase completes:
 1. Store key results in working memory
 2. Check backlog for newly unblocked items
-3. Bridge to next action — never end with just a summary
-4. Track untracked work — if 3+ ad-hoc changes without backlog items, prompt for capture
+3. Check `.product/` for feature lifecycle bridges (validated → epic, shipped → experiment)
+4. Bridge to next action — never end with just a summary
+5. Track untracked work — if 3+ ad-hoc changes without backlog items, prompt for capture
 
 ---
 

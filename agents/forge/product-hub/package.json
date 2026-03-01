@@ -1,0 +1,21 @@
+{
+  "name": "product-hub",
+  "version": "1.0.0",
+  "description": "Product repository library for Forge agent — manages .product/ artifacts, feature lifecycle, versioning",
+  "type": "module",
+  "scripts": {
+    "build": "npx ncc build src/cli.ts -o scripts --minify --no-source-map-register && rm -f scripts/*.d.ts",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "@types/node": "^25.3.3",
+    "@vercel/ncc": "^0.38.4",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  },
+  "dependencies": {
+    "gray-matter": "^4.0.3",
+    "yaml": "^2.7.0"
+  }
+}

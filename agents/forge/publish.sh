@@ -102,7 +102,7 @@ publish_file "$SCRIPT_DIR/SKILL.md" "$SKILLS_TARGET/forge/SKILL.md" "forge/SKILL
 echo ""
 echo "⚙️  Publishing mode skills..."
 
-MODES=("explore" "ideate" "plan" "execute" "verify" "memory")
+MODES=("explore" "ideate" "plan" "execute" "verify" "memory" "product")
 
 for mode in "${MODES[@]}"; do
   publish_file \
@@ -110,6 +110,28 @@ for mode in "${MODES[@]}"; do
     "$SKILLS_TARGET/forge-${mode}/SKILL.md" \
     "forge-${mode}/SKILL.md"
 done
+
+# --- Step 4: Product-hub library ---
+echo ""
+echo "📦 Publishing product-hub library..."
+
+PRODUCT_HUB="$SCRIPT_DIR/product-hub"
+
+if [ -f "$PRODUCT_HUB/scripts/index.js" ]; then
+  publish_file \
+    "$PRODUCT_HUB/scripts/index.js" \
+    "$SKILLS_TARGET/forge-product/scripts/index.js" \
+    "forge-product/scripts/index.js"
+else
+  echo "   ⚠️  Product-hub not built. Run: cd product-hub && npm run build"
+fi
+
+if [ -f "$PRODUCT_HUB/references/storage.md" ]; then
+  publish_file \
+    "$PRODUCT_HUB/references/storage.md" \
+    "$SKILLS_TARGET/forge-product/references/storage.md" \
+    "forge-product/references/storage.md"
+fi
 
 # --- Summary ---
 echo ""
