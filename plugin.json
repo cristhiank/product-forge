@@ -1,0 +1,23 @@
+{
+  "name": "forge",
+  "description": "Forge dev partner — dispatch coordinator with specialized skills for product management, architecture guidance, backlog tracking, expert council reviews, and parallel worker execution.",
+  "version": "1.0.0",
+  "author": {
+    "name": "Cris Lopez",
+    "url": "https://github.com/cristhiank"
+  },
+  "repository": "https://github.com/cristhiank/mcps",
+  "license": "MIT",
+  "keywords": [
+    "dev-partner",
+    "coordinator",
+    "multi-agent",
+    "architecture",
+    "backlog",
+    "product-management",
+    "parallel-workers"
+  ],
+  "category": "development",
+  "agents": "agents/",
+  "skills": "skills/"
+}
