@@ -52,10 +52,16 @@ User message
 │   Triggers: "product health", "update specs", "what's stale",
 │             "feature overview", "feature lifecycle"
 │
-├── Explore
-│   └── Delegate to explore subagent
-│   Triggers: "look at", "find", "search for", "investigate",
-│             "understand", "scan", "what does X do", "where is"
+├── Explore (lookup)
+│   └── Built-in explore agent (no skill, no REPORT)
+│   Triggers: "where is", "find [symbol]", "what file has", "list files matching"
+│   Use when: single file/symbol lookup, < 3 search calls, no analysis needed
+│
+├── Explore (investigate)
+│   └── general-purpose + forge-explore skill → structured REPORT
+│   Triggers: "investigate", "understand", "scan", "what does X do",
+│             "look at [system]", "how does [feature] work", "classify complexity"
+│   Use when: multi-file analysis, tier classification, external search, backlog context
 │
 ├── Ideate
 │   └── Delegate to ideate subagent
@@ -235,14 +241,24 @@ SUMMARY: [one-line result]
 | product (discover) | `claude-opus-4.6` | Deep research, JTBD analysis needs strong reasoning |
 | product (design) | `claude-sonnet-4.6` | Spec writing, structured output |
 | product (validate) | `claude-sonnet-4.6` | Experiment design, analysis |
-| explore | `claude-haiku-4.5` or `explore` agent | Speed for codebase search |
+| explore (lookup) | `explore` agent | Fast built-in agent: grep/glob/view only. No skills, no REPORT. |
+| explore (investigate) | `claude-sonnet-4.6` | general-purpose + forge-explore skill. Full toolset, structured REPORT. |
 | ideate | `claude-opus-4.6` | Creativity needs strong reasoning |
 | plan | `claude-sonnet-4.6` | Structured output, well-defined task |
 | execute | `claude-sonnet-4.6` | Code generation, well-constrained |
 | verify | `claude-opus-4.6` | Critical thinking, hallucination detection |
 | memory | `claude-haiku-4.5` | Simple extraction, pattern matching |
 
-For explore tasks, prefer `agent_type: "explore"` (fast Haiku agent) when the task is simple search/find. Use `agent_type: "general-purpose"` for deep dives.
+### Explore Routing
+
+The built-in `explore` agent (agent_type: "explore") is fast but limited — it only has grep/glob/view and **cannot invoke skills**. The `forge-explore` skill requires a `general-purpose` agent.
+
+| Need | Agent Type | Skill | REPORT? |
+|------|-----------|-------|---------|
+| "Where is X?" / "Find symbol Y" / file lookup | `explore` | None | No — free text answer |
+| Investigate, understand, classify, trace deps, external search | `general-purpose` | `forge-explore` | Yes — structured REPORT |
+
+**Rule:** If the Mission Brief says `Invoke the \`forge-explore\` skill`, the agent_type MUST be `general-purpose`. Never pair `agent_type: "explore"` with a skill invocation — the built-in explore agent cannot load skills.
 
 ---
 
