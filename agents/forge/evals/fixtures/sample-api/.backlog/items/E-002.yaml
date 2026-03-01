@@ -1,0 +1,36 @@
+---
+id: E-002
+title: "UX/UI improvements for booking dashboard"
+status: ready
+priority: medium
+items:
+  - id: E-002.1
+    title: "Fix invisible logo (UX-BUG-002)"
+    status: ready
+    priority: P1
+    files: ["frontend/index.html"]
+  - id: E-002.2
+    title: "Fix unreadable nav links (UX-BUG-003)"
+    status: ready
+    priority: P1
+    files: ["frontend/index.html"]
+  - id: E-002.3
+    title: "Add responsive design (UX-BUG-001)"
+    status: ready
+    priority: P2
+    files: ["frontend/index.html"]
+  - id: E-002.4
+    title: "Add status badge colors (UX-BUG-005)"
+    status: ready
+    priority: P2
+    files: ["frontend/index.html"]
+  - id: E-002.5
+    title: "Add hover/focus states (UX-BUG-006)"
+    status: ready
+    priority: P3
+    files: ["frontend/index.html"]
+  - id: E-002.6
+    title: "Fix XSS vulnerability (JS-BUG-002)"
+    status: ready
+    priority: P0
+    files: ["frontend/index.html"]

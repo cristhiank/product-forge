@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PetBoard - Booking Dashboard</title>
+  <style>
+    /* UX-BUG-001: No responsive design — breaks on mobile */
+    body { font-family: Arial; margin: 0; padding: 0; background: #1a1a2e; color: #eee; }
+    .header { background: #16213e; padding: 20px; display: flex; justify-content: space-between; }
+    /* UX-BUG-002: Logo text is same color as background — invisible */
+    .header h1 { color: #16213e; font-size: 24px; }
+    .nav { display: flex; gap: 20px; }
+    .nav a { color: #0f3460; text-decoration: none; } /* UX-BUG-003: Link color too dark — unreadable */
+    .container { padding: 40px; max-width: 1200px; }
+    .stats { display: flex; gap: 20px; margin-bottom: 30px; }
+    /* UX-BUG-004: Cards have no visual hierarchy — all same style */
+    .stat-card { background: #16213e; padding: 20px; border-radius: 8px; flex: 1; }
+    .stat-card h3 { margin: 0 0 8px 0; font-size: 14px; color: #888; }
+    .stat-card .value { font-size: 32px; font-weight: bold; }
+    .bookings-table { width: 100%; border-collapse: collapse; }
+    .bookings-table th { text-align: left; padding: 12px; border-bottom: 1px solid #333; color: #888; }
+    .bookings-table td { padding: 12px; border-bottom: 1px solid #222; }
+    /* UX-BUG-005: Status badges have no color differentiation */
+    .badge { padding: 4px 8px; border-radius: 4px; font-size: 12px; background: #333; }
+    .btn { padding: 8px 16px; border: none; border-radius: 4px; cursor: pointer; background: #333; color: #fff; }
+    /* UX-BUG-006: No hover/focus states on interactive elements */
+    .form-group { margin-bottom: 16px; }
+    .form-group label { display: block; margin-bottom: 4px; color: #888; }
+    .form-group input { width: 100%; padding: 8px; background: #16213e; border: 1px solid #333; color: #eee; border-radius: 4px; }
+    /* UX-BUG-007: No error states or validation feedback on form */
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>🐾 PetBoard</h1>
+    <nav class="nav">
+      <a href="#dashboard">Dashboard</a>
+      <a href="#bookings">Bookings</a>
+      <a href="#settings">Settings</a>
+    </nav>
+  </div>
+  <div class="container">
+    <div class="stats">
+      <div class="stat-card">
+        <h3>Total Bookings</h3>
+        <div class="value" id="total">--</div>
+      </div>
+      <div class="stat-card">
+        <h3>Revenue</h3>
+        <div class="value" id="revenue">--</div>
+      </div>
+      <div class="stat-card">
+        <h3>Confirmed</h3>
+        <div class="value" id="confirmed">--</div>
+      </div>
+    </div>
+
+    <h2>Recent Bookings</h2>
+    <table class="bookings-table">
+      <thead>
+        <tr><th>Pet</th><th>Nights</th><th>Total</th><th>Status</th><th>Actions</th></tr>
+      </thead>
+      <tbody id="bookings-body">
+        <tr><td colspan="5">Loading...</td></tr>
+      </tbody>
+    </table>
+
+    <h2 style="margin-top: 30px;">New Booking</h2>
+    <form id="booking-form">
+      <div class="form-group">
+        <label>Pet Name</label>
+        <input type="text" id="petName" placeholder="Enter pet name">
+      </div>
+      <div class="form-group">
+        <label>Nights</label>
+        <input type="number" id="nights" placeholder="Number of nights">
+      </div>
+      <div class="form-group">
+        <label>Price per Night</label>
+        <input type="number" id="pricePerNight" placeholder="Price per night">
+      </div>
+      <button type="submit" class="btn">Create Booking</button>
+    </form>
+  </div>
+
+  <script>
+    // JS-BUG-001: No error handling on fetch
+    async function loadStats() {
+      const res = await fetch('/api/stats');
+      const data = await res.json();
+      document.getElementById('total').textContent = data.total;
+      document.getElementById('revenue').textContent = '$' + data.revenue;
+      document.getElementById('confirmed').textContent = data.confirmed;
+    }
+
+    async function loadBookings() {
+      const res = await fetch('/api/bookings');
+      const bookings = await res.json();
+      const tbody = document.getElementById('bookings-body');
+      tbody.innerHTML = bookings.map(b => `
+        <tr>
+          <td>${b.petName}</td>
+          <td>${b.nights}</td>
+          <td>$${b.totalPrice}</td>
+          <td><span class="badge">${b.status}</span></td>
+          <td><button class="btn" onclick="cancelBooking(${b.id})">Cancel</button></td>
+        </tr>
+      `).join('');
+    }
+
+    // JS-BUG-002: XSS vulnerability — petName is injected into innerHTML without escaping
+    async function cancelBooking(id) {
+      await fetch(`/api/bookings/${id}`, { method: 'DELETE' });
+      loadBookings();
+      loadStats();
+    }
+
+    document.getElementById('booking-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      // JS-BUG-003: No client-side validation
+      await fetch('/api/bookings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          petName: document.getElementById('petName').value,
+          nights: parseInt(document.getElementById('nights').value),
+          pricePerNight: parseInt(document.getElementById('pricePerNight').value)
+        })
+      });
+      loadBookings();
+      loadStats();
+    });
+
+    loadStats();
+    loadBookings();
+  </script>
+</body>
+</html>

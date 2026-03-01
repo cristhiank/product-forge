@@ -1,0 +1,19 @@
+---
+id: E-003
+title: "Implement notification system (F-002)"
+status: design
+priority: medium
+items:
+  - id: E-003.1
+    title: "Research notification channels"
+    status: ready
+    priority: P1
+  - id: E-003.2
+    title: "Define feature spec for F-002"
+    status: ready
+    priority: P1
+  - id: E-003.3
+    title: "Implement notification service"
+    status: blocked
+    depends_on: E-003.2
+    priority: P1

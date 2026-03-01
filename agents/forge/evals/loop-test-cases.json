@@ -1,0 +1,269 @@
+[
+  {
+    "id": "loop1-impl-cycle",
+    "name": "Loop 1: Full implementation cycle (explore→plan→execute→verify)",
+    "category": "workflow-loop",
+    "loop": "implementation",
+    "needs_fixture": true,
+    "mode": "resume",
+    "turns": [
+      {
+        "prompt": "Investigate the booking service — there are failing tests. Run `node --test tests/bookings.test.js` and understand what's broken.",
+        "expect_phase": "explore",
+        "expect_dispatch": true,
+        "expect_skills": ["forge", "forge-explore"],
+        "expect_no_edits": true,
+        "description": "Should dispatch explore subagent to investigate. No file edits."
+      },
+      {
+        "prompt": "Create a plan to fix the P0 bugs first, then P1, then P2.",
+        "expect_phase": "plan",
+        "expect_dispatch": true,
+        "expect_skills": ["forge"],
+        "expect_no_edits": true,
+        "description": "Should dispatch plan subagent. Produce ordered fix plan."
+      },
+      {
+        "prompt": "proceed",
+        "expect_phase": "execute",
+        "expect_dispatch": true,
+        "expect_skills": ["forge"],
+        "expect_no_edits": true,
+        "description": "Pressure signal. Must dispatch execute subagent, not edit inline."
+      },
+      {
+        "prompt": "verify the changes",
+        "expect_phase": "verify",
+        "expect_dispatch": true,
+        "expect_skills": ["forge"],
+        "expect_no_edits": true,
+        "description": "Should dispatch verify subagent to check the implementation."
+      }
+    ],
+    "outcome_check": {
+      "run_tests": true,
+      "expect_tests_pass_min": 7,
+      "expect_tests_total": 10,
+      "description": "After the full cycle, at least P0 bugs should be fixed (7+ tests passing)."
+    }
+  },
+  {
+    "id": "loop2-expert-review-fix",
+    "name": "Loop 2: Expert review → backlog → fix → delta review",
+    "category": "workflow-loop",
+    "loop": "expert-review",
+    "needs_fixture": true,
+    "mode": "resume",
+    "turns": [
+      {
+        "prompt": "Ask the experts to review the booking service code for bugs, security issues, and design problems.",
+        "expect_phase": "experts",
+        "expect_dispatch": true,
+        "expect_skills": ["forge", "experts-council"],
+        "expect_no_edits": true,
+        "description": "Should invoke experts-council with 3 parallel models."
+      },
+      {
+        "prompt": "Create backlog items for the P0 and P1 findings and work on them.",
+        "expect_phase": "execute",
+        "expect_dispatch": true,
+        "expect_skills": ["forge"],
+        "expect_no_edits": true,
+        "description": "Should create backlog items then dispatch execution."
+      },
+      {
+        "prompt": "Ask the experts to review again — delta review against their original findings.",
+        "expect_phase": "experts-delta",
+        "expect_dispatch": true,
+        "expect_skills": ["forge", "experts-council"],
+        "expect_no_edits": true,
+        "description": "Should invoke experts-council in delta review mode."
+      }
+    ],
+    "outcome_check": {
+      "run_tests": true,
+      "expect_tests_pass_min": 6,
+      "expect_tests_total": 10,
+      "description": "P0+P1 bugs should be fixed after expert-driven fixes."
+    }
+  },
+  {
+    "id": "loop3-product-to-build",
+    "name": "Loop 3: Product discovery → design → plan → build",
+    "category": "workflow-loop",
+    "loop": "product-bridge",
+    "needs_fixture": true,
+    "mode": "resume",
+    "turns": [
+      {
+        "prompt": "Look at the .product/ folder. There are gaps in our product docs — PRODUCT-GAP-001 through GAP-004. Research and fill them. Start with customer discovery using JTBD.",
+        "expect_phase": "product-discover",
+        "expect_dispatch": true,
+        "expect_skills": ["forge"],
+        "expect_no_edits": true,
+        "description": "Should dispatch product subagent in DISCOVER phase."
+      },
+      {
+        "prompt": "Now define the feature spec for F-002 (Notification System). The open questions need answers.",
+        "expect_phase": "product-design",
+        "expect_dispatch": true,
+        "expect_skills": ["forge"],
+        "expect_no_edits": true,
+        "description": "Should dispatch product subagent in DESIGN phase."
+      },
+      {
+        "prompt": "Create a backlog epic from F-002 and plan the implementation.",
+        "expect_phase": "plan",
+        "expect_dispatch": true,
+        "expect_skills": ["forge"],
+        "expect_no_edits": true,
+        "description": "Should bridge product → backlog, then dispatch plan subagent."
+      }
+    ],
+    "outcome_check": {
+      "check_files": [".product/features/F-002.md"],
+      "description": "F-002 spec should be filled in. Backlog epic should exist."
+    }
+  },
+  {
+    "id": "loop4-epic-parallel",
+    "name": "Loop 4: Epic parallelism — spawn workers for E-001",
+    "category": "workflow-loop",
+    "loop": "epic-parallel",
+    "needs_fixture": true,
+    "mode": "interactive",
+    "turns": [
+      {
+        "prompt": "Work on epic E-001 until completion. The 7 bug fixes are all independent — parallelize when possible.",
+        "expect_phase": "execute",
+        "expect_dispatch": true,
+        "expect_skills": ["forge"],
+        "expect_no_edits": true,
+        "expect_parallel_workers": true,
+        "description": "Should detect 7 independent items and spawn parallel workers."
+      }
+    ],
+    "outcome_check": {
+      "run_tests": true,
+      "expect_tests_pass_min": 10,
+      "expect_tests_total": 10,
+      "description": "All 7 bugs should be fixed. 10/10 tests passing."
+    }
+  },
+  {
+    "id": "loop5-bug-triage",
+    "name": "Loop 5: Error report → explore → fix → iterate",
+    "category": "workflow-loop",
+    "loop": "bug-triage",
+    "needs_fixture": true,
+    "mode": "resume",
+    "turns": [
+      {
+        "prompt": "I'm getting this error when creating a booking with negative nights:\nTypeError: Cannot read properties of undefined (reading 'totalPrice')\nThe booking was created but has wrong data. Investigate and fix.",
+        "expect_phase": "explore",
+        "expect_dispatch": true,
+        "expect_skills": ["forge"],
+        "expect_no_edits": true,
+        "description": "Should dispatch explore to investigate the error, then execute to fix."
+      },
+      {
+        "prompt": "The fix looks incomplete — I can still create bookings with missing petName. Fix the validation too.",
+        "expect_phase": "execute",
+        "expect_dispatch": true,
+        "expect_skills": ["forge"],
+        "expect_no_edits": true,
+        "description": "Iteration — should dispatch another execute for the remaining validation bug."
+      }
+    ],
+    "outcome_check": {
+      "run_tests": true,
+      "expect_tests_pass_min": 5,
+      "expect_tests_total": 10,
+      "description": "At minimum BUG-001 and BUG-002 should be fixed."
+    }
+  },
+  {
+    "id": "loop6-ux-review",
+    "name": "Loop 6: UX audit → expert review → epic → build",
+    "category": "workflow-loop",
+    "loop": "ux-review",
+    "needs_fixture": true,
+    "mode": "resume",
+    "turns": [
+      {
+        "prompt": "Review the frontend/index.html dashboard. Look at the UX/UI issues — there are visibility problems, missing responsive design, and accessibility gaps. Create a prioritized list.",
+        "expect_phase": "explore",
+        "expect_dispatch": true,
+        "expect_skills": ["forge"],
+        "expect_no_edits": true,
+        "description": "Should dispatch explore subagent to audit the frontend."
+      },
+      {
+        "prompt": "Ask the experts to review the frontend code for security and UX issues.",
+        "expect_phase": "experts",
+        "expect_dispatch": true,
+        "expect_skills": ["forge", "experts-council"],
+        "expect_no_edits": true,
+        "description": "Should invoke experts-council for frontend review."
+      },
+      {
+        "prompt": "Create backlog items from the findings and fix the P0 and P1 issues.",
+        "expect_phase": "execute",
+        "expect_dispatch": true,
+        "expect_skills": ["forge"],
+        "expect_no_edits": true,
+        "description": "Should create backlog, then dispatch execution for P0/P1 fixes."
+      }
+    ],
+    "outcome_check": {
+      "check_files": ["frontend/index.html"],
+      "description": "XSS vulnerability (P0) and visibility issues (P1) should be fixed."
+    }
+  },
+  {
+    "id": "loop7-greenfield",
+    "name": "Loop 7: Clarify → ideate → plan → build (notification system)",
+    "category": "workflow-loop",
+    "loop": "greenfield",
+    "needs_fixture": true,
+    "mode": "resume",
+    "turns": [
+      {
+        "prompt": "We want to add a notification system to PetBoard. When bookings are created or cancelled, notify the pet owner.",
+        "expect_phase": "clarify",
+        "expect_dispatch": false,
+        "expect_clarification": true,
+        "expect_no_edits": true,
+        "description": "Ambiguous T4 request. Should ask clarifying questions about channels, timing, etc."
+      },
+      {
+        "prompt": "WhatsApp only for now, immediate notifications, system-triggered. Spanish only.",
+        "expect_phase": "ideate",
+        "expect_dispatch": true,
+        "expect_skills": ["forge"],
+        "expect_no_edits": true,
+        "description": "Scope is now clear. Should dispatch ideate for approach options."
+      },
+      {
+        "prompt": "Go with approach A. Plan the implementation.",
+        "expect_phase": "plan",
+        "expect_dispatch": true,
+        "expect_skills": ["forge"],
+        "expect_no_edits": true,
+        "description": "Should dispatch plan subagent to create execution plan."
+      },
+      {
+        "prompt": "proceed",
+        "expect_phase": "execute",
+        "expect_dispatch": true,
+        "expect_skills": ["forge"],
+        "expect_no_edits": true,
+        "description": "Pressure signal. Must dispatch execute subagent."
+      }
+    ],
+    "outcome_check": {
+      "check_files": ["src/services/notifications.js"],
+      "description": "Notification service should be created with WhatsApp integration."
+    }
+  }
+]
