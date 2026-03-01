@@ -9,20 +9,33 @@ export function registerEvents(app: FastifyInstance, discovery: DiscoveryResult)
   const clients = new Set<EventSender>();
 
   app.get('/events', async (req, reply) => {
+    reply.hijack();
     reply.raw.writeHead(200, {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
       Connection: 'keep-alive',
     });
 
+    reply.raw.on('error', () => { /* swallow stream errors */ });
+
     const send: EventSender = (event, data) => {
-      reply.raw.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+      try {
+        if (!reply.raw.destroyed) {
+          reply.raw.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+        }
+      } catch {
+        clients.delete(send);
+      }
     };
 
     clients.add(send);
     send('connected', { systems: discovery.systems.map(s => s.type) });
 
     req.raw.on('close', () => {
+      clients.delete(send);
+    });
+
+    req.raw.on('error', () => {
       clients.delete(send);
     });
   });

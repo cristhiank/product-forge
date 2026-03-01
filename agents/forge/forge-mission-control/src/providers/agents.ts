@@ -1,7 +1,7 @@
 import { spawnSync } from 'node:child_process';
-import { accessSync, readFileSync, readdirSync, statSync } from 'node:fs';
+import { accessSync, readFileSync, readdirSync, statSync, unlinkSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { homedir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
 
 
 export interface AgentWorker {
@@ -119,14 +119,15 @@ export class AgentsProvider {
 
     try {
       const cliPath = this.findHubCli();
-      const result = spawnSync('node', [cliPath, '--db', this.hubDbPath, ...args], {
+      const tmpFile = join(tmpdir(), `forge-agents-${Date.now()}-${Math.random().toString(36).slice(2)}.json`);
+      spawnSync('sh', ['-c', `node ${JSON.stringify(cliPath)} --db ${JSON.stringify(this.hubDbPath)} ${args.join(' ')} > ${JSON.stringify(tmpFile)}`], {
         cwd: this.repoRoot,
         encoding: 'utf-8',
         timeout: 15000,
-        maxBuffer: 10 * 1024 * 1024,
       });
-      if (result.error) return null;
-      return JSON.parse(result.stdout) as unknown;
+      const stdout = readFileSync(tmpFile, 'utf-8');
+      unlinkSync(tmpFile);
+      return JSON.parse(stdout) as unknown;
     } catch {
       return null;
     }

@@ -1,6 +1,7 @@
 import { spawnSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { existsSync, readFileSync, unlinkSync } from 'node:fs';
+import { resolve, join } from 'node:path';
+import { tmpdir } from 'node:os';
 
 import type {
   FeatureOverview,
@@ -91,14 +92,15 @@ export class ProductProvider {
   // Run product-hub CLI and parse JSON output
   private run<T>(args: string[]): T {
     try {
-      const result = spawnSync('node', [this.cliPath, ...args], {
+      const tmpFile = join(tmpdir(), `forge-product-${Date.now()}-${Math.random().toString(36).slice(2)}.json`);
+      spawnSync('sh', ['-c', `node ${JSON.stringify(this.cliPath)} ${args.join(' ')} > ${JSON.stringify(tmpFile)}`], {
         cwd: this.repoRoot,
         encoding: 'utf-8',
         timeout: 10_000,
-        maxBuffer: 10 * 1024 * 1024,
       });
-      if (result.error) throw result.error;
-      return JSON.parse(result.stdout) as T;
+      const stdout = readFileSync(tmpFile, 'utf-8');
+      unlinkSync(tmpFile);
+      return JSON.parse(stdout) as T;
     } catch (error) {
       if (error instanceof Error && 'stderr' in error) {
         const stderr = String((error as { stderr?: string }).stderr ?? '').trim();

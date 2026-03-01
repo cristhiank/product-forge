@@ -1,6 +1,7 @@
 import { spawnSync } from 'node:child_process';
-import { accessSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { accessSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
+import { resolve, join } from 'node:path';
+import { tmpdir } from 'node:os';
 
 export interface BacklogItem {
   id: string;
@@ -45,20 +46,19 @@ export class BacklogProvider {
 
   private run(args: string[]): unknown {
     const cliPath = this.findCli();
+    const tmpFile = join(tmpdir(), `forge-backlog-${Date.now()}-${Math.random().toString(36).slice(2)}.json`);
 
-    const result = spawnSync('node', [cliPath, '--root', this.repoRoot, ...args], {
+    spawnSync('sh', ['-c', `node ${JSON.stringify(cliPath)} --root ${JSON.stringify(this.repoRoot)} ${args.join(' ')} > ${JSON.stringify(tmpFile)}`], {
       encoding: 'utf-8',
       timeout: 10000,
-      maxBuffer: 10 * 1024 * 1024,
     });
 
-    if (result.error) {
-      throw result.error;
-    }
-
     try {
-      return JSON.parse(result.stdout) as unknown;
+      const stdout = readFileSync(tmpFile, 'utf-8');
+      unlinkSync(tmpFile);
+      return JSON.parse(stdout) as unknown;
     } catch (error) {
+      try { unlinkSync(tmpFile); } catch { /* ignore */ }
       throw new Error(
         `Failed to parse backlog CLI JSON output for command "${args.join(' ')}": ${String(error)}`,
       );

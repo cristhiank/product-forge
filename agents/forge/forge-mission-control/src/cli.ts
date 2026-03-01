@@ -37,7 +37,7 @@ program
 
     const server = await createServer(discovery, { port, verbose: opts.verbose });
 
-    await server.listen({ port, host: '127.0.0.1' });
+    await server.listen({ port, host: '0.0.0.0' });
 
     const url = `http://localhost:${port}`;
     console.log(`   🚀 Dashboard: ${url}\n`);
@@ -54,6 +54,12 @@ program
     };
     process.on('SIGINT', shutdown);
     process.on('SIGTERM', shutdown);
+    process.on('uncaughtException', (err) => {
+      console.error('   ⚠️  Uncaught exception:', err.message);
+    });
+    process.on('unhandledRejection', (err) => {
+      console.error('   ⚠️  Unhandled rejection:', err);
+    });
   });
 
 program.parse();
