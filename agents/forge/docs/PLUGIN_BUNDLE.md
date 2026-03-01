@@ -1,4 +1,4 @@
-# Forge Plugin Bundle — Design & SDK Migration
+# Forge Plugin Bundle — Design, Hooks & SDK Migration
 
 ## Overview
 
@@ -340,3 +340,254 @@ This means:
 
 For Forge, this is ideal — users can customize by placing overrides in their
 project's `.github/agents/` or `.github/skills/` directories.
+
+## Hooks System — Structural Enforcement
+
+Hooks are the **game-changer** for dispatch discipline. Unlike prompt-based rules
+(which the LLM can ignore), hooks are shell scripts that run BEFORE/AFTER every
+tool call. A `preToolUse` hook can **deny tool execution** by returning
+`{"permissionDecision": "deny"}`. This is structural, deterministic enforcement.
+
+### hooks.json Specification
+
+```json
+{
+  "version": 1,
+  "hooks": {
+    "sessionStart": [...],
+    "sessionEnd": [...],
+    "userPromptSubmitted": [...],
+    "preToolUse": [...],
+    "postToolUse": [...],
+    "errorOccurred": [...]
+  }
+}
+```
+
+Each hook is an array of command configs:
+```json
+{
+  "type": "command",
+  "bash": "./scripts/hook-handler.sh",
+  "cwd": ".",
+  "timeoutSec": 10
+}
+```
+
+Hook scripts receive a JSON payload via stdin with full context (tool name,
+arguments, session info). preToolUse scripts must return JSON on stdout with
+`permissionDecision: "allow"` or `"deny"`.
+
+### Forge Hooks Design
+
+#### Hook 1: Dispatch Discipline (preToolUse)
+
+**The fix for inline execution.** When the Forge agent is active, deny
+`edit`, `create`, and mutating `bash` calls from the coordinator context.
+
+```bash
+#!/usr/bin/env bash
+# hooks/pre-tool-use.sh
+# Reads JSON from stdin, decides allow/deny
+
+INPUT=$(cat)
+TOOL_NAME=$(echo "$INPUT" | jq -r '.toolName // .tool_name // ""')
+AGENT=$(echo "$INPUT" | jq -r '.agent // .agentId // ""')
+COMMAND=$(echo "$INPUT" | jq -r '.arguments.command // ""')
+
+# Allow everything for subagents (they should edit files)
+if [ "$AGENT" != "Forge" ] && [ "$AGENT" != "forge" ]; then
+  echo '{"permissionDecision": "allow"}'
+  exit 0
+fi
+
+# Forge coordinator: deny file mutations
+case "$TOOL_NAME" in
+  edit|create|apply_patch)
+    echo "{\"permissionDecision\": \"deny\", \"permissionDecisionReason\": \"Forge coordinator cannot edit files. Dispatch a subagent via task() instead.\"}"
+    exit 0
+    ;;
+  bash|execute)
+    # Check for mutating bash commands
+    if echo "$COMMAND" | grep -qE '^(npm (run build|test|install)|dotnet (build|test|run)|pytest|cargo (build|test)|make |sed -i|echo >|cat >)'; then
+      echo "{\"permissionDecision\": \"deny\", \"permissionDecisionReason\": \"Forge coordinator cannot run builds/tests. Dispatch a subagent via task() instead.\"}"
+      exit 0
+    fi
+    ;;
+esac
+
+echo '{"permissionDecision": "allow"}'
+```
+
+**Impact:** This would bring dispatch purity from 47% to ~95%+ because the
+LLM literally cannot call edit/create — the hook blocks it before execution.
+
+#### Hook 2: Session Telemetry (postToolUse)
+
+Log every tool call for eval grading and debugging:
+
+```bash
+#!/usr/bin/env bash
+# hooks/post-tool-use.sh
+INPUT=$(cat)
+TOOL=$(echo "$INPUT" | jq -r '.toolName // ""')
+SESSION=$(echo "$INPUT" | jq -r '.sessionId // ""')
+TIMESTAMP=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+
+# Append to telemetry log
+echo "{\"ts\":\"$TIMESTAMP\",\"session\":\"$SESSION\",\"tool\":\"$TOOL\"}" \
+  >> ~/.copilot/forge-telemetry.jsonl
+```
+
+**Impact:** Structured tool usage data for eval grading without parsing events.jsonl.
+
+#### Hook 3: Session Bootstrap (sessionStart)
+
+Ensure forge skill is loaded at the start of every Forge session:
+
+```bash
+#!/usr/bin/env bash
+# hooks/session-start.sh
+INPUT=$(cat)
+AGENT=$(echo "$INPUT" | jq -r '.agent // ""')
+
+if [ "$AGENT" = "Forge" ] || [ "$AGENT" = "forge" ]; then
+  echo "{\"additionalContext\": \"REMINDER: Load the forge coordinator skill as your first action. Call skill('forge') before classifying any user message.\"}"
+else
+  echo "{}"
+fi
+```
+
+**Impact:** Adds a structural reminder at session start, reinforcing skill loading.
+
+#### Hook 4: Quality Gate (preToolUse — git commit)
+
+Block commits that don't follow hygiene rules:
+
+```bash
+#!/usr/bin/env bash
+# hooks/pre-commit-gate.sh
+INPUT=$(cat)
+TOOL=$(echo "$INPUT" | jq -r '.toolName // ""')
+CMD=$(echo "$INPUT" | jq -r '.arguments.command // ""')
+
+# Only check bash/execute with git commit
+if [ "$TOOL" != "bash" ] && [ "$TOOL" != "execute" ]; then
+  echo '{"permissionDecision": "allow"}'
+  exit 0
+fi
+
+if echo "$CMD" | grep -q "git commit"; then
+  # Check for git add . (banned)
+  if echo "$CMD" | grep -q "git add \."; then
+    echo '{"permissionDecision": "deny", "permissionDecisionReason": "Never use git add . — stage specific files only."}'
+    exit 0
+  fi
+fi
+
+echo '{"permissionDecision": "allow"}'
+```
+
+#### Hook 5: Scope Tracking (postToolUse — edit/create)
+
+Track which files are being modified for scope creep detection:
+
+```bash
+#!/usr/bin/env bash
+# hooks/scope-tracker.sh
+INPUT=$(cat)
+TOOL=$(echo "$INPUT" | jq -r '.toolName // ""')
+FILE=$(echo "$INPUT" | jq -r '.arguments.path // ""')
+SESSION=$(echo "$INPUT" | jq -r '.sessionId // ""')
+
+if [ "$TOOL" = "edit" ] || [ "$TOOL" = "create" ]; then
+  echo "$FILE" >> "/tmp/forge-scope-${SESSION}.txt"
+  COUNT=$(sort -u "/tmp/forge-scope-${SESSION}.txt" | wc -l | tr -d ' ')
+  if [ "$COUNT" -gt 8 ]; then
+    echo "{\"additionalContext\": \"⚠️ Scope alert: ${COUNT} files modified. Review if this is within scope.\"}"
+    exit 0
+  fi
+fi
+
+echo "{}"
+```
+
+### hooks.json for Forge Plugin
+
+```json
+{
+  "version": 1,
+  "hooks": {
+    "sessionStart": [
+      {
+        "type": "command",
+        "bash": "./hooks/session-start.sh",
+        "timeoutSec": 5
+      }
+    ],
+    "preToolUse": [
+      {
+        "type": "command",
+        "bash": "./hooks/pre-tool-use.sh",
+        "timeoutSec": 5
+      },
+      {
+        "type": "command",
+        "bash": "./hooks/pre-commit-gate.sh",
+        "timeoutSec": 5
+      }
+    ],
+    "postToolUse": [
+      {
+        "type": "command",
+        "bash": "./hooks/post-tool-use.sh",
+        "timeoutSec": 5
+      },
+      {
+        "type": "command",
+        "bash": "./hooks/scope-tracker.sh",
+        "timeoutSec": 5
+      }
+    ]
+  }
+}
+```
+
+### Hook Capabilities Summary
+
+| Hook | Trigger | Can Deny? | Use Case |
+|------|---------|:---------:|----------|
+| `sessionStart` | Session begins | No | Inject context, bootstrap reminders |
+| `userPromptSubmitted` | User sends message | No | Modify/augment prompt |
+| `preToolUse` | Before tool execution | **Yes** | Block edit/create from coordinator, block git push, enforce scope |
+| `postToolUse` | After tool execution | No | Telemetry logging, auto-format, scope tracking |
+| `sessionEnd` | Session ends | No | Cleanup, final audit, memory extraction trigger |
+| `errorOccurred` | Error happens | No | Error logging, retry decisions |
+
+### Why Hooks Solve the Dispatch Problem
+
+The current enforcement stack:
+1. **Prompt-based** (agent.md): "You are a dispatcher" → LLM ignores under pressure (5-47% purity)
+2. **Skill-based** (SKILL.md): Pressure table, examples → helps but not deterministic
+3. **Eval-based** (evals): Measures but doesn't prevent
+
+With hooks:
+4. **Structural** (hooks.json preToolUse): **Deny edit/create from coordinator** → physically impossible to inline edit → 95%+ purity
+
+This is the same pattern as v17's architectural separation (Orchestrator couldn't edit because
+it dispatched to Executor) but implemented via hooks instead of separate agents.
+
+### Open Questions
+
+1. **Agent identification in hooks**: Does the hook receive which agent is active?
+   If not, we need another way to distinguish coordinator vs subagent tool calls.
+   Subagents SHOULD be allowed to edit — only the coordinator should be blocked.
+
+2. **Hook context in task() subagents**: Do plugin hooks fire for tool calls made
+   by task() subagents? If yes, we need the dispatch-discipline hook to only
+   block the coordinator. If no, subagents are automatically unrestricted.
+
+3. **Hook performance**: Each preToolUse hook runs a shell script. With 2 hooks
+   × hundreds of tool calls per session = overhead. We need hooks to be fast (<50ms).
+
+These need empirical testing to validate.
