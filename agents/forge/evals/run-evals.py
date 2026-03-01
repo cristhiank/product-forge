@@ -284,7 +284,7 @@ def run_single_turn(case: dict, worktree_dir: Path) -> tuple[str, str]:
     sessions_before = set(os.listdir(SESSION_STATE)) if SESSION_STATE.exists() else set()
 
     result = subprocess.run(
-        ["copilot", "--agent", "Forge", "-p", case["prompt"],
+        ["copilot", "--agent", "forge/Forge", "-p", case["prompt"],
          "--allow-all-tools", "--max-autopilot-continues", "8",
          "--model", "claude-opus-4.6", "--no-color"],
         capture_output=True, text=True, timeout=300, cwd=str(worktree_dir)
@@ -304,7 +304,7 @@ def run_multi_turn(case: dict, worktree_dir: Path) -> tuple[str, str]:
     sessions_before = set(os.listdir(SESSION_STATE)) if SESSION_STATE.exists() else set()
 
     result = subprocess.run(
-        ["copilot", "--agent", "Forge", "-i", turns[0],
+        ["copilot", "--agent", "forge/Forge", "-i", turns[0],
          "--allow-all-tools", "--max-autopilot-continues", "8",
          "--model", "claude-opus-4.6", "--no-color", "--autopilot"],
         input="\n".join(turns[1:]) + "\n" if len(turns) > 1 else "",

@@ -248,7 +248,7 @@ def run_loop_resume(case: dict, sandbox: Path) -> tuple[str | None, list[TurnGra
     for i, turn in enumerate(turns):
         sessions_before = set(os.listdir(SESSION_STATE)) if SESSION_STATE.exists() else set()
 
-        cmd = ["copilot", "--agent", "Forge",
+        cmd = ["copilot", "--agent", "forge/Forge",
                "--allow-all-tools", "--max-autopilot-continues", "8",
                "--model", "claude-opus-4.6", "--no-color"]
 
@@ -300,7 +300,7 @@ def run_loop_interactive(case: dict, sandbox: Path) -> tuple[str | None, list[Tu
 
     sessions_before = set(os.listdir(SESSION_STATE)) if SESSION_STATE.exists() else set()
 
-    cmd = ["copilot", "--agent", "Forge", "-i", first_prompt,
+    cmd = ["copilot", "--agent", "forge/Forge", "-i", first_prompt,
            "--allow-all-tools", "--max-autopilot-continues", "8",
            "--model", "claude-opus-4.6", "--no-color", "--autopilot"]
 
