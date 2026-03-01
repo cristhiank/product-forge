@@ -1,14 +1,17 @@
 ---
 type: feature
 version: 1.0.0
-status: draft
-created: "2026-07-13"
-updated: "2026-07-13"
-updated_by: forge
-tags: [shell, navigation, ux, server]
-feature_status: discovery
+status: active
+created: '2026-03-01'
+updated: '2026-03-01'
+updated_by: forge-product
+tags:
+  - shell
+  - navigation
+  - ux
+  - server
+feature_status: defined
 ---
-
 # F-005: Unified Shell & Navigation
 
 ## Summary

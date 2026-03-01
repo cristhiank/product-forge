@@ -1,13 +1,15 @@
 ---
 type: strategy
-version: 1.0.0
-status: draft
-created: "2026-07-13"
-updated: "2026-07-13"
-updated_by: forge
-tags: [architecture, technical, strategy]
+version: 1.1.0
+status: active
+created: '2026-03-01'
+updated: '2026-03-01'
+updated_by: forge-product
+tags:
+  - architecture
+  - technical
+  - strategy
 ---
-
 # Technical Architecture
 
 ## System Architecture
