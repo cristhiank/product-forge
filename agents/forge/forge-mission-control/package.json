@@ -8,7 +8,11 @@
   },
   "scripts": {
     "build": "tsc",
+    "build:client": "cd client && npx vite build --outDir ../dist/client",
+    "build:server": "tsc",
     "dev": "tsc --watch",
+    "dev:client": "cd client && npx vite",
+    "dev:server": "tsc && node dist/cli.js . --port 3700",
     "start": "node dist/cli.js"
   },
   "dependencies": {
