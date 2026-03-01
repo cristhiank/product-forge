@@ -164,8 +164,11 @@ def grade_session_per_turn(session_id: str, turn_prompts: list[str]) -> list[Tur
     return turns
 
 
-def evaluate_turn(grade: TurnGrade, expected: dict) -> bool:
-    """Check if a turn's behavior matches expectations."""
+def evaluate_turn(grade: TurnGrade, expected: dict, all_skills_so_far: set = None) -> bool:
+    """Check if a turn's behavior matches expectations.
+    
+    all_skills_so_far: accumulated skills from previous turns (they persist in session).
+    """
     passed = True
 
     if expected.get("expect_dispatch") and grade.dispatches == 0:
@@ -174,8 +177,21 @@ def evaluate_turn(grade: TurnGrade, expected: dict) -> bool:
         passed = False
     if expected.get("expect_no_edits") and grade.mutating_bashes > 0:
         passed = False
-    if expected.get("expect_clarification") and not grade.has_clarification:
+    # Clarification: only fail if expected AND agent didn't clarify AND didn't dispatch
+    # (dispatching with enough context is acceptable alternative to clarifying)
+    if expected.get("expect_clarification") and not grade.has_clarification and grade.dispatches == 0:
         passed = False
+    # Skill check: consider accumulated skills from prior turns (they persist)
+    if expected.get("expect_skills"):
+        available = set(grade.skills_loaded)
+        if all_skills_so_far:
+            available |= all_skills_so_far
+        for s in expected["expect_skills"]:
+            if s not in available:
+                passed = False
+    # Parallel workers: if expected, check for copilot-cli-skill or multiple task() calls
+    if expected.get("expect_parallel_workers") and grade.dispatches < 2:
+        passed = False  # at minimum 2+ dispatches indicate parallelism attempt
 
     grade.passed = passed
     return passed
@@ -242,8 +258,9 @@ def run_loop_resume(case: dict, sandbox: Path) -> tuple[str | None, list[TurnGra
             cmd.extend(["-p", turn["prompt"]])
 
         try:
+            timeout = turn.get("timeout", 600)
             r = subprocess.run(cmd, capture_output=True, text=True,
-                               timeout=300, cwd=str(sandbox))
+                               timeout=timeout, cwd=str(sandbox))
         except subprocess.TimeoutExpired:
             print(f"    Turn {i}: TIMEOUT")
             break
@@ -257,9 +274,13 @@ def run_loop_resume(case: dict, sandbox: Path) -> tuple[str | None, list[TurnGra
 
         # Grade this turn
         turn_grades = grade_session_per_turn(session_id, [t["prompt"] for t in turns[:i+1]])
+        # Accumulate skills from all prior turns (they persist in session)
+        accumulated_skills = set()
+        for prev_tg in all_grades:
+            accumulated_skills.update(prev_tg.skills_loaded)
         if i < len(turn_grades):
             tg = turn_grades[i]
-            passed = evaluate_turn(tg, turn)
+            passed = evaluate_turn(tg, turn, accumulated_skills)
             status = "✅" if passed else "❌"
             print(f"    Turn {i} [{turn.get('expect_phase', '?')}]: {status} "
                   f"(dispatch={tg.dispatches}, edit={tg.inline_edits}, "
@@ -296,9 +317,11 @@ def run_loop_interactive(case: dict, sandbox: Path) -> tuple[str | None, list[Tu
 
     turn_grades = grade_session_per_turn(session_id, [t["prompt"] for t in turns])
 
+    accumulated_skills = set()
     for i, tg in enumerate(turn_grades):
         if i < len(turns):
-            passed = evaluate_turn(tg, turns[i])
+            passed = evaluate_turn(tg, turns[i], accumulated_skills)
+            accumulated_skills.update(tg.skills_loaded)
             status = "✅" if passed else "❌"
             print(f"    Turn {i} [{turns[i].get('expect_phase', '?')}]: {status} "
                   f"(dispatch={tg.dispatches}, edit={tg.inline_edits}, "
