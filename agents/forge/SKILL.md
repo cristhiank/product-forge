@@ -380,15 +380,15 @@ SUMMARY: [one-line result]
 | Mode | Default Model | Rationale |
 |------|--------------|-----------|
 | product (discover) | `claude-opus-4.6` | Deep research, JTBD analysis needs strong reasoning |
-| product (design) | `claude-sonnet-4.6` | Spec writing, structured output |
+| product (design) | `claude-opus-4.6` | Spec writing, structured output |
 | product (validate) | `claude-sonnet-4.6` | Experiment design, analysis |
 | explore (lookup) | `explore` agent | Fast built-in agent: grep/glob/view only. No skills, no REPORT. |
 | explore (investigate) | `claude-sonnet-4.6` | general-purpose + forge-explore skill. Full toolset, structured REPORT. |
 | ideate | `claude-opus-4.6` | Creativity needs strong reasoning |
-| plan | `claude-sonnet-4.6` | Structured output, well-defined task |
-| execute | `claude-sonnet-4.6` | Code generation, well-constrained |
+| plan | `claude-opus-4.6` | Structured output, well-defined task |
+| execute | `gpt-5.3-codex` | Code generation, well-constrained |
 | verify | `claude-opus-4.6` | Critical thinking, hallucination detection |
-| memory | `claude-haiku-4.5` | Simple extraction, pattern matching |
+| memory | `claude-opus-4.6` | Simple extraction, pattern matching |
 
 ### Explore Routing
 
