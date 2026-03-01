@@ -43,10 +43,12 @@ PRESSURE_SIGNALS = [
 
 def _is_mutating_bash(cmd: str) -> bool:
     """Check if a bash command is mutating, avoiding false positives from arguments."""
+    # Neutralize quoted strings so patterns inside args don't trigger matches
+    stripped = re.sub(r'"[^"]*"|\'[^\']*\'', '""', cmd)
     for pattern in MUTATING_BASH_OPERATORS:
-        if pattern in cmd:
+        if pattern in stripped:
             return True
-    for seg in re.split(r'\s*(?:&&|\|\||[;|])\s*', cmd):
+    for seg in re.split(r'\s*(?:&&|\|\||[;|])\s*', stripped):
         seg = seg.strip()
         for pattern in MUTATING_BASH_COMMANDS:
             if seg.startswith(pattern):

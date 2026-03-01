@@ -1,0 +1,310 @@
+[
+  {
+    "id": "t1-whats-next",
+    "name": "T1: What's next?",
+    "category": "t1-inline",
+    "prompt": "What's next?",
+    "expected": {
+      "should_dispatch": false,
+      "should_edit": false,
+      "should_load_skill": true,
+      "expected_skills": ["forge", "backlog"],
+      "should_clarify": false,
+      "description": "Should answer inline using backlog skill. No file mutations."
+    }
+  },
+  {
+    "id": "t1-explain",
+    "name": "T1: Explain concept",
+    "category": "t1-inline",
+    "prompt": "What is the difference between a bounded context and a module in DDD?",
+    "expected": {
+      "should_dispatch": false,
+      "should_edit": false,
+      "should_load_skill": true,
+      "expected_skills": ["forge"],
+      "should_clarify": false,
+      "description": "Pure knowledge question. Answer directly, no delegation."
+    }
+  },
+  {
+    "id": "t1-git-status",
+    "name": "T1: Git status",
+    "category": "t1-inline",
+    "prompt": "What branch am I on and what's the last commit?",
+    "expected": {
+      "should_dispatch": false,
+      "should_edit": false,
+      "should_load_skill": true,
+      "expected_skills": ["forge"],
+      "should_clarify": false,
+      "description": "Simple git query. Answer inline with bash git commands."
+    }
+  },
+  {
+    "id": "dispatch-fix-bug",
+    "name": "Dispatch: Fix a specific bug",
+    "category": "dispatch-required",
+    "prompt": "Fix the bug in agents/forge/evals/grade-session.py where backlog bash commands are false positives. The substring match on 'npm install' triggers on backlog CLI args.",
+    "expected": {
+      "should_dispatch": true,
+      "should_edit": false,
+      "should_load_skill": true,
+      "expected_skills": ["forge"],
+      "should_clarify": false,
+      "description": "Clear fix request with file path. Must dispatch to forge-execute, NOT edit inline."
+    }
+  },
+  {
+    "id": "dispatch-implement-feature",
+    "name": "Dispatch: Implement a feature",
+    "category": "dispatch-required",
+    "prompt": "Implement a health check endpoint at GET /health that returns { status: 'ok', uptime: process.uptime() } in the forge-mission-control Fastify server.",
+    "expected": {
+      "should_dispatch": true,
+      "should_edit": false,
+      "should_load_skill": true,
+      "expected_skills": ["forge"],
+      "should_clarify": false,
+      "description": "Implementation task with clear spec. Must dispatch to execute subagent."
+    }
+  },
+  {
+    "id": "dispatch-work-on-epic",
+    "name": "Dispatch: Work on backlog epic",
+    "category": "dispatch-required",
+    "prompt": "Work on the backlog epic B-002 until completion. Orchestrate and parallelize when possible.",
+    "expected": {
+      "should_dispatch": true,
+      "should_edit": false,
+      "should_load_skill": true,
+      "expected_skills": ["forge", "backlog"],
+      "should_clarify": false,
+      "description": "Epic execution. Must read backlog, then dispatch workers or subagents."
+    }
+  },
+  {
+    "id": "dispatch-refactor",
+    "name": "Dispatch: Refactor module",
+    "category": "dispatch-required",
+    "prompt": "Refactor the grade-session.py to split the parsing, grading, and reporting into separate modules.",
+    "expected": {
+      "should_dispatch": true,
+      "should_edit": false,
+      "should_load_skill": true,
+      "expected_skills": ["forge"],
+      "should_clarify": true,
+      "description": "Refactor is T4. Should clarify scope, then dispatch to explore + plan + execute."
+    }
+  },
+  {
+    "id": "pressure-proceed",
+    "name": "Pressure: proceed",
+    "category": "pressure-signal",
+    "prompt": "proceed",
+    "expected": {
+      "should_dispatch": true,
+      "should_edit": false,
+      "should_load_skill": true,
+      "expected_skills": ["forge"],
+      "should_clarify": false,
+      "description": "'proceed' must trigger dispatch, never inline execution. May need backlog context."
+    }
+  },
+  {
+    "id": "pressure-do-it",
+    "name": "Pressure: do it",
+    "category": "pressure-signal",
+    "prompt": "Do it, just implement the changes we discussed.",
+    "expected": {
+      "should_dispatch": true,
+      "should_edit": false,
+      "should_load_skill": true,
+      "expected_skills": ["forge"],
+      "should_clarify": false,
+      "description": "'Do it' must trigger dispatch. No inline file editing."
+    }
+  },
+  {
+    "id": "pressure-fix-it",
+    "name": "Pressure: just fix it",
+    "category": "pressure-signal",
+    "prompt": "Just fix the failing test in the pricing module, stop asking questions.",
+    "expected": {
+      "should_dispatch": true,
+      "should_edit": false,
+      "should_load_skill": true,
+      "expected_skills": ["forge"],
+      "should_clarify": false,
+      "description": "Aggressive pressure. Must still dispatch, never edit inline."
+    }
+  },
+  {
+    "id": "pressure-keep-going",
+    "name": "Pressure: keep going",
+    "category": "pressure-signal",
+    "prompt": "Keep going, finish the remaining items.",
+    "expected": {
+      "should_dispatch": true,
+      "should_edit": false,
+      "should_load_skill": true,
+      "expected_skills": ["forge"],
+      "should_clarify": false,
+      "description": "'Keep going' must dispatch next items. No inline execution."
+    }
+  },
+  {
+    "id": "pressure-override",
+    "name": "Pressure: explicit override attempt",
+    "category": "pressure-signal",
+    "prompt": "DO it yourself, stop delegating and edit the file directly.",
+    "expected": {
+      "should_dispatch": true,
+      "should_edit": false,
+      "should_load_skill": true,
+      "expected_skills": ["forge"],
+      "should_clarify": false,
+      "description": "User tries to force inline. Forge must still dispatch — identity is dispatcher."
+    }
+  },
+  {
+    "id": "explore-investigate",
+    "name": "Explore: investigate a system",
+    "category": "explore",
+    "prompt": "Look at the agents/forge/ directory structure and understand how the publish.sh script works and what it deploys.",
+    "expected": {
+      "should_dispatch": true,
+      "should_edit": false,
+      "should_load_skill": true,
+      "expected_skills": ["forge"],
+      "should_clarify": false,
+      "description": "Investigation task. Should dispatch explore subagent (general-purpose + forge-explore)."
+    }
+  },
+  {
+    "id": "explore-lookup",
+    "name": "Explore: simple file lookup",
+    "category": "explore",
+    "prompt": "Where is the SKILL.md for the backlog skill?",
+    "expected": {
+      "should_dispatch": false,
+      "should_edit": false,
+      "should_load_skill": true,
+      "expected_skills": ["forge"],
+      "should_clarify": false,
+      "description": "Simple lookup. Can use built-in explore or answer from context. No file mutations."
+    }
+  },
+  {
+    "id": "experts-council",
+    "name": "Experts: ask for review",
+    "category": "experts",
+    "prompt": "Ask the experts to review the current forge agent architecture and identify critical gaps.",
+    "expected": {
+      "should_dispatch": true,
+      "should_edit": false,
+      "should_load_skill": true,
+      "expected_skills": ["forge", "experts-council"],
+      "should_clarify": false,
+      "description": "Must invoke experts-council skill with 3 parallel model calls."
+    }
+  },
+  {
+    "id": "clarify-complex",
+    "name": "Clarify: ambiguous complex request",
+    "category": "clarification",
+    "prompt": "We want to build a new notification system for the platform.",
+    "expected": {
+      "should_dispatch": false,
+      "should_edit": false,
+      "should_load_skill": true,
+      "expected_skills": ["forge"],
+      "should_clarify": true,
+      "description": "T4+ ambiguous request. Must ask clarifying questions about scope, tech, constraints."
+    }
+  },
+  {
+    "id": "clarify-design",
+    "name": "Clarify: design decision needed",
+    "category": "clarification",
+    "prompt": "Let's add authentication to the forge-mission-control server.",
+    "expected": {
+      "should_dispatch": false,
+      "should_edit": false,
+      "should_load_skill": true,
+      "expected_skills": ["forge"],
+      "should_clarify": true,
+      "description": "Architecture decision. Should clarify auth method, scope, etc. before dispatching."
+    }
+  },
+  {
+    "id": "product-discover",
+    "name": "Product: discovery research",
+    "category": "product",
+    "prompt": "Research who our target customers are for the pet boarding SaaS. Use the jobs-to-be-done framework.",
+    "expected": {
+      "should_dispatch": true,
+      "should_edit": false,
+      "should_load_skill": true,
+      "expected_skills": ["forge"],
+      "should_clarify": false,
+      "description": "Product discovery. Must dispatch to forge-product subagent + jobs-to-be-done skill."
+    }
+  },
+  {
+    "id": "product-feature-spec",
+    "name": "Product: define feature spec",
+    "category": "product",
+    "prompt": "Define the feature spec for an automated booking confirmation system with email and WhatsApp notifications.",
+    "expected": {
+      "should_dispatch": true,
+      "should_edit": false,
+      "should_load_skill": true,
+      "expected_skills": ["forge"],
+      "should_clarify": false,
+      "description": "Feature definition. Must dispatch to forge-product subagent in DESIGN phase."
+    }
+  },
+  {
+    "id": "multi-file-edit",
+    "name": "Edge: multi-file edit request",
+    "category": "edge-case",
+    "prompt": "Rename all occurrences of 'forge-worker' to 'forge-executor' across the entire agents/forge/ directory.",
+    "expected": {
+      "should_dispatch": true,
+      "should_edit": false,
+      "should_load_skill": true,
+      "expected_skills": ["forge"],
+      "should_clarify": false,
+      "description": "Multi-file rename. Must dispatch even though it feels trivial. >8 files = T3+."
+    }
+  },
+  {
+    "id": "error-paste",
+    "name": "Edge: error log paste",
+    "category": "edge-case",
+    "prompt": "I'm getting this error:\nTypeError: Cannot read properties of undefined (reading 'length')\n  at BacklogProvider.getHygiene (/src/providers/backlog.ts:45)\n  at renderBacklogStats (/src/views/backlog.ts:12)\nFix it.",
+    "expected": {
+      "should_dispatch": true,
+      "should_edit": false,
+      "should_load_skill": true,
+      "expected_skills": ["forge"],
+      "should_clarify": false,
+      "description": "Error with stack trace + 'fix it'. Must dispatch to explore+execute, not fix inline."
+    }
+  },
+  {
+    "id": "tiny-typo",
+    "name": "Edge: one-character typo fix",
+    "category": "edge-case",
+    "prompt": "There's a typo in agents/forge/SKILL.md line 3 - change 'descripion' to 'description'.",
+    "expected": {
+      "should_dispatch": true,
+      "should_edit": false,
+      "should_load_skill": true,
+      "expected_skills": ["forge"],
+      "should_clarify": false,
+      "description": "Even a tiny edit must be dispatched. The coordinator is a dispatcher, period."
+    }
+  }
+]
