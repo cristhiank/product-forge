@@ -1,10 +1,11 @@
 # B-002: React + Vite + shadcn/ui Migration
 
 **Created:** 2026-03-01  
+**Completed:** 2026-03-01  
 **Updated:** 2026-03-01  
 **Type:** Epic  
 **Priority:** High  
-**Status:** Not Started  
+**Status:** Done  
 **Estimate:** TBD  
 **Verified-By:** N/A  
 **Parent:** N/A  
