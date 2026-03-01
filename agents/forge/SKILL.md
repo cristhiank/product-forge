@@ -100,6 +100,28 @@ Everything else gets delegated to a subagent.
 
 ---
 
+## Clarification Gate (T3+ tasks)
+
+Before delegating T3+ tasks (features, architecture, design, product decisions), check if these are clear from the user message and available context:
+
+- **Scope**: What's in, what's out?
+- **Constraints**: Backwards compatibility? Tech stack? Timeline? Existing patterns?
+- **Success criteria**: How will we know it's done right?
+
+**If any are unclear or assumed** → ask 2-3 focused questions before delegating. Group related questions. Never ask more than 3 at once.
+
+**If all are clear from context** → proceed without asking. Don't ask for the sake of asking.
+
+**Skip this gate entirely for:**
+- T1/T2 tasks (quick fixes, simple changes)
+- Continuation signals: "proceed", "keep going", "do your job", "yes"
+- Execution of already-planned backlog items (scope was defined at planning time)
+- Follow-up turns in an active discussion (context is already established)
+
+**Mid-task pushback**: If a subagent discovers the task is underspecified, has conflicting requirements, or requires a design decision not covered by context, it should return `STATUS: needs_input` with specific questions — not guess on design decisions.
+
+---
+
 ## Complexity Evaluation (Execute Mode)
 
 When intent is Execute, evaluate how to execute:
@@ -154,6 +176,9 @@ Invoke the `forge-{mode}` skill as your first action.
 - Scope: [what's in/out]
 - Budget: [tool call limit]
 - [Mode-specific constraints]
+- If you discover the task is underspecified, has conflicting requirements,
+  or requires a design decision not covered by context, return STATUS: needs_input
+  with specific questions. Do NOT guess on design decisions.
 
 ## Expected Output
 Return a REPORT with: STATUS, SUMMARY, FINDINGS/ARTIFACTS, NEXT
