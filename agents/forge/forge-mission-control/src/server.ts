@@ -1,4 +1,7 @@
 import Fastify from 'fastify';
+import fastifyStatic from '@fastify/static';
+import { existsSync, statSync } from 'node:fs';
+import { join } from 'node:path';
 import type { DiscoveryResult } from './discovery.js';
 import { renderHome, layout, renderNav } from './render/layout.js';
 import { getStyles } from './render/styles.js';
@@ -59,10 +62,10 @@ export async function createServer(discovery: DiscoveryResult, opts: ServerOptio
 
     app.get('/product', async (_req, reply) => {
       try {
-        const meta = productProvider.getMeta();
-        const health = productProvider.getHealth();
-        const featureOverview = productProvider.getFeatureOverview();
-        const docs = productProvider.listDocs();
+        const meta = await productProvider.getMeta();
+        const health = await productProvider.getHealth();
+        const featureOverview = await productProvider.getFeatureOverview();
+        const docs = await productProvider.listDocs();
         reply.type('text/html').send(
           renderProductOverview(discovery, meta, health, featureOverview, docs),
         );
@@ -83,7 +86,7 @@ export async function createServer(discovery: DiscoveryResult, opts: ServerOptio
           );
           return;
         }
-        const doc = productProvider.readDoc(docPath);
+        const doc = await productProvider.readDoc(docPath);
         reply.type('text/html').send(renderProductDoc(discovery, doc));
       } catch (err) {
         reply.code(500).type('text/html').send(
@@ -94,8 +97,8 @@ export async function createServer(discovery: DiscoveryResult, opts: ServerOptio
 
     app.get('/product/features', async (_req, reply) => {
       try {
-        const featureOverview = productProvider.getFeatureOverview();
-        const features = productProvider.listFeatures();
+        const featureOverview = await productProvider.getFeatureOverview();
+        const features = await productProvider.listFeatures();
         reply.type('text/html').send(renderProductFeatures(discovery, featureOverview, features));
       } catch (err) {
         reply.code(500).type('text/html').send(
@@ -106,7 +109,7 @@ export async function createServer(discovery: DiscoveryResult, opts: ServerOptio
 
     app.get<{ Querystring: { q?: string } }>('/product/search', async (req, reply) => {
       const query = (req.query.q ?? '').trim();
-      const results = query ? productProvider.searchDocs(query) : [];
+      const results = query ? await productProvider.searchDocs(query) : [];
       reply.type('text/html').send(renderProductSearch(discovery, query, results));
     });
   }
@@ -117,7 +120,7 @@ export async function createServer(discovery: DiscoveryResult, opts: ServerOptio
 
     app.get('/backlog', async (_req, reply) => {
       try {
-        const items = provider.listItems();
+        const items = await provider.listItems();
         const content = renderBacklogBoard(discovery, items);
         reply.type('text/html').send(layout(discovery, renderNav(discovery, { activeMode: 'backlog', activeSubItem: 'board' }), content));
       } catch (err) {
@@ -129,7 +132,7 @@ export async function createServer(discovery: DiscoveryResult, opts: ServerOptio
 
     app.get<{ Params: { id: string } }>('/backlog/item/:id', async (req, reply) => {
       try {
-        const item = provider.getItem(req.params.id);
+        const item = await provider.getItem(req.params.id);
         const content = renderBacklogItem(discovery, item);
         reply.type('text/html').send(layout(discovery, renderNav(discovery, { activeMode: 'backlog', activeSubItem: 'board' }), content));
       } catch (err) {
@@ -141,8 +144,8 @@ export async function createServer(discovery: DiscoveryResult, opts: ServerOptio
 
     app.get('/backlog/stats', async (_req, reply) => {
       try {
-        const stats = provider.getStats();
-        const hygiene = provider.getHygiene();
+        const stats = await provider.getStats();
+        const hygiene = await provider.getHygiene();
         const content = renderBacklogStats(discovery, stats, hygiene);
         reply.type('text/html').send(layout(discovery, renderNav(discovery, { activeMode: 'backlog', activeSubItem: 'stats' }), content));
       } catch (err) {
@@ -154,7 +157,7 @@ export async function createServer(discovery: DiscoveryResult, opts: ServerOptio
 
     app.get<{ Querystring: { q?: string } }>('/backlog/search', async (req, reply) => {
       const query = req.query.q?.trim() ?? '';
-      const results = query ? provider.searchItems(query) : [];
+      const results = query ? await provider.searchItems(query) : [];
       const content = renderBacklogSearch(discovery, query, results);
       reply.type('text/html').send(layout(discovery, renderNav(discovery, { activeMode: 'backlog', activeSubItem: 'board' }), content));
     });
@@ -166,7 +169,7 @@ export async function createServer(discovery: DiscoveryResult, opts: ServerOptio
         return;
       }
 
-      provider.moveItem(req.params.id, destination);
+      await provider.moveItem(req.params.id, destination);
       reply.redirect('/backlog');
     });
   }
@@ -174,15 +177,15 @@ export async function createServer(discovery: DiscoveryResult, opts: ServerOptio
   // --- Agents Mode ---
   if (discovery.hasAgents || discovery.hasWorkers) {
     app.get('/agents', async (_req, reply) => {
-      const workers = agentsProvider.listAllWorkers();
+      const workers = await agentsProvider.listAllWorkers();
       const content = renderAgentsOverview(discovery, workers, agentsProvider.hasHub);
       reply.type('text/html').send(layout(discovery, renderNav(discovery, { activeMode: 'agents', activeSubItem: 'workers' }), content));
     });
 
     app.get<{ Params: { id: string } }>('/agents/worker/:id', async (req, reply) => {
       const { id } = req.params;
-      const fromList = agentsProvider.listAllWorkers().find(worker => worker.id === id) ?? null;
-      const fromHub = agentsProvider.getHubWorker(id) ?? null;
+      const fromList = (await agentsProvider.listAllWorkers()).find(worker => worker.id === id) ?? null;
+      const fromHub = (await agentsProvider.getHubWorker(id)) ?? null;
       const worker = fromList
         ? { ...fromList, ...fromHub, id: fromList.id }
         : fromHub;
@@ -199,27 +202,27 @@ export async function createServer(discovery: DiscoveryResult, opts: ServerOptio
     });
 
     app.get('/agents/messages', async (_req, reply) => {
-      const messages = agentsProvider.listMessages({ limit: 500 });
+      const messages = await agentsProvider.listMessages({ limit: 500 });
       const content = renderAgentsMessages(discovery, messages);
       reply.type('text/html').send(layout(discovery, renderNav(discovery, { activeMode: 'agents', activeSubItem: 'messages' }), content));
     });
 
     app.get('/agents/costs', async (_req, reply) => {
-      const workers = agentsProvider.listAllWorkers();
+      const workers = await agentsProvider.listAllWorkers();
       const content = renderAgentsCosts(discovery, workers);
       reply.type('text/html').send(layout(discovery, renderNav(discovery, { activeMode: 'agents', activeSubItem: 'costs' }), content));
     });
 
     app.get('/agents/incidents', async (_req, reply) => {
-      const workers = agentsProvider.listAllWorkers();
-      const messages = agentsProvider.listMessages({ limit: 500 });
+      const workers = await agentsProvider.listAllWorkers();
+      const messages = await agentsProvider.listMessages({ limit: 500 });
       const content = renderAgentsIncidents(discovery, workers, messages);
       reply.type('text/html').send(layout(discovery, renderNav(discovery, { activeMode: 'agents', activeSubItem: 'incidents' }), content));
     });
 
     app.post<{ Params: { id: string } }>('/agents/worker/:id/sync', async (req, reply) => {
       const { id } = req.params;
-      agentsProvider.syncWorker(id);
+      await agentsProvider.syncWorker(id);
       reply.redirect(`/agents/worker/${encodeURIComponent(id)}`);
     });
 
@@ -227,6 +230,213 @@ export async function createServer(discovery: DiscoveryResult, opts: ServerOptio
       const { id } = req.params;
       // Placeholder until agents-hub supports a stop operation.
       reply.redirect(`/agents/worker/${encodeURIComponent(id)}`);
+    });
+  }
+
+  // ===== JSON API Routes =====
+
+  // --- Discovery API ---
+  app.get('/api/discovery', async () => {
+    return discovery;
+  });
+
+  // --- Product API ---
+  if (discovery.hasProduct) {
+    const productApi = new ProductProvider(discovery.repoRoot);
+
+    app.get('/api/product', async (_req, reply) => {
+      try {
+        const [meta, health, featureOverview, docs] = await Promise.all([
+          productApi.getMeta(),
+          productApi.getHealth(),
+          productApi.getFeatureOverview(),
+          productApi.listDocs(),
+        ]);
+        return { meta, health, featureOverview, docs };
+      } catch (err) {
+        reply.code(500);
+        return { error: err instanceof Error ? err.message : String(err) };
+      }
+    });
+
+    app.get('/api/product/features', async (_req, reply) => {
+      try {
+        const [featureOverview, features] = await Promise.all([
+          productApi.getFeatureOverview(),
+          productApi.listFeatures(),
+        ]);
+        return { featureOverview, features };
+      } catch (err) {
+        reply.code(500);
+        return { error: err instanceof Error ? err.message : String(err) };
+      }
+    });
+
+    app.get<{ Params: { '*': string } }>('/api/product/doc/*', async (req, reply) => {
+      try {
+        const rawParam = req.params['*'] ?? '';
+        const docPath = decodeURIComponent(rawParam).replace(/^\/+/, '');
+        if (!docPath) {
+          reply.code(400);
+          return { error: 'Missing document path' };
+        }
+        const doc = await productApi.readDoc(docPath);
+        return { doc };
+      } catch (err) {
+        reply.code(500);
+        return { error: err instanceof Error ? err.message : String(err) };
+      }
+    });
+
+    app.get<{ Querystring: { q?: string } }>('/api/product/search', async (req, reply) => {
+      try {
+        const query = (req.query.q ?? '').trim();
+        const results = query ? await productApi.searchDocs(query) : [];
+        return { results };
+      } catch (err) {
+        reply.code(500);
+        return { error: err instanceof Error ? err.message : String(err) };
+      }
+    });
+  }
+
+  // --- Backlog API ---
+  if (discovery.hasBacklog) {
+    const backlogApi = new BacklogProvider(discovery.repoRoot);
+
+    app.get('/api/backlog/items', async (_req, reply) => {
+      try {
+        return await backlogApi.listItems();
+      } catch (err) {
+        reply.code(500);
+        return { error: err instanceof Error ? err.message : String(err) };
+      }
+    });
+
+    app.get<{ Params: { id: string } }>('/api/backlog/item/:id', async (req, reply) => {
+      try {
+        return await backlogApi.getItem(req.params.id);
+      } catch (err) {
+        reply.code(500);
+        return { error: err instanceof Error ? err.message : String(err) };
+      }
+    });
+
+    app.get('/api/backlog/stats', async (_req, reply) => {
+      try {
+        const [stats, hygiene] = await Promise.all([
+          backlogApi.getStats(),
+          backlogApi.getHygiene(),
+        ]);
+        return { stats, hygiene };
+      } catch (err) {
+        reply.code(500);
+        return { error: err instanceof Error ? err.message : String(err) };
+      }
+    });
+
+    app.get<{ Querystring: { q?: string } }>('/api/backlog/search', async (req, reply) => {
+      try {
+        const query = (req.query.q ?? '').trim();
+        const results = query ? await backlogApi.searchItems(query) : [];
+        return results;
+      } catch (err) {
+        reply.code(500);
+        return { error: err instanceof Error ? err.message : String(err) };
+      }
+    });
+
+    app.post<{ Params: { id: string }; Body: { to?: string } }>('/api/backlog/item/:id/move', async (req, reply) => {
+      try {
+        const destination = req.body?.to;
+        if (destination !== 'next' && destination !== 'working' && destination !== 'done' && destination !== 'archive') {
+          reply.code(400);
+          return { error: 'Invalid destination folder. Must be one of: next, working, done, archive' };
+        }
+        await backlogApi.moveItem(req.params.id, destination);
+        const item = await backlogApi.getItem(req.params.id);
+        return item;
+      } catch (err) {
+        reply.code(500);
+        return { error: err instanceof Error ? err.message : String(err) };
+      }
+    });
+  }
+
+  // --- Agents API ---
+  if (discovery.hasAgents || discovery.hasWorkers) {
+    const agentsApi = agentsProvider;
+
+    app.get('/api/agents/workers', async (_req, reply) => {
+      try {
+        return await agentsApi.listAllWorkers();
+      } catch (err) {
+        reply.code(500);
+        return { error: err instanceof Error ? err.message : String(err) };
+      }
+    });
+
+    app.get<{ Params: { id: string } }>('/api/agents/worker/:id', async (req, reply) => {
+      try {
+        const { id } = req.params;
+        const fromList = (await agentsApi.listAllWorkers()).find(w => w.id === id) ?? null;
+        const fromHub = (await agentsApi.getHubWorker(id)) ?? null;
+        const worker = fromList
+          ? { ...fromList, ...fromHub, id: fromList.id }
+          : fromHub;
+
+        if (!worker) {
+          reply.code(404);
+          return { error: `Worker ${id} not found` };
+        }
+
+        const log = agentsApi.getWorkerLog(id, 100);
+        return { worker, log };
+      } catch (err) {
+        reply.code(500);
+        return { error: err instanceof Error ? err.message : String(err) };
+      }
+    });
+
+    app.get('/api/agents/messages', async (_req, reply) => {
+      try {
+        return await agentsApi.listMessages({ limit: 500 });
+      } catch (err) {
+        reply.code(500);
+        return { error: err instanceof Error ? err.message : String(err) };
+      }
+    });
+
+    app.get('/api/agents/costs', async (_req, reply) => {
+      try {
+        return await agentsApi.listAllWorkers();
+      } catch (err) {
+        reply.code(500);
+        return { error: err instanceof Error ? err.message : String(err) };
+      }
+    });
+
+    app.get('/api/agents/incidents', async (_req, reply) => {
+      try {
+        const [workers, messages] = await Promise.all([
+          agentsApi.listAllWorkers(),
+          agentsApi.listMessages({ limit: 500 }),
+        ]);
+        return { workers, messages };
+      } catch (err) {
+        reply.code(500);
+        return { error: err instanceof Error ? err.message : String(err) };
+      }
+    });
+
+    app.post<{ Params: { id: string } }>('/api/agents/worker/:id/sync', async (req, reply) => {
+      try {
+        await agentsApi.syncWorker(req.params.id);
+        return { ok: true };
+      } catch (err) {
+        reply.code(500);
+        return { error: err instanceof Error ? err.message : String(err) };
+      }
     });
   }
 
@@ -244,6 +454,21 @@ export async function createServer(discovery: DiscoveryResult, opts: ServerOptio
   });
 
   registerEvents(app, discovery);
+
+  // --- SPA static serving (production) ---
+  const clientDir = join(import.meta.dirname, '../client/dist');
+  if (existsSync(clientDir)) {
+    await app.register(fastifyStatic, { root: clientDir, serve: false });
+    app.setNotFoundHandler(async (req, reply) => {
+      // Try to serve the static file; fall back to index.html for SPA routing
+      const filePath = req.url.split('?')[0].replace(/^\/+/, '');
+      const fullPath = join(clientDir, filePath);
+      if (filePath && existsSync(fullPath) && !statSync(fullPath).isDirectory()) {
+        return reply.sendFile(filePath);
+      }
+      return reply.sendFile('index.html');
+    });
+  }
 
   return app;
 }

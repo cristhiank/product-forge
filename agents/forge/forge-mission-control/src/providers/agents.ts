@@ -1,7 +1,10 @@
-import { execFileSync } from 'node:child_process';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { accessSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { homedir } from 'node:os';
+
+const execFileAsync = promisify(execFile);
 
 export interface AgentWorker {
   id: string;
@@ -111,59 +114,59 @@ export class AgentsProvider {
     throw new Error('Agents-hub CLI not found');
   }
 
-  private runHub(args: string[]): unknown | null {
+  private async runHub(args: string[]): Promise<unknown | null> {
     if (!this.hubDbPath) {
       return null;
     }
 
     try {
       const cliPath = this.findHubCli();
-      const output = execFileSync('node', [cliPath, '--db', this.hubDbPath, ...args], {
+      const { stdout } = await execFileAsync('node', [cliPath, '--db', this.hubDbPath, ...args], {
         cwd: this.repoRoot,
         encoding: 'utf-8',
         timeout: 15000,
       });
-      return JSON.parse(output) as unknown;
+      return JSON.parse(stdout) as unknown;
     } catch {
       return null;
     }
   }
 
-  private runHubFallback(primaryArgs: string[], fallbackArgs: string[]): unknown | null {
-    const primary = this.runHub(primaryArgs);
+  private async runHubFallback(primaryArgs: string[], fallbackArgs: string[]): Promise<unknown | null> {
+    const primary = await this.runHub(primaryArgs);
     if (primary !== null) {
       return primary;
     }
     return this.runHub(fallbackArgs);
   }
 
-  listHubWorkers(status?: string): AgentWorker[] {
+  async listHubWorkers(status?: string): Promise<AgentWorker[]> {
     const args = ['worker', 'list'];
     if (status) {
       args.push('--status', status);
     }
-    const result = this.runHub(args);
+    const result = await this.runHub(args);
     return Array.isArray(result) ? (result as AgentWorker[]) : [];
   }
 
-  getHubWorker(id: string, sync?: boolean): AgentWorker | null {
+  async getHubWorker(id: string, sync?: boolean): Promise<AgentWorker | null> {
     if (sync) {
-      this.syncWorker(id);
+      await this.syncWorker(id);
     }
 
-    const result = this.runHubFallback(['worker', 'get', id], ['worker', 'status', id]);
+    const result = await this.runHubFallback(['worker', 'get', id], ['worker', 'status', id]);
     return result && typeof result === 'object' ? (result as AgentWorker) : null;
   }
 
-  syncWorker(id: string): boolean {
-    return this.runHub(['worker', 'sync', '--id', id]) !== null;
+  async syncWorker(id: string): Promise<boolean> {
+    return (await this.runHub(['worker', 'sync', '--id', id])) !== null;
   }
 
-  syncAllWorkers(): boolean {
-    return this.runHub(['worker', 'sync']) !== null;
+  async syncAllWorkers(): Promise<boolean> {
+    return (await this.runHub(['worker', 'sync'])) !== null;
   }
 
-  listMessages(opts?: { channel?: string; limit?: number; type?: string }): HubMessage[] {
+  async listMessages(opts?: { channel?: string; limit?: number; type?: string }): Promise<HubMessage[]> {
     const modernArgs = ['read'];
     const legacyArgs = ['message', 'list'];
 
@@ -180,11 +183,11 @@ export class AgentsProvider {
       legacyArgs.push('--type', opts.type);
     }
 
-    const result = this.runHubFallback(modernArgs, legacyArgs);
+    const result = await this.runHubFallback(modernArgs, legacyArgs);
     return Array.isArray(result) ? (result as HubMessage[]) : [];
   }
 
-  searchMessages(query: string, opts?: { limit?: number }): HubMessage[] {
+  async searchMessages(query: string, opts?: { limit?: number }): Promise<HubMessage[]> {
     const modernArgs = ['search', query];
     const legacyArgs = ['message', 'search', query];
 
@@ -193,22 +196,22 @@ export class AgentsProvider {
       legacyArgs.push('--limit', String(opts.limit));
     }
 
-    const result = this.runHubFallback(modernArgs, legacyArgs);
+    const result = await this.runHubFallback(modernArgs, legacyArgs);
     return Array.isArray(result) ? (result as HubMessage[]) : [];
   }
 
-  getStatus(): Record<string, unknown> {
-    const result = this.runHub(['status']);
+  async getStatus(): Promise<Record<string, unknown>> {
+    const result = await this.runHub(['status']);
     return result && typeof result === 'object' ? (result as Record<string, unknown>) : {};
   }
 
-  getStats(): Record<string, unknown> {
-    const result = this.runHub(['stats']);
+  async getStats(): Promise<Record<string, unknown>> {
+    const result = await this.runHub(['stats']);
     return result && typeof result === 'object' ? (result as Record<string, unknown>) : {};
   }
 
-  getOpsSummary(): OpsSummary {
-    const result = this.runHub(['exec', 'sdk.opsSummary()']);
+  async getOpsSummary(): Promise<OpsSummary> {
+    const result = await this.runHub(['exec', 'sdk.opsSummary()']);
     return result && typeof result === 'object' ? (result as OpsSummary) : {};
   }
 
@@ -282,8 +285,8 @@ export class AgentsProvider {
     }
   }
 
-  listAllWorkers(status?: string): AgentWorker[] {
-    const hubWorkers = this.hasHub ? this.listHubWorkers(status) : [];
+  async listAllWorkers(status?: string): Promise<AgentWorker[]> {
+    const hubWorkers = this.hasHub ? await this.listHubWorkers(status) : [];
     const fileWorkers = this.listFileWorkers();
     const merged = new Map<string, AgentWorker>();
 

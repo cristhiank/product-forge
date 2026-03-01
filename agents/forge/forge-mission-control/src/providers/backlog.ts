@@ -1,6 +1,9 @@
-import { execFileSync } from 'node:child_process';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { accessSync } from 'node:fs';
 import { resolve } from 'node:path';
+
+const execFileAsync = promisify(execFile);
 
 export interface BacklogItem {
   id: string;
@@ -43,16 +46,16 @@ export class BacklogProvider {
     this.repoRoot = repoRoot;
   }
 
-  private run(args: string[]): unknown {
+  private async run(args: string[]): Promise<unknown> {
     const cliPath = this.findCli();
 
-    const result = execFileSync('node', [cliPath, '--root', this.repoRoot, ...args], {
+    const { stdout } = await execFileAsync('node', [cliPath, '--root', this.repoRoot, ...args], {
       encoding: 'utf-8',
       timeout: 10000,
     });
 
     try {
-      return JSON.parse(result) as unknown;
+      return JSON.parse(stdout) as unknown;
     } catch (error) {
       throw new Error(
         `Failed to parse backlog CLI JSON output for command "${args.join(' ')}": ${String(error)}`,
@@ -81,7 +84,7 @@ export class BacklogProvider {
     throw new Error('Backlog CLI not found. Install the backlog skill.');
   }
 
-  listItems(opts?: { folder?: BacklogFolder; limit?: number; unblocked?: boolean }): BacklogItem[] {
+  async listItems(opts?: { folder?: BacklogFolder; limit?: number; unblocked?: boolean }): Promise<BacklogItem[]> {
     const args = ['list'];
 
     if (opts?.folder) {
@@ -94,14 +97,14 @@ export class BacklogProvider {
       args.push('--unblocked');
     }
 
-    return this.run(args) as BacklogItem[];
+    return (await this.run(args)) as BacklogItem[];
   }
 
-  getItem(id: string): BacklogItem {
-    return this.run(['get', id]) as BacklogItem;
+  async getItem(id: string): Promise<BacklogItem> {
+    return (await this.run(['get', id])) as BacklogItem;
   }
 
-  searchItems(query: string, opts?: { folder?: BacklogFolder; limit?: number }): BacklogItem[] {
+  async searchItems(query: string, opts?: { folder?: BacklogFolder; limit?: number }): Promise<BacklogItem[]> {
     const args = ['search', query];
 
     if (opts?.folder) {
@@ -111,14 +114,14 @@ export class BacklogProvider {
       args.push('--limit', String(opts.limit));
     }
 
-    return this.run(args) as BacklogItem[];
+    return (await this.run(args)) as BacklogItem[];
   }
 
-  getStats(): BacklogStats {
-    return this.run(['stats']) as BacklogStats;
+  async getStats(): Promise<BacklogStats> {
+    return (await this.run(['stats'])) as BacklogStats;
   }
 
-  getHygiene(opts?: { staleDays?: number; doneDays?: number }): BacklogHygiene {
+  async getHygiene(opts?: { staleDays?: number; doneDays?: number }): Promise<BacklogHygiene> {
     const args = ['hygiene'];
 
     if (opts?.staleDays) {
@@ -129,7 +132,7 @@ export class BacklogProvider {
       args.push('--done-days', String(opts.doneDays));
     }
 
-    const raw = this.run(args) as Record<string, unknown>;
+    const raw = (await this.run(args)) as Record<string, unknown>;
     return {
       stale: (raw.stale ?? raw.stale_in_next ?? raw.stuck_in_working ?? []) as BacklogItem[],
       old_done: (raw.old_done ?? raw.old_in_done ?? []) as BacklogItem[],
@@ -137,19 +140,19 @@ export class BacklogProvider {
     };
   }
 
-  getBrief(): BacklogBrief {
-    return this.run(['brief']) as BacklogBrief;
+  async getBrief(): Promise<BacklogBrief> {
+    return (await this.run(['brief'])) as BacklogBrief;
   }
 
-  pickItem(id: string): BacklogItem {
-    return this.run(['pick', id]) as BacklogItem;
+  async pickItem(id: string): Promise<BacklogItem> {
+    return (await this.run(['pick', id])) as BacklogItem;
   }
 
-  completeItem(id: string): unknown {
+  async completeItem(id: string): Promise<unknown> {
     return this.run(['complete', id]);
   }
 
-  moveItem(id: string, to: BacklogFolder): unknown {
+  async moveItem(id: string, to: BacklogFolder): Promise<unknown> {
     return this.run(['move', id, '--to', to]);
   }
 }
