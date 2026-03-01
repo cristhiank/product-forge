@@ -2,13 +2,17 @@
 type: feature
 version: 1.0.0
 status: active
-created: "2026-03-01"
-updated: "2026-03-01"
-updated_by: forge
-tags: [agents, workers, monitoring, transcripts]
+created: '2026-03-01'
+updated: '2026-03-01'
+updated_by: forge-product
+tags:
+  - agents
+  - workers
+  - monitoring
+  - transcripts
 feature_status: discovery
+epic_id: B-001
 ---
-
 # F-004: Agents Mode
 
 ## Summary

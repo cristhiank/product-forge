@@ -2,13 +2,16 @@
 type: feature
 version: 1.0.0
 status: active
-created: "2026-03-01"
-updated: "2026-03-01"
-updated_by: forge
-tags: [backlog, kanban, tasks]
+created: '2026-03-01'
+updated: '2026-03-01'
+updated_by: forge-product
+tags:
+  - backlog
+  - kanban
+  - tasks
 feature_status: discovery
+epic_id: B-001
 ---
-
 # F-003: Backlog Mode
 
 ## Summary

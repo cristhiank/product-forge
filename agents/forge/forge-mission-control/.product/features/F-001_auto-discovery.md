@@ -10,6 +10,7 @@ tags:
   - discovery
   - cli
 feature_status: defined
+epic_id: B-001
 ---
 # F-001: Auto-Discovery Engine
 

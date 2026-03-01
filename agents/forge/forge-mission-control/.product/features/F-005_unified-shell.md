@@ -11,6 +11,7 @@ tags:
   - ux
   - server
 feature_status: defined
+epic_id: B-001
 ---
 # F-005: Unified Shell & Navigation
 

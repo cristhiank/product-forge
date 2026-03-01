@@ -2,13 +2,16 @@
 type: feature
 version: 1.0.0
 status: active
-created: "2026-03-01"
-updated: "2026-03-01"
-updated_by: forge
-tags: [product, docs, navigation]
+created: '2026-03-01'
+updated: '2026-03-01'
+updated_by: forge-product
+tags:
+  - product
+  - docs
+  - navigation
 feature_status: discovery
+epic_id: B-001
 ---
-
 # F-002: Product Mode
 
 ## Summary
