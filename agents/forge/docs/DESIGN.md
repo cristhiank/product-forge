@@ -2,10 +2,21 @@
 
 > Next-generation single-agent coordinator that replaces DevPartner v17's 8 specialized agents with 1 coordinator agent + mode-specific context packages for subagent delegation.
 
-**Status:** Design phase  
+**Status:** Built + Eval Phase  
 **Previous:** DevPartner v17 (8 agents + constitution)  
 **Author:** Cris Lopez + AI Council (Gemini 3 Pro, Opus 4.6, GPT-5.3 Codex)  
-**Date:** 2026-02-28
+**Date:** 2026-02-28 (design), 2026-03-01 (evals + enforcement)
+
+## Related Docs
+
+| Doc | What |
+|-----|------|
+| [EXECUTION_ARCHITECTURE.md](EXECUTION_ARCHITECTURE.md) | Single-level task() constraint, flow charts, L0/L1/Worker capabilities |
+| [ENFORCEMENT_ANALYSIS.md](ENFORCEMENT_ANALYSIS.md) | Process discipline mechanisms tried, what works/doesn't, v17 comparison |
+| [EVAL_RESULTS.md](EVAL_RESULTS.md) | Progressive eval tracking, baseline → Round 1 → Round 2 metrics |
+| [CONSOLIDATION_MAP.md](CONSOLIDATION_MAP.md) | DevPartner v17 → Forge mapping (which agents became which skills) |
+| [MODE_CONTRACTS.md](MODE_CONTRACTS.md) | Input/output contracts for each forge-{mode} skill |
+| [ROUTING_RULES.md](ROUTING_RULES.md) | Intent classification tree and routing logic |
 
 ---
 
