@@ -89,7 +89,7 @@ export function renderBacklogBoard(_discovery: DiscoveryResult, items: BacklogIt
     const cards = columnItems.length === 0
       ? '<div class="empty-state">No items</div>'
       : columnItems.map((item) => {
-        const dependencyCount = item.depends_on.length;
+        const dependencyCount = (item.depends_on ?? []).length;
         return `<article class="kanban-card">
           <a href="/backlog/item/${encodeURIComponent(item.id)}">
             <div class="kanban-card-title">${escapeHtml(item.id)} · ${escapeHtml(item.title)}</div>
@@ -98,7 +98,7 @@ export function renderBacklogBoard(_discovery: DiscoveryResult, items: BacklogIt
               ${kindBadge(item.kind)}
               ${dependencyCount > 0 ? `<span>${dependencyCount} dependenc${dependencyCount === 1 ? 'y' : 'ies'}</span>` : '<span>No dependencies</span>'}
             </div>
-            <div class="kanban-card-tags">${renderTagPills(item.tags)}</div>
+            <div class="kanban-card-tags">${renderTagPills(item.tags ?? [])}</div>
           </a>
         </article>`;
       }).join('');
@@ -119,16 +119,20 @@ export function renderBacklogBoard(_discovery: DiscoveryResult, items: BacklogIt
 }
 
 export function renderBacklogItem(_discovery: DiscoveryResult, item: BacklogItem): string {
+  const dependsOn = item.depends_on ?? [];
+  const relatedItems = item.related ?? [];
+  const tags = item.tags ?? [];
+
   const metadataRows = [
     { key: 'Folder', value: folderBadge(item.folder) },
     { key: 'Created', value: parseDate(item.metadata?.created_at) },
     { key: 'Updated', value: parseDate(item.metadata?.updated_at) },
   ];
 
-  const dependencies = item.depends_on.length === 0
+  const dependencies = dependsOn.length === 0
     ? emptyState('No dependencies', 'This item is currently unblocked.')
     : `<ul class="link-list">
-      ${item.depends_on.map((dependencyId) => {
+      ${dependsOn.map((dependencyId) => {
         const status = inferDependencyStatus(item, dependencyId);
         const indicator = status === 'done'
           ? statusBadge('done', 'success')
@@ -142,10 +146,10 @@ export function renderBacklogItem(_discovery: DiscoveryResult, item: BacklogItem
       }).join('')}
     </ul>`;
 
-  const related = item.related.length === 0
+  const related = relatedItems.length === 0
     ? emptyState('No related items')
     : `<ul class="link-list">
-      ${item.related.map((relatedId) => `<li><a href="/backlog/item/${encodeURIComponent(relatedId)}">${escapeHtml(relatedId)}</a></li>`).join('')}
+      ${relatedItems.map((relatedId) => `<li><a href="/backlog/item/${encodeURIComponent(relatedId)}">${escapeHtml(relatedId)}</a></li>`).join('')}
     </ul>`;
 
   const body = item.body?.trim() ? mdToHtml(item.body) : emptyState('No description provided yet.');
@@ -172,7 +176,7 @@ export function renderBacklogItem(_discovery: DiscoveryResult, item: BacklogItem
         <h3 class="card-title">Metadata</h3>
         <div class="backlog-meta-grid">
           ${metadataRows.map((row) => `<div><strong>${row.key}:</strong> ${row.value}</div>`).join('')}
-          <div><strong>Tags:</strong> <span class="backlog-tags">${renderTagPills(item.tags)}</span></div>
+          <div><strong>Tags:</strong> <span class="backlog-tags">${renderTagPills(tags)}</span></div>
         </div>
       </div>
     </section>
@@ -296,7 +300,7 @@ export function renderBacklogSearch(
             ${priorityBadge((item.priority as 'high' | 'medium' | 'low') || 'medium')}
             ${folderBadge(item.folder)}
           </div>
-          <div class="kanban-card-tags">${renderTagPills(item.tags)}</div>
+          <div class="kanban-card-tags">${renderTagPills(item.tags ?? [])}</div>
         </div>
       </article>`).join('')}
     </div>`;

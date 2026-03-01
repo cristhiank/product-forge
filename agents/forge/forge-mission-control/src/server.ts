@@ -25,6 +25,7 @@ import {
   renderBacklogSearch,
   renderBacklogStats,
 } from './render/backlog-views.js';
+import { registerEvents } from './events.js';
 
 interface ServerOptions {
   port: number;
@@ -188,6 +189,8 @@ export async function createServer(discovery: DiscoveryResult, opts: ServerOptio
       systems: discovery.systems.map(s => ({ name: s.name, type: s.type })),
     };
   });
+
+  registerEvents(app, discovery);
 
   return app;
 }

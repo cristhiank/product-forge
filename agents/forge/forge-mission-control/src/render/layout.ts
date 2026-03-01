@@ -34,6 +34,13 @@ export function layout(discovery: DiscoveryResult, nav: string, content: string)
       ${content}
     </main>
   </div>
+  <script>
+    const es = new EventSource('/events');
+    es.addEventListener('product_change', () => location.reload());
+    es.addEventListener('backlog_change', () => location.reload());
+    es.addEventListener('worker_update', () => location.reload());
+    es.onerror = () => setTimeout(() => location.reload(), 5000);
+  </script>
 </body>
 </html>`;
 }

@@ -1,10 +1,11 @@
 # B-001: MVP: Forge Mission Control Phase 1
 
 **Created:** 2026-03-01  
+**Completed:** 2026-03-01  
 **Updated:** 2026-03-01  
 **Type:** Epic  
 **Priority:** High  
-**Status:** In Progress  
+**Status:** Done  
 **Estimate:** TBD  
 **Verified-By:** N/A  
 **Parent:** N/A  
