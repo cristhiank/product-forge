@@ -16,6 +16,35 @@ Architectural principles, patterns, and structural rules for building frontend a
 
 When in doubt, follow this skill instead of improvising a new pattern.
 
+## When This Skill Activates
+
+1. **Check product context** — Look for product spec, brand guidelines, design system docs, or color token files in the project. These are constraints, not suggestions. Brand voice, color tokens, and design principles override generic defaults.
+2. **Assess fit** — Identify which principles below apply to the current task. Skip sections that don't apply — a one-component fix doesn't need a full architecture assessment.
+3. **Cite decisions** — When making a design or architecture choice, briefly note which principle or product spec constraint guided it. Example: "Using accordion for settings form (design-system: progressive disclosure; form has 7 sections)."
+4. **Flag deviations** — If you deviate from a principle or product spec, note why. Deviations with good rationale are fine — silent deviations erode trust.
+5. **Propagate to workers** — When spawning sub-agents for frontend tasks, include in their prompt:
+   - "Load the frontend-architecture skill"
+   - Design token file paths (e.g., `styles/tokens.css`, `globals.css`)
+   - Shared component inventory (existing reusable components to use, not reinvent)
+   - Brand constraints from product spec (voice, colors, key rules)
+   - i18n approach (key format, namespace strategy, locale detection method)
+
+## Design Decision Artifacts
+
+When facing a non-trivial design or architecture choice, produce the appropriate artifact inline:
+
+**Quick Decision** (default — use for most choices):
+> **Decision**: [what] | **Principle**: [which one] | **Alternative**: [rejected option and why]
+
+**Tradeoff Matrix** (use when 2+ viable approaches compete):
+
+| Criteria | Option A | Option B |
+|----------|----------|----------|
+| [relevant dimension] | [assessment] | [assessment] |
+
+For common "choose X vs Y" frontend decisions, see [design-decisions.md](references/design-decisions.md).
+For UX review and audit workflows, see [ux-review-workflow.md](references/ux-review-workflow.md).
+
 ## Tech Stack Selection Criteria
 
 Whatever framework, styling system, and component library are chosen, the stack should optimize for:
@@ -142,6 +171,8 @@ For details, see [feature-modules.md](references/feature-modules.md).
 | Streaming and progressive UX | [streaming-ux.md](references/streaming-ux.md) |
 | Testing strategy and E2E with real backend | [testing-strategy.md](references/testing-strategy.md) |
 | Telemetry and observability | [telemetry.md](references/telemetry.md) |
+| Common frontend design decision trees | [design-decisions.md](references/design-decisions.md) |
+| UX review and audit workflow | [ux-review-workflow.md](references/ux-review-workflow.md) |
 
 ## Internationalization
 
