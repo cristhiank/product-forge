@@ -63,10 +63,12 @@ TOTAL=$((TOTAL + 1))
 if [ ! -f "$AGENT_SRC" ]; then
   echo "   ❌ Missing: $AGENT_SRC"
 else
-  # Extract body from ## Identity onwards
-  BODY=$(sed -n '/^## Identity$/,$p' "$AGENT_SRC")
+  # Extract body — skip the H1 title and its description, keep EVERYTHING else
+  # This includes: CRITICAL First Action, Pressure Table, Dispatch Examples, etc.
+  # We skip lines 1-4 (# Forge, blank, description, blank) and keep from line 5 onwards
+  BODY=$(awk 'NR>1 && /^[#*>\[]/{found=1} found{print}' "$AGENT_SRC")
   if [ -z "$BODY" ]; then
-    BODY=$(cat "$AGENT_SRC")
+    BODY=$(tail -n +3 "$AGENT_SRC")
   fi
 
   FRONTMATTER="---
