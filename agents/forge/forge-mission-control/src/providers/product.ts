@@ -1,9 +1,7 @@
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
+import { spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-const execFileAsync = promisify(execFile);
 import type {
   FeatureOverview,
   ProductDoc,
@@ -91,14 +89,16 @@ export class ProductProvider {
   }
 
   // Run product-hub CLI and parse JSON output
-  private async run<T>(args: string[]): Promise<T> {
+  private run<T>(args: string[]): T {
     try {
-      const { stdout } = await execFileAsync('node', [this.cliPath, ...args], {
+      const result = spawnSync('node', [this.cliPath, ...args], {
         cwd: this.repoRoot,
         encoding: 'utf-8',
         timeout: 10_000,
+        maxBuffer: 10 * 1024 * 1024,
       });
-      return JSON.parse(stdout) as T;
+      if (result.error) throw result.error;
+      return JSON.parse(result.stdout) as T;
     } catch (error) {
       if (error instanceof Error && 'stderr' in error) {
         const stderr = String((error as { stderr?: string }).stderr ?? '').trim();
@@ -110,39 +110,39 @@ export class ProductProvider {
     }
   }
 
-  async getMeta(): Promise<ProductMeta> {
+  getMeta(): ProductMeta {
     return this.run<ProductMeta>(['meta']);
   }
 
-  async listDocs(type?: string): Promise<ProductDoc[]> {
+  listDocs(type?: string): ProductDoc[] {
     const args = ['list'];
     if (type) args.push('--type', type);
-    const raw = await this.run<RawDoc[]>(args);
+    const raw = this.run<RawDoc[]>(args);
     return raw.map(normalizeDoc);
   }
 
-  async readDoc(path: string): Promise<ProductDoc> {
-    const raw = await this.run<RawDoc>(['read', path]);
+  readDoc(path: string): ProductDoc {
+    const raw = this.run<RawDoc>(['read', path]);
     return normalizeDoc(raw);
   }
 
-  async searchDocs(query: string): Promise<ProductDoc[]> {
-    const raw = await this.run<RawDoc[]>(['search', query]);
+  searchDocs(query: string): ProductDoc[] {
+    const raw = this.run<RawDoc[]>(['search', query]);
     return raw.map(normalizeDoc);
   }
 
-  async getHealth(): Promise<ProductHealth> {
+  getHealth(): ProductHealth {
     return this.run<ProductHealth>(['health']);
   }
 
-  async getFeatureOverview(): Promise<FeatureOverview> {
+  getFeatureOverview(): FeatureOverview {
     return this.run<FeatureOverview>(['feature', 'overview']);
   }
 
-  async listFeatures(status?: string): Promise<ProductFeature[]> {
+  listFeatures(status?: string): ProductFeature[] {
     const args = ['feature', 'list'];
     if (status) args.push('--status', status);
-    const raw = await this.run<RawDoc[]>(args);
+    const raw = this.run<RawDoc[]>(args);
     return raw.map(normalizeFeature);
   }
 }
