@@ -16,6 +16,39 @@ Architectural principles, patterns, and structural rules for building backend pl
 
 When in doubt, this skill wins over personal preference or what is easiest right now.
 
+## When This Skill Activates
+
+1. **Assess fit** — Identify which principles below apply to the current task and codebase. Skip sections that don't apply — not every task needs every principle. A one-endpoint change doesn't need a bounded context analysis.
+2. **Cite decisions** — When making an architecture choice, briefly note which principle guided it and what alternative was considered. Example: "Using metadata field over schema migration (data-persistence pragmatism: shape still evolving, module-private data)."
+3. **Flag deviations** — If you intentionally deviate from a principle, note why. Deviations with good rationale are fine — silent deviations erode trust.
+4. **Adapt to stack** — These patterns are expressed generically. Translate to the project's actual idioms. See [stack-adaptation.md](references/stack-adaptation.md) when the mapping is not obvious.
+5. **Propagate to workers** — When spawning sub-agents or workers for backend implementation tasks, instruct them to load this skill.
+
+## Architecture Decision Artifacts
+
+When facing a non-trivial architecture choice, produce the appropriate artifact inline:
+
+**Quick Decision** (default — use for most choices):
+> **Decision**: [what] | **Principle**: [which one] | **Alternative**: [rejected option and why]
+
+**Tradeoff Matrix** (use when 2+ viable approaches compete):
+
+| Criteria | Option A | Option B |
+|----------|----------|----------|
+| [relevant dimension] | [assessment] | [assessment] |
+
+**Module Design Record** (use when introducing a new module or bounded context):
+
+| Aspect | Decision |
+|--------|----------|
+| Bounded context | [name and responsibility] |
+| Modeling style | Transaction-style / Focused domain / Full DDD |
+| Data ownership | [tables or stores owned] |
+| Contract surface | [interfaces and DTOs exposed] |
+| Key risks | [top 2-3] |
+
+For common "choose X vs Y" decisions, see [decision-frameworks.md](references/decision-frameworks.md).
+
 ## Core Architectural Principles
 
 1. **Monolith first, modular always** — Prefer a single deployable backend structured as well-isolated modules. Only extract capabilities into separate runtimes with a strong technical forcing function.
@@ -168,6 +201,8 @@ Favor autonomy over reuse. Shared code without domain meaning belongs in a share
 | Testing strategy | [testing-strategy.md](references/testing-strategy.md) |
 | Observability and telemetry | [observability.md](references/observability.md) |
 | Error handling | [error-handling.md](references/error-handling.md) |
+| Common architecture decision trees | [decision-frameworks.md](references/decision-frameworks.md) |
+| Translating patterns across stacks | [stack-adaptation.md](references/stack-adaptation.md) |
 
 ## Evolution Path
 
