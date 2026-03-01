@@ -78,7 +78,7 @@ def cleanup_worktree(worktree_dir: Path):
 
 BUILD_TEST_PATTERNS = [
     "npm run build", "npm test", "dotnet build", "dotnet test", "dotnet run",
-    "pytest", "cargo build", "cargo test", "make ", "go build", "go test",
+    "pytest", "cargo build", "cargo test", "make", "go build", "go test",
     "npx tsc", "npx vitest", "node --test",
 ]
 FILE_MUTATION_PATTERNS = [
@@ -86,15 +86,31 @@ FILE_MUTATION_PATTERNS = [
     "echo >", "cat >", "tee ", ">>",
     "npm install", "pip install", "dotnet add",
 ]
+SAFE_SEGMENT_PREFIXES = [
+    "node ", "git ", "grep ", "jq ", "cat ", "head ", "tail ",
+    "ls ", "find ", "wc ", "sort ", "uniq ", "which ", "pwd",
+]
 
 
 def _is_mutating_bash(cmd: str) -> bool:
-    segments = re.split(r'&&|\|\||;', cmd)
+    # Neutralize quoted strings so patterns inside args don't trigger matches
+    stripped = re.sub(r'"[^"]*"|\'[^\']*\'', '""', cmd)
+    segments = re.split(r'\s*(?:&&|\|\||[;|])\s*', stripped)
     for seg in segments:
         seg = seg.strip()
-        for p in BUILD_TEST_PATTERNS + FILE_MUTATION_PATTERNS:
-            if seg.startswith(p) or (seg.startswith("cd ") and p in seg):
+        if not seg:
+            continue
+        # Skip known-safe CLI tool invocations (backlog, hub, git, etc.)
+        if any(seg.startswith(p) for p in SAFE_SEGMENT_PREFIXES):
+            continue
+        for p in FILE_MUTATION_PATTERNS:
+            if p in seg:
                 return True
+        for p in BUILD_TEST_PATTERNS:
+            if seg.startswith(p):
+                rest = seg[len(p):]
+                if not rest or rest[0].isspace():
+                    return True
     return False
 
 
