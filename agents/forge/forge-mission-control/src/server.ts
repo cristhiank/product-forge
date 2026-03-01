@@ -1,6 +1,6 @@
 import Fastify from 'fastify';
 import type { DiscoveryResult } from './discovery.js';
-import { renderHome, layout } from './render/layout.js';
+import { renderHome, layout, renderNav } from './render/layout.js';
 import { getStyles } from './render/styles.js';
 import { AgentsProvider } from './providers/agents.js';
 import {
@@ -26,10 +26,20 @@ import {
   renderBacklogStats,
 } from './render/backlog-views.js';
 import { registerEvents } from './events.js';
+import { pageHeader, emptyState } from './render/components.js';
 
 interface ServerOptions {
   port: number;
   verbose: boolean;
+}
+
+function renderErrorPage(discovery: DiscoveryResult, title: string, message: string): string {
+  const nav = renderNav(discovery, { activeMode: '' });
+  const content = `
+    ${pageHeader('⚠️ ' + title)}
+    ${emptyState(message, 'Try navigating back or refreshing the page.')}
+  `;
+  return layout(discovery, nav, content);
 }
 
 export async function createServer(discovery: DiscoveryResult, opts: ServerOptions) {
@@ -48,25 +58,50 @@ export async function createServer(discovery: DiscoveryResult, opts: ServerOptio
     const productProvider = new ProductProvider(discovery.repoRoot);
 
     app.get('/product', async (_req, reply) => {
-      const meta = productProvider.getMeta();
-      const health = productProvider.getHealth();
-      const featureOverview = productProvider.getFeatureOverview();
-      const docs = productProvider.listDocs();
-      reply.type('text/html').send(
-        renderProductOverview(discovery, meta, health, featureOverview, docs),
-      );
+      try {
+        const meta = productProvider.getMeta();
+        const health = productProvider.getHealth();
+        const featureOverview = productProvider.getFeatureOverview();
+        const docs = productProvider.listDocs();
+        reply.type('text/html').send(
+          renderProductOverview(discovery, meta, health, featureOverview, docs),
+        );
+      } catch (err) {
+        reply.code(500).type('text/html').send(
+          renderErrorPage(discovery, 'Product Error', String(err instanceof Error ? err.message : err)),
+        );
+      }
     });
 
     app.get<{ Params: { '*': string } }>('/product/doc/*', async (req, reply) => {
-      const docPath = decodeURIComponent(req.params['*'] ?? '');
-      const doc = productProvider.readDoc(docPath);
-      reply.type('text/html').send(renderProductDoc(discovery, doc));
+      try {
+        const rawParam = req.params['*'] ?? '';
+        const docPath = decodeURIComponent(rawParam).replace(/^\/+/, '');
+        if (!docPath) {
+          reply.code(400).type('text/html').send(
+            renderErrorPage(discovery, 'Missing document path', 'No document path specified.'),
+          );
+          return;
+        }
+        const doc = productProvider.readDoc(docPath);
+        reply.type('text/html').send(renderProductDoc(discovery, doc));
+      } catch (err) {
+        reply.code(500).type('text/html').send(
+          renderErrorPage(discovery, 'Document Error', String(err instanceof Error ? err.message : err)),
+        );
+      }
     });
 
     app.get('/product/features', async (_req, reply) => {
-      const featureOverview = productProvider.getFeatureOverview();
-      const features = productProvider.listFeatures();
-      reply.type('text/html').send(renderProductFeatures(discovery, featureOverview, features));
+      try {
+        const featureOverview = productProvider.getFeatureOverview();
+        const features = productProvider.listFeatures();
+        reply.type('text/html').send(renderProductFeatures(discovery, featureOverview, features));
+      } catch (err) {
+        reply.code(500).type('text/html').send(
+          renderErrorPage(discovery, 'Features Error', String(err instanceof Error ? err.message : err)),
+        );
+      }
     });
 
     app.get<{ Querystring: { q?: string } }>('/product/search', async (req, reply) => {
@@ -81,29 +116,47 @@ export async function createServer(discovery: DiscoveryResult, opts: ServerOptio
     const provider = new BacklogProvider(discovery.repoRoot);
 
     app.get('/backlog', async (_req, reply) => {
-      const items = provider.listItems();
-      const content = renderBacklogBoard(discovery, items);
-      reply.type('text/html').send(layout(discovery, renderNavFor(discovery, 'backlog'), content));
+      try {
+        const items = provider.listItems();
+        const content = renderBacklogBoard(discovery, items);
+        reply.type('text/html').send(layout(discovery, renderNav(discovery, { activeMode: 'backlog', activeSubItem: 'board' }), content));
+      } catch (err) {
+        reply.code(500).type('text/html').send(
+          renderErrorPage(discovery, 'Backlog Error', String(err instanceof Error ? err.message : err)),
+        );
+      }
     });
 
     app.get<{ Params: { id: string } }>('/backlog/item/:id', async (req, reply) => {
-      const item = provider.getItem(req.params.id);
-      const content = renderBacklogItem(discovery, item);
-      reply.type('text/html').send(layout(discovery, renderNavFor(discovery, 'backlog'), content));
+      try {
+        const item = provider.getItem(req.params.id);
+        const content = renderBacklogItem(discovery, item);
+        reply.type('text/html').send(layout(discovery, renderNav(discovery, { activeMode: 'backlog', activeSubItem: 'board' }), content));
+      } catch (err) {
+        reply.code(500).type('text/html').send(
+          renderErrorPage(discovery, 'Backlog Item Error', String(err instanceof Error ? err.message : err)),
+        );
+      }
     });
 
     app.get('/backlog/stats', async (_req, reply) => {
-      const stats = provider.getStats();
-      const hygiene = provider.getHygiene();
-      const content = renderBacklogStats(discovery, stats, hygiene);
-      reply.type('text/html').send(layout(discovery, renderNavFor(discovery, 'backlog'), content));
+      try {
+        const stats = provider.getStats();
+        const hygiene = provider.getHygiene();
+        const content = renderBacklogStats(discovery, stats, hygiene);
+        reply.type('text/html').send(layout(discovery, renderNav(discovery, { activeMode: 'backlog', activeSubItem: 'stats' }), content));
+      } catch (err) {
+        reply.code(500).type('text/html').send(
+          renderErrorPage(discovery, 'Backlog Stats Error', String(err instanceof Error ? err.message : err)),
+        );
+      }
     });
 
     app.get<{ Querystring: { q?: string } }>('/backlog/search', async (req, reply) => {
       const query = req.query.q?.trim() ?? '';
       const results = query ? provider.searchItems(query) : [];
       const content = renderBacklogSearch(discovery, query, results);
-      reply.type('text/html').send(layout(discovery, renderNavFor(discovery, 'backlog'), content));
+      reply.type('text/html').send(layout(discovery, renderNav(discovery, { activeMode: 'backlog', activeSubItem: 'board' }), content));
     });
 
     app.post<{ Params: { id: string }; Body: { to?: string } }>('/backlog/item/:id/move', async (req, reply) => {
@@ -123,7 +176,7 @@ export async function createServer(discovery: DiscoveryResult, opts: ServerOptio
     app.get('/agents', async (_req, reply) => {
       const workers = agentsProvider.listAllWorkers();
       const content = renderAgentsOverview(discovery, workers, agentsProvider.hasHub);
-      reply.type('text/html').send(layout(discovery, renderNavFor(discovery, 'agents'), content));
+      reply.type('text/html').send(layout(discovery, renderNav(discovery, { activeMode: 'agents', activeSubItem: 'workers' }), content));
     });
 
     app.get<{ Params: { id: string } }>('/agents/worker/:id', async (req, reply) => {
@@ -136,32 +189,32 @@ export async function createServer(discovery: DiscoveryResult, opts: ServerOptio
 
       if (!worker) {
         const content = `<div class="dashboard"><h1 class="page-title">Worker not found</h1><p class="page-subtitle">Worker <code>${escapeHtml(id)}</code> could not be found.</p></div>`;
-        reply.code(404).type('text/html').send(layout(discovery, renderNavFor(discovery, 'agents'), content));
+        reply.code(404).type('text/html').send(layout(discovery, renderNav(discovery, { activeMode: 'agents', activeSubItem: 'workers' }), content));
         return;
       }
 
       const log = agentsProvider.getWorkerLog(id, 100);
       const content = renderAgentWorkerDetail(discovery, worker, log);
-      reply.type('text/html').send(layout(discovery, renderNavFor(discovery, 'agents'), content));
+      reply.type('text/html').send(layout(discovery, renderNav(discovery, { activeMode: 'agents', activeSubItem: 'workers' }), content));
     });
 
     app.get('/agents/messages', async (_req, reply) => {
       const messages = agentsProvider.listMessages({ limit: 500 });
       const content = renderAgentsMessages(discovery, messages);
-      reply.type('text/html').send(layout(discovery, renderNavFor(discovery, 'agents'), content));
+      reply.type('text/html').send(layout(discovery, renderNav(discovery, { activeMode: 'agents', activeSubItem: 'messages' }), content));
     });
 
     app.get('/agents/costs', async (_req, reply) => {
       const workers = agentsProvider.listAllWorkers();
       const content = renderAgentsCosts(discovery, workers);
-      reply.type('text/html').send(layout(discovery, renderNavFor(discovery, 'agents'), content));
+      reply.type('text/html').send(layout(discovery, renderNav(discovery, { activeMode: 'agents', activeSubItem: 'costs' }), content));
     });
 
     app.get('/agents/incidents', async (_req, reply) => {
       const workers = agentsProvider.listAllWorkers();
       const messages = agentsProvider.listMessages({ limit: 500 });
       const content = renderAgentsIncidents(discovery, workers, messages);
-      reply.type('text/html').send(layout(discovery, renderNavFor(discovery, 'agents'), content));
+      reply.type('text/html').send(layout(discovery, renderNav(discovery, { activeMode: 'agents', activeSubItem: 'incidents' }), content));
     });
 
     app.post<{ Params: { id: string } }>('/agents/worker/:id/sync', async (req, reply) => {
@@ -193,28 +246,4 @@ export async function createServer(discovery: DiscoveryResult, opts: ServerOptio
   registerEvents(app, discovery);
 
   return app;
-}
-
-function renderNavFor(discovery: DiscoveryResult, active: string): string {
-  const items: { href: string; icon: string; label: string; key: string; enabled: boolean }[] = [
-    { href: '/', icon: '🔥', label: 'Dashboard', key: 'home', enabled: true },
-    { href: '/product', icon: '📋', label: 'Product', key: 'product', enabled: discovery.hasProduct },
-    { href: '/backlog', icon: '📦', label: 'Backlog', key: 'backlog', enabled: discovery.hasBacklog },
-    { href: '/agents', icon: '🤖', label: 'Agents', key: 'agents', enabled: discovery.hasAgents || discovery.hasWorkers },
-  ];
-
-  return `<nav class="nav">
-    ${items.map(item => {
-      const cls = [
-        'nav-item',
-        item.key === active ? 'nav-item--active' : '',
-        !item.enabled ? 'nav-item--disabled' : '',
-      ].filter(Boolean).join(' ');
-
-      if (!item.enabled) {
-        return `<span class="${cls}" title="Not found"><span class="nav-icon">${item.icon}</span> ${item.label}</span>`;
-      }
-      return `<a href="${item.href}" class="${cls}"><span class="nav-icon">${item.icon}</span> ${item.label}</a>`;
-    }).join('\n    ')}
-  </nav>`;
 }

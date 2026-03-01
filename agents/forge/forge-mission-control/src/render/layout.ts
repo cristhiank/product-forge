@@ -1,13 +1,19 @@
 import type { DiscoveryResult } from '../discovery.js';
 import { escapeHtml } from './markdown.js';
 
+export interface NavContext {
+  activeMode: string;
+  activeSubItem?: string;
+}
+
 export function renderHome(discovery: DiscoveryResult): string {
-  const nav = renderNav(discovery, 'home');
+  const nav = renderNav(discovery, { activeMode: 'home' });
   const content = renderDashboard(discovery);
   return layout(discovery, nav, content);
 }
 
 export function layout(discovery: DiscoveryResult, nav: string, content: string): string {
+  const systemCount = discovery.systems.length;
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -34,6 +40,11 @@ export function layout(discovery: DiscoveryResult, nav: string, content: string)
       ${content}
     </main>
   </div>
+  <footer class="statusbar">
+    <span><span class="statusbar-dot"></span></span>
+    <span>${systemCount} system${systemCount !== 1 ? 's' : ''} active</span>
+    <span>Updated just now</span>
+  </footer>
   <script>
     const es = new EventSource('/events');
     es.addEventListener('product_change', () => location.reload());
@@ -45,49 +56,147 @@ export function layout(discovery: DiscoveryResult, nav: string, content: string)
 </html>`;
 }
 
-function renderNav(discovery: DiscoveryResult, active: string): string {
-  const items: { href: string; icon: string; label: string; key: string; enabled: boolean }[] = [
-    { href: '/', icon: '🔥', label: 'Dashboard', key: 'home', enabled: true },
-    { href: '/product', icon: '📋', label: 'Product', key: 'product', enabled: discovery.hasProduct },
-    { href: '/backlog', icon: '📦', label: 'Backlog', key: 'backlog', enabled: discovery.hasBacklog },
-    { href: '/agents', icon: '🤖', label: 'Agents', key: 'agents', enabled: discovery.hasAgents || discovery.hasWorkers },
-  ];
+export function renderNav(discovery: DiscoveryResult, ctx: NavContext): string {
+  const { activeMode, activeSubItem } = ctx;
 
-  return `<nav class="nav">
-    ${items.map(item => {
-      const cls = [
-        'nav-item',
-        item.key === active ? 'nav-item--active' : '',
-        !item.enabled ? 'nav-item--disabled' : '',
-      ].filter(Boolean).join(' ');
+  const navItem = (href: string, icon: string, label: string, key: string, enabled: boolean) => {
+    const isActive = key === activeMode;
+    const cls = [
+      'nav-item',
+      isActive ? 'nav-item--active' : '',
+      !enabled ? 'nav-item--disabled' : '',
+    ].filter(Boolean).join(' ');
 
-      if (!item.enabled) {
-        return `<span class="${cls}" title="Not found"><span class="nav-icon">${item.icon}</span> ${item.label}</span>`;
-      }
-      return `<a href="${item.href}" class="${cls}"><span class="nav-icon">${item.icon}</span> ${item.label}</a>`;
-    }).join('\n    ')}
-  </nav>`;
+    if (!enabled) {
+      return `<span class="${cls}" title="Not found"><span class="nav-icon">${icon}</span> ${label}</span>`;
+    }
+    return `<a href="${href}" class="${cls}"><span class="nav-icon">${icon}</span> ${label}</a>`;
+  };
+
+  const subItem = (href: string, label: string, key: string) => {
+    const cls = activeSubItem === key ? 'nav-sub-item nav-sub-item--active' : 'nav-sub-item';
+    return `<a href="${href}" class="${cls}">${label}</a>`;
+  };
+
+  let html = '<nav class="nav">';
+  html += navItem('/', '🔥', 'Dashboard', 'home', true);
+  html += '<div class="nav-divider"></div>';
+
+  // Product section
+  html += '<div class="nav-section-label">Product</div>';
+  html += navItem('/product', '📋', 'Product', 'product', discovery.hasProduct);
+  if (discovery.hasProduct) {
+    html += subItem('/product', 'Overview', 'overview');
+    html += subItem('/product/features', 'Features', 'features');
+  }
+
+  html += '<div class="nav-divider"></div>';
+
+  // Backlog section
+  html += '<div class="nav-section-label">Backlog</div>';
+  html += navItem('/backlog', '📦', 'Backlog', 'backlog', discovery.hasBacklog);
+  if (discovery.hasBacklog) {
+    html += subItem('/backlog', 'Board', 'board');
+    html += subItem('/backlog/stats', 'Stats', 'stats');
+  }
+
+  html += '<div class="nav-divider"></div>';
+
+  // Agents section
+  const hasAgents = discovery.hasAgents || discovery.hasWorkers;
+  html += '<div class="nav-section-label">Agents</div>';
+  html += navItem('/agents', '🤖', 'Agents', 'agents', hasAgents);
+  if (hasAgents) {
+    html += subItem('/agents', 'Workers', 'workers');
+    html += subItem('/agents/messages', 'Messages', 'messages');
+    html += subItem('/agents/costs', 'Costs', 'costs');
+    html += subItem('/agents/incidents', 'Incidents', 'incidents');
+  }
+
+  html += '</nav>';
+  return html;
 }
 
 function renderDashboard(discovery: DiscoveryResult): string {
-  const systemCards = discovery.systems.map(sys => `
-    <div class="card">
-      <div class="card-icon">${sys.icon}</div>
-      <div class="card-body">
-        <h3 class="card-title">${escapeHtml(sys.name)}</h3>
-        <p class="card-meta">${escapeHtml(sys.path)}</p>
+  const repoName = discovery.repoRoot.split('/').pop() || 'Project';
+
+  const statCards: string[] = [];
+  const quickLinks: string[] = [];
+
+  if (discovery.hasProduct) {
+    statCards.push(`<a href="/product" class="stat-card">
+      <div class="stat-card-value">📋</div>
+      <div class="stat-card-label">Product Docs</div>
+    </a>`);
+    quickLinks.push(`<a href="/product" class="quick-link">
+      <span class="quick-link-icon">📋</span>
+      <div class="quick-link-body">
+        <div class="quick-link-title">Product</div>
+        <div class="quick-link-desc">Vision, features, brand &amp; strategy docs</div>
       </div>
-      <a href="/${sys.type === 'workers' ? 'agents' : sys.type}" class="card-link">Open →</a>
-    </div>
-  `).join('');
+    </a>`);
+    quickLinks.push(`<a href="/product/features" class="quick-link">
+      <span class="quick-link-icon">🧩</span>
+      <div class="quick-link-body">
+        <div class="quick-link-title">Features</div>
+        <div class="quick-link-desc">Feature lifecycle board</div>
+      </div>
+    </a>`);
+  }
+
+  if (discovery.hasBacklog) {
+    statCards.push(`<a href="/backlog" class="stat-card">
+      <div class="stat-card-value">📦</div>
+      <div class="stat-card-label">Backlog Board</div>
+    </a>`);
+    quickLinks.push(`<a href="/backlog" class="quick-link">
+      <span class="quick-link-icon">📦</span>
+      <div class="quick-link-body">
+        <div class="quick-link-title">Backlog</div>
+        <div class="quick-link-desc">Kanban board across all folders</div>
+      </div>
+    </a>`);
+    quickLinks.push(`<a href="/backlog/stats" class="quick-link">
+      <span class="quick-link-icon">📊</span>
+      <div class="quick-link-body">
+        <div class="quick-link-title">Backlog Stats</div>
+        <div class="quick-link-desc">Distribution &amp; hygiene health</div>
+      </div>
+    </a>`);
+  }
+
+  if (discovery.hasAgents || discovery.hasWorkers) {
+    statCards.push(`<a href="/agents" class="stat-card">
+      <div class="stat-card-value">🤖</div>
+      <div class="stat-card-label">Agents</div>
+    </a>`);
+    quickLinks.push(`<a href="/agents" class="quick-link">
+      <span class="quick-link-icon">🤖</span>
+      <div class="quick-link-body">
+        <div class="quick-link-title">Agents</div>
+        <div class="quick-link-desc">Workers, costs &amp; incidents</div>
+      </div>
+    </a>`);
+  }
 
   return `
     <div class="dashboard">
-      <h1 class="page-title">Project Overview</h1>
-      <p class="page-subtitle">${discovery.systems.length} system${discovery.systems.length !== 1 ? 's' : ''} discovered at <code>${escapeHtml(discovery.repoRoot)}</code></p>
+      <div class="home-header">
+        <h1>${escapeHtml(repoName)}</h1>
+        <p>${discovery.systems.length} system${discovery.systems.length !== 1 ? 's' : ''} discovered at <code>${escapeHtml(discovery.repoRoot)}</code></p>
+        <div class="home-stage-badge">
+          <span class="statusbar-dot"></span>
+          Active
+        </div>
+      </div>
 
-      <div class="card-grid">
-        ${systemCards}
+      <div class="stat-grid">
+        ${statCards.join('')}
+      </div>
+
+      <h2 class="section-title">Quick Links</h2>
+      <div class="quick-links">
+        ${quickLinks.join('')}
       </div>
     </div>
   `;

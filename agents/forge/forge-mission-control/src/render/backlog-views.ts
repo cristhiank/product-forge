@@ -12,6 +12,21 @@ import {
 } from './components.js';
 import { escapeHtml, mdToHtml } from './markdown.js';
 
+function normalizePriority(priority: unknown): 'high' | 'medium' | 'low' {
+  const str = String(priority ?? '').trim().toLowerCase();
+  if (str === 'high') return 'high';
+  if (str === 'low') return 'low';
+  return 'medium';
+}
+
+function stripIdPrefix(id: string, title: string): string {
+  const prefix = `${id}: `;
+  if (title.startsWith(prefix)) return title.slice(prefix.length);
+  const prefixAlt = `${id} - `;
+  if (title.startsWith(prefixAlt)) return title.slice(prefixAlt.length);
+  return title;
+}
+
 const BACKLOG_FOLDERS = ['next', 'working', 'done', 'archive'] as const;
 type BacklogFolder = typeof BACKLOG_FOLDERS[number];
 
@@ -92,23 +107,23 @@ export function renderBacklogBoard(_discovery: DiscoveryResult, items: BacklogIt
         const dependencyCount = (item.depends_on ?? []).length;
         return `<article class="kanban-card">
           <a href="/backlog/item/${encodeURIComponent(item.id)}">
-            <div class="kanban-card-title">${escapeHtml(item.id)} · ${escapeHtml(item.title)}</div>
+            <div class="kanban-card-title">${escapeHtml(item.id)} · ${escapeHtml(stripIdPrefix(item.id, item.title))}</div>
             <div class="kanban-card-meta">
-              ${priorityBadge((item.priority as 'high' | 'medium' | 'low') || 'medium')}
               ${kindBadge(item.kind)}
-              ${dependencyCount > 0 ? `<span>${dependencyCount} dependenc${dependencyCount === 1 ? 'y' : 'ies'}</span>` : '<span>No dependencies</span>'}
+              ${dependencyCount > 0 ? `<span>${dependencyCount} dep${dependencyCount === 1 ? '' : 's'}</span>` : ''}
             </div>
-            <div class="kanban-card-tags">${renderTagPills(item.tags ?? [])}</div>
           </a>
         </article>`;
       }).join('');
 
-    return `<section class="kanban-column">
+    return `<section class="kanban-column kanban-column--${folder}">
       <div class="kanban-column-header">
         <span>${FOLDER_LABELS[folder]}</span>
         <span class="kanban-count">${columnItems.length}</span>
       </div>
+      <div class="kanban-cards">
       ${cards}
+      </div>
     </section>`;
   }).join('');
 
@@ -162,11 +177,11 @@ export function renderBacklogItem(_discovery: DiscoveryResult, item: BacklogItem
     ])}
 
     <header class="page-header">
-      <h1 class="page-title">${escapeHtml(item.title)}</h1>
+      <h1 class="page-title">${escapeHtml(stripIdPrefix(item.id, item.title))}</h1>
       <p class="page-subtitle">${escapeHtml(item.id)}</p>
       <div class="backlog-header-meta">
         ${kindBadge(item.kind)}
-        ${priorityBadge((item.priority as 'high' | 'medium' | 'low') || 'medium')}
+        ${priorityBadge(normalizePriority(item.priority))}
         ${folderBadge(item.folder)}
       </div>
     </header>
@@ -293,11 +308,11 @@ export function renderBacklogSearch(
     : `<div class="card-grid">
       ${results.map(item => `<article class="card">
         <div class="card-body">
-          <h3 class="card-title"><a href="/backlog/item/${encodeURIComponent(item.id)}">${escapeHtml(item.title)}</a></h3>
+          <h3 class="card-title"><a href="/backlog/item/${encodeURIComponent(item.id)}">${escapeHtml(stripIdPrefix(item.id, item.title))}</a></h3>
           <p class="card-meta">${escapeHtml(item.id)}</p>
           <div class="kanban-card-meta">
             ${kindBadge(item.kind)}
-            ${priorityBadge((item.priority as 'high' | 'medium' | 'low') || 'medium')}
+            ${priorityBadge(normalizePriority(item.priority))}
             ${folderBadge(item.folder)}
           </div>
           <div class="kanban-card-tags">${renderTagPills(item.tags ?? [])}</div>

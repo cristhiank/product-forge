@@ -7,7 +7,7 @@ import type {
   ProductHealth,
   ProductMeta,
 } from '../providers/types.js';
-import { layout } from './layout.js';
+import { layout, renderNav } from './layout.js';
 import {
   breadcrumbs,
   card,
@@ -38,7 +38,7 @@ export function renderProductOverview(
   featureOverview: FeatureOverview,
   docs: ProductDoc[],
 ): string {
-  const nav = renderNavFor(discovery, 'product');
+  const nav = renderNav(discovery, { activeMode: 'product', activeSubItem: 'overview' });
   const lifecycleRows = FEATURE_STATUSES.map((status) => ({
     status: statusLabel(status),
     count: String(featureOverview[status].length),
@@ -53,33 +53,23 @@ export function renderProductOverview(
     alerts.push(`${health.orphaned_features.length} orphaned features found`);
   }
 
+  // Feature pipeline bar
+  const pipelineSegments = FEATURE_STATUSES.map((status) => {
+    const count = featureOverview[status].length;
+    if (count === 0) return '';
+    return `<div class="pipeline-segment pipeline-segment--${status}" style="flex: ${count};" title="${statusLabel(status)}: ${count}">${statusLabel(status)} ${count}</div>`;
+  }).filter(Boolean).join('');
+
   const content = `
     ${pageHeader(meta.name, meta.description)}
-    <div class="card-grid">
-      ${card({
-        icon: '🧭',
-        title: 'North Star',
-        meta: meta.north_star,
-        body: `Stage: ${meta.stage} · Version: ${meta.version}`,
-      })}
-      ${card({
-        icon: '🚦',
-        title: 'Stage',
-        meta: meta.stage,
-        body: `Created ${meta.created}`,
-      })}
-      ${card({
-        icon: '🏷️',
-        title: 'Version',
-        meta: meta.version,
-        body: 'Product metadata',
-      })}
-      ${card({
-        icon: '📈',
-        title: 'Status',
-        meta: `${health.active_count} active · ${health.draft_count} draft`,
-        body: alerts.length > 0 ? alerts.join(' | ') : 'No active health alerts',
-      })}
+
+    <div class="callout">
+      <div class="callout-label">🧭 North Star</div>
+      <div class="callout-text">${escapeHtml(meta.north_star)}</div>
+    </div>
+
+    <div class="home-stage-badge" style="margin-bottom: 24px;">
+      Stage: ${escapeHtml(meta.stage)} · v${escapeHtml(meta.version)} · Created ${escapeHtml(meta.created)}
     </div>
 
     <div class="card-grid">
@@ -87,38 +77,39 @@ export function renderProductOverview(
       ${metricCard({ label: 'Features', value: totalFeatures, icon: '🧩', variant: 'info' })}
       ${metricCard({ label: 'Draft docs', value: health.draft_count, icon: '📝', variant: 'warning' })}
       ${metricCard({ label: 'Active docs', value: health.active_count, icon: '✅', variant: 'success' })}
-      ${metricCard({ label: 'Stale docs', value: health.stale_docs.length, icon: '⏰', variant: health.stale_docs.length > 0 ? 'warning' : 'success' })}
     </div>
 
-    <section>
-      <h2 class="page-title">Feature lifecycle summary</h2>
-      ${dataTable({
-        headers: [
-          { label: 'Status', key: 'status' },
-          { label: 'Count', key: 'count', align: 'right' },
-        ],
-        rows: lifecycleRows,
-        emptyMessage: 'No feature lifecycle data found.',
-      })}
-    </section>
+    <h2 class="section-title">Feature Lifecycle</h2>
+    ${pipelineSegments ? `<div class="pipeline">${pipelineSegments}</div>` : emptyState('No features tracked yet.')}
 
-    <section>
-      <h2 class="page-title">Health alerts</h2>
-      ${
-        alerts.length > 0
-          ? `<div class="card-grid">${alerts
-              .map((message) => card({ icon: '⚠️', title: 'Alert', meta: message }))
-              .join('')}</div>`
-          : emptyState('No health alerts 🎉', 'Everything looks healthy right now.')
-      }
-    </section>
+    <h2 class="section-title">Documents</h2>
+    ${docs.length > 0 ? `<div class="card-grid">
+      ${docs.map(doc => card({
+        icon: docTypeIcon(doc.type),
+        title: doc.title,
+        meta: `${doc.type} · ${doc.status}`,
+        link: { href: `/product/doc/${encodeURIComponent(doc.path)}`, text: 'Open →' },
+      })).join('')}
+    </div>` : emptyState('No documents found.')}
+
+    ${alerts.length > 0 ? `
+      <h2 class="section-title">Health Alerts</h2>
+      <div class="card-grid">${alerts.map(msg => card({ icon: '⚠️', title: 'Alert', meta: msg })).join('')}</div>
+    ` : ''}
   `;
 
   return layout(discovery, nav, content);
 }
 
+function docTypeIcon(type: string): string {
+  const icons: Record<string, string> = {
+    vision: '🔭', brand: '🎨', strategy: '📐', feature: '🧩', experiment: '🧪',
+  };
+  return icons[type.toLowerCase()] ?? '📄';
+}
+
 export function renderProductDoc(discovery: DiscoveryResult, doc: ProductDoc): string {
-  const nav = renderNavFor(discovery, 'product');
+  const nav = renderNav(discovery, { activeMode: 'product', activeSubItem: 'overview' });
   const frontmatterRows: Record<string, string>[] = [
     { key: 'Version', value: doc.version },
     { key: 'Status', value: doc.status },
@@ -162,7 +153,7 @@ export function renderProductFeatures(
   featureOverview: FeatureOverview,
   features: ProductFeature[],
 ): string {
-  const nav = renderNavFor(discovery, 'product');
+  const nav = renderNav(discovery, { activeMode: 'product', activeSubItem: 'features' });
   const byStatus = new Map<FeatureStatus, ProductFeature[]>();
 
   for (const status of FEATURE_STATUSES) {
@@ -214,7 +205,7 @@ export function renderProductSearch(
   query: string,
   results: ProductDoc[],
 ): string {
-  const nav = renderNavFor(discovery, 'product');
+  const nav = renderNav(discovery, { activeMode: 'product' });
   const content = `
     ${pageHeader('Product search', query ? `Results for "${query}"` : 'Enter a query with ?q=')}
     ${
@@ -267,32 +258,4 @@ function variantForStatus(status: FeatureStatus): 'success' | 'warning' | 'dange
     default:
       return 'muted';
   }
-}
-
-function renderNavFor(discovery: DiscoveryResult, active: string): string {
-  const items: { href: string; icon: string; label: string; key: string; enabled: boolean }[] = [
-    { href: '/', icon: '🔥', label: 'Dashboard', key: 'home', enabled: true },
-    { href: '/product', icon: '📋', label: 'Product', key: 'product', enabled: discovery.hasProduct },
-    { href: '/backlog', icon: '📦', label: 'Backlog', key: 'backlog', enabled: discovery.hasBacklog },
-    { href: '/agents', icon: '🤖', label: 'Agents', key: 'agents', enabled: discovery.hasAgents || discovery.hasWorkers },
-  ];
-
-  return `<nav class="nav">
-    ${items
-      .map((item) => {
-        const cls = [
-          'nav-item',
-          item.key === active ? 'nav-item--active' : '',
-          !item.enabled ? 'nav-item--disabled' : '',
-        ]
-          .filter(Boolean)
-          .join(' ');
-
-        if (!item.enabled) {
-          return `<span class="${cls}" title="Not found"><span class="nav-icon">${item.icon}</span> ${item.label}</span>`;
-        }
-        return `<a href="${item.href}" class="${cls}"><span class="nav-icon">${item.icon}</span> ${item.label}</a>`;
-      })
-      .join('\n    ')}
-  </nav>`;
 }
