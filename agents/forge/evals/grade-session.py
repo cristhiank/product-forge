@@ -37,8 +37,9 @@ MUTATING_BASH_OPERATORS = [
 # Segments starting with these prefixes are known-safe CLI tool invocations
 # (backlog CLI, hub CLI, git, read-only utilities) and skip mutation checks.
 SAFE_SEGMENT_PREFIXES = [
-    "node ", "git ", "grep ", "jq ", "head ", "tail ",
+    "node ", "git ", "grep ", "jq ", "cat ", "head ", "tail ",
     "ls ", "find ", "wc ", "sort ", "uniq ", "which ", "pwd",
+    "python3 ", "python ",
 ]
 DISPATCH_TOOLS = {"task"}
 SKILL_TOOLS = {"skill"}
@@ -51,25 +52,30 @@ PRESSURE_SIGNALS = [
 def _is_mutating_bash(cmd: str) -> bool:
     """Check if a bash command is mutating, avoiding false positives from arguments."""
     # Neutralize quoted strings so patterns inside args don't trigger matches
-    stripped = re.sub(r'"[^"]*"|\'[^\']*\'', '""', cmd)
+    stripped = re.sub(r'"[^"]*"|\'[^\']*\'|`[^`]*`', '""', cmd)
     for seg in re.split(r'\s*(?:&&|\|\||[;|])\s*', stripped):
         seg = seg.strip()
+        # Strip leading env var assignments (e.g. NODE_ENV=prod ...)
+        while re.match(r'[A-Za-z_]\w*=\S+\s', seg):
+            seg = re.sub(r'^[A-Za-z_]\w*=\S+\s+', '', seg)
         if not seg:
             continue
-        # Skip known-safe CLI tool invocations (backlog, hub, git, etc.)
-        if any(seg.startswith(p) for p in SAFE_SEGMENT_PREFIXES):
-            continue
-        # Check operator patterns per-segment (not full command) to avoid
-        # false positives from operators inside CLI tool arguments.
+        # Check for mutating operators FIRST (before safe prefixes)
         for pattern in MUTATING_BASH_OPERATORS:
             if pattern in seg:
                 return True
+        # Skip known-safe CLI tool invocations (backlog, hub, git, etc.)
+        if any(seg.startswith(p) for p in SAFE_SEGMENT_PREFIXES):
+            continue
+        # Check mutating commands
         for pattern in MUTATING_BASH_COMMANDS:
             if seg.startswith(pattern):
                 # Word boundary: pattern must be followed by whitespace or end
                 rest = seg[len(pattern):]
                 if not rest or rest[0].isspace():
                     return True
+        # Default: unrecognized command is treated as mutating
+        return True
     return False
 
 
