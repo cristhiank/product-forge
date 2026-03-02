@@ -12,6 +12,7 @@ import {
 import { MarkdownViewer } from "@/components/MarkdownViewer";
 import { MarkdownEditor } from "@/components/MarkdownEditor";
 import { GitHistoryPanel } from "@/components/GitHistoryPanel";
+import { AIAssistPanel } from "@/components/product/AIAssistPanel";
 
 interface ProductFeature {
   id: string;
@@ -78,6 +79,7 @@ export function FeatureWorkspace() {
   const [saving, setSaving] = useState(false);
   const [savedMsg, setSavedMsg] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [aiOpen, setAiOpen] = useState(false);
 
   // Fetch features list to find the matching feature
   const { data: featuresData, isLoading: featuresLoading } = useQuery({
@@ -220,9 +222,9 @@ export function FeatureWorkspace() {
                 History
               </button>
               <button
-                disabled
-                title="AI assistance — coming in Phase 4"
-                className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-sm text-muted-foreground opacity-40 cursor-not-allowed"
+                onClick={() => setAiOpen(true)}
+                title="AI assistance"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
               >
                 <Sparkles className="h-3.5 w-3.5" />
                 AI
@@ -373,6 +375,21 @@ export function FeatureWorkspace() {
         open={historyOpen}
         onClose={() => setHistoryOpen(false)}
         onRevert={handleRevert}
+      />
+
+      <AIAssistPanel
+        open={aiOpen}
+        onClose={() => setAiOpen(false)}
+        featureId={feature.id}
+        specContent={editMode ? editContent : (doc?.content ?? "")}
+        onInsert={(inserted) => {
+          const base = editMode ? editContent : (doc?.content ?? "");
+          const newContent = base
+            ? `${base}\n\n---\n\n${inserted}`
+            : inserted;
+          setEditContent(newContent);
+          if (!editMode) setEditMode(true);
+        }}
       />
     </div>
   );

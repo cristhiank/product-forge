@@ -9,6 +9,7 @@ import { ProductProvider } from './providers/product.js';
 import { BacklogProvider } from './providers/backlog.js';
 import { SessionsProvider } from './providers/sessions.js';
 import { GitProvider } from './providers/git.js';
+import { AIProvider } from './providers/ai.js';
 import { registerEvents } from './events.js';
 
 interface ServerOptions {
@@ -24,6 +25,11 @@ export async function createServer(discovery: DiscoveryResult, opts: ServerOptio
   const gitProvider = GitProvider.isAvailable(discovery.repoRoot)
     ? new GitProvider(discovery.repoRoot)
     : null;
+
+  // --- AI Provider ---
+  const aiProvider = new AIProvider();
+  const hasAI = await aiProvider.initialize();
+  app.addHook('onClose', async () => { await aiProvider.stop(); });
 
   // ===== JSON API Routes =====
 
@@ -557,6 +563,51 @@ export async function createServer(discovery: DiscoveryResult, opts: ServerOptio
         return { error: err instanceof Error ? err.message : String(err) };
       }
     });
+  }
+
+  // --- AI Assist API ---
+  app.get('/api/ai/status', async () => ({ available: hasAI }));
+
+  if (hasAI) {
+    const FEATURE_ASSIST_PROMPTS: Record<string, (spec: string) => string> = {
+      acceptance_criteria: (spec) =>
+        `You are a product manager assistant. Given this feature spec, generate detailed acceptance criteria in markdown format.\n\nFeature Spec:\n${spec}\n\nGenerate acceptance criteria:`,
+      gap_analysis: (spec) =>
+        `You are a product manager assistant. Analyze this feature spec for gaps, missing sections, unclear requirements, or potential risks.\n\nFeature Spec:\n${spec}\n\nAnalysis:`,
+      mock_ui: (spec) =>
+        `You are a UI/UX designer assistant. Based on this feature spec, describe a detailed UI mockup using markdown with ASCII layout diagrams.\n\nFeature Spec:\n${spec}\n\nUI Mockup:`,
+      backlog_breakdown: (spec) =>
+        `You are a product manager assistant. Break this feature spec down into concrete backlog items (stories/tasks) with titles and brief descriptions in markdown.\n\nFeature Spec:\n${spec}\n\nBacklog Items:`,
+    };
+
+    app.post<{ Body: { action: string; featureId: string; specContent: string } }>(
+      '/api/ai/feature-assist',
+      async (req, reply) => {
+        const { action, specContent = '' } = req.body ?? {};
+        const buildPrompt = FEATURE_ASSIST_PROMPTS[action];
+        if (!buildPrompt) {
+          reply.code(400);
+          return { error: `Unknown action: ${action}` };
+        }
+        const prompt = buildPrompt(specContent);
+
+        reply.hijack();
+        reply.raw.writeHead(200, {
+          'Content-Type': 'text/event-stream',
+          'Cache-Control': 'no-cache',
+          Connection: 'keep-alive',
+        });
+
+        try {
+          for await (const event of aiProvider.streamCompletion(prompt)) {
+            reply.raw.write(`data: ${JSON.stringify(event)}\n\n`);
+          }
+        } catch (err) {
+          reply.raw.write(`data: ${JSON.stringify({ type: 'error', error: String(err) })}\n\n`);
+        }
+        reply.raw.end();
+      },
+    );
   }
 
   const cleanupEvents = registerEvents(app, discovery);
