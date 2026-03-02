@@ -102,6 +102,44 @@ Fixture sandboxes with small codebases — agent skips dispatch.
 
 ---
 
+## Round 3: Role Purity + Slimmed Agent.md
+
+**Date:** 2026-03-02
+**Changes:** Slimmed agent.md from 242→87 lines (64% reduction). Moved personality, session start, engineering preferences to SKILL.md. Added anti-pattern table, tool permissions matrix. Restored condensed pressure table (10 lines). Fixed all P1/P2 council findings.
+
+### Single-Turn Results (10 runs: 4 dispatch + 6 pressure)
+| Category | Pass | Total | Rate |
+|----------|:----:|:-----:|:----:|
+| dispatch-required | 1 | 4 | 25% |
+| pressure-signal | 4 | 5 | 80% |
+| multi-turn | 0 | 1 | 0% |
+
+### Key Metrics (Round 3 — Final)
+| Metric | Baseline | Round 1 | Round 2 | **Round 3** | Change |
+|--------|:--------:|:-------:|:-------:|:-----------:|:------:|
+| Skill loading | 0% | 71% | 100% | **100%** | Held |
+| Pressure pass | 0% | 60% | 60% | **80%** | 🟢 +20pp |
+| Inline edits | 100% | ~60% | ~50% | **0%** | 🟢 Eliminated |
+| Dispatch rate | 0% | 86% | 90% | **90%** | Held |
+| Agent.md lines | 107 | 179 | 242 | **87** | 🟢 -64% |
+
+### Critical Achievement: Zero Inline File Edits
+
+Across ALL 10 eval runs in Round 3, the coordinator used the `edit` tool **zero times**.
+This is the primary goal of the dispatch-only architecture.
+
+The remaining failures are ALL `bash` violations (running `npm test`, `node --test` after
+dispatch). These will be fixed by the hooks system (preToolUse deny for build/test from coordinator).
+
+### Remaining Failure Patterns (bash only)
+| Pattern | Count | Bash Command | Should be |
+|---------|:-----:|-------------|-----------|
+| Post-dispatch verification | 4/10 | `npm test`, `node --test` | Dispatch verify subagent |
+| Post-dispatch git operations | 2/10 | `git add`, `git commit` | Acceptable (bookkeeping) |
+| Post-dispatch file creation | 1/10 | `cat > .backlog/file` | Should use backlog CLI |
+
+---
+
 ## DevPartner v17 Comparison
 
 | Metric | v17 (8 agents) | Forge (1 agent) | Notes |
