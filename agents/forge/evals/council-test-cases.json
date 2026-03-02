@@ -1,0 +1,122 @@
+[
+  {
+    "id": "auto-council-arch-decision",
+    "name": "Auto-Council: Architecture decision with competing approaches",
+    "category": "auto-council",
+    "loop": "auto-council",
+    "needs_fixture": true,
+    "mode": "interactive",
+    "turns": [
+      {
+        "prompt": "We need to add real-time updates to the booking dashboard. The options are: WebSockets, Server-Sent Events, or polling. Each has different complexity and browser support tradeoffs. Evaluate and pick the best approach for our stack.",
+        "expect_phase": "ideate",
+        "expect_dispatch": true,
+        "expect_skills": ["forge"],
+        "expect_no_edits": true,
+        "expect_auto_council": true,
+        "description": "3 competing approaches with non-obvious tradeoffs. Should trigger autonomous experts-council invocation (condition: 3+ strategies, confidence < 70%)."
+      }
+    ],
+    "grading_notes": "Check for '🤖 Auto-consulted' prefix OR experts-council skill loaded OR 3+ parallel task() calls to different models. The agent should NOT just pick one — it should recognize this needs diverse perspectives."
+  },
+  {
+    "id": "auto-council-data-model",
+    "name": "Auto-Council: Data model design with long-term implications",
+    "category": "auto-council",
+    "loop": "auto-council",
+    "needs_fixture": true,
+    "mode": "interactive",
+    "turns": [
+      {
+        "prompt": "We need to design the data model for multi-location support. A booking can span multiple locations (e.g., pick up at location A, board at location B). This affects the entire schema. Design the data model.",
+        "expect_phase": "ideate",
+        "expect_dispatch": true,
+        "expect_skills": ["forge"],
+        "expect_no_edits": true,
+        "expect_auto_council": true,
+        "description": "Complex feature with long-term architectural implications (high reversal cost). Should trigger auto-council (condition: complex feature, long-term choices)."
+      }
+    ],
+    "grading_notes": "Data model decisions are high-reversal-cost. The agent should recognize this and auto-invoke council rather than deciding alone."
+  },
+  {
+    "id": "auto-council-tradeoff",
+    "name": "Auto-Council: Non-obvious performance vs simplicity tradeoff",
+    "category": "auto-council",
+    "loop": "auto-council",
+    "needs_fixture": true,
+    "mode": "interactive",
+    "turns": [
+      {
+        "prompt": "The booking list query is getting slow with 10K+ bookings. We could: add database indexes, implement pagination with cursors, add a Redis cache layer, or denormalize into a read model. What's the right approach given we're pre-launch with 0 real users?",
+        "expect_phase": "ideate",
+        "expect_dispatch": true,
+        "expect_skills": ["forge"],
+        "expect_no_edits": true,
+        "expect_auto_council": true,
+        "description": "Non-obvious tradeoff: performance vs simplicity at pre-launch stage. 4 competing approaches. Should trigger auto-council."
+      }
+    ],
+    "grading_notes": "The 'pre-launch with 0 users' context makes this a judgment call. Over-engineering vs under-engineering. Should consult council."
+  },
+  {
+    "id": "auto-council-security",
+    "name": "Auto-Council: Security-sensitive auth design",
+    "category": "auto-council",
+    "loop": "auto-council",
+    "needs_fixture": true,
+    "mode": "interactive",
+    "turns": [
+      {
+        "prompt": "We need to add authentication to the booking API. Options: JWT with refresh tokens, session-based auth with cookies, or delegate to Keycloak/Auth0. We're a small team, security is critical for pet data (owner PII). What's the right choice?",
+        "expect_phase": "ideate",
+        "expect_dispatch": true,
+        "expect_skills": ["forge"],
+        "expect_no_edits": true,
+        "expect_auto_council": true,
+        "description": "Security-sensitive decision with multiple valid approaches and team-size constraints. Should trigger auto-council (condition: high-risk + low confidence)."
+      }
+    ],
+    "grading_notes": "Security decisions should always trigger council per hard constraints ('no guessing on risk'). The agent must NOT just pick JWT and implement."
+  },
+  {
+    "id": "no-council-simple-fix",
+    "name": "No-Council: Simple bug fix (should NOT auto-invoke)",
+    "category": "auto-council-negative",
+    "loop": "auto-council-negative",
+    "needs_fixture": true,
+    "mode": "interactive",
+    "turns": [
+      {
+        "prompt": "Fix the off-by-one bug in the price calculation in src/services/bookings.js. The totalPrice multiplies by nights+1 instead of nights.",
+        "expect_phase": "execute",
+        "expect_dispatch": true,
+        "expect_skills": ["forge"],
+        "expect_no_edits": true,
+        "expect_auto_council": false,
+        "description": "Clear, unambiguous fix. No competing approaches, no design decision. Should dispatch directly to forge-execute, NOT invoke council."
+      }
+    ],
+    "grading_notes": "Invoking council for a trivial off-by-one fix is waste. The agent should dispatch directly."
+  },
+  {
+    "id": "no-council-clear-plan",
+    "name": "No-Council: Already-planned backlog item (should NOT auto-invoke)",
+    "category": "auto-council-negative",
+    "loop": "auto-council-negative",
+    "needs_fixture": true,
+    "mode": "interactive",
+    "turns": [
+      {
+        "prompt": "Work on E-001.7 from the backlog — add a GET /health endpoint that returns { status: 'ok', uptime: process.uptime() }.",
+        "expect_phase": "execute",
+        "expect_dispatch": true,
+        "expect_skills": ["forge"],
+        "expect_no_edits": true,
+        "expect_auto_council": false,
+        "description": "Fully specified backlog item. No ambiguity, no competing approaches. Should dispatch to execute, NOT invoke council."
+      }
+    ],
+    "grading_notes": "Pre-planned items with clear specs should never trigger council."
+  }
+]
