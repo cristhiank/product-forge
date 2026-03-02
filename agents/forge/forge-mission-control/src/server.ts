@@ -27,7 +27,7 @@ export async function createServer(discovery: DiscoveryResult, opts: ServerOptio
     : null;
 
   // --- AI Provider ---
-  const aiProvider = new AIProvider();
+  const aiProvider = new AIProvider(discovery.repoRoot);
   const hasAI = await aiProvider.initialize();
   app.addHook('onClose', async () => { await aiProvider.stop(); });
 
@@ -606,6 +606,54 @@ export async function createServer(discovery: DiscoveryResult, opts: ServerOptio
           reply.raw.write(`data: ${JSON.stringify({ type: 'error', error: String(err) })}\n\n`);
         }
         reply.raw.end();
+      },
+    );
+
+    // --- Chat Session API ---
+    app.post<{ Body: { scope: 'product' | 'feature' | 'doc'; contextId?: string; docContent?: string } }>(
+      '/api/ai/chat/sessions',
+      async (req, reply) => {
+        const { scope, contextId, docContent } = req.body ?? {};
+        if (!scope) { reply.code(400); return { error: 'scope is required' }; }
+        try {
+          const chatSession = await aiProvider.createChatSession(scope, contextId, docContent);
+          return { sessionId: chatSession.sessionId };
+        } catch (err) {
+          reply.code(500);
+          return { error: err instanceof Error ? err.message : String(err) };
+        }
+      },
+    );
+
+    app.post<{ Body: { sessionId: string; message: string } }>(
+      '/api/ai/chat/send',
+      async (req, reply) => {
+        const { sessionId, message } = req.body ?? {};
+        if (!sessionId || !message) { reply.code(400); return { error: 'sessionId and message are required' }; }
+
+        reply.hijack();
+        reply.raw.writeHead(200, {
+          'Content-Type': 'text/event-stream',
+          'Cache-Control': 'no-cache',
+          Connection: 'keep-alive',
+        });
+
+        try {
+          for await (const event of aiProvider.sendMessage(sessionId, message)) {
+            reply.raw.write(`data: ${JSON.stringify(event)}\n\n`);
+          }
+        } catch (err) {
+          reply.raw.write(`data: ${JSON.stringify({ type: 'error', error: String(err) })}\n\n`);
+        }
+        reply.raw.end();
+      },
+    );
+
+    app.delete<{ Params: { sessionId: string } }>(
+      '/api/ai/chat/sessions/:sessionId',
+      async (req, reply) => {
+        aiProvider.destroySession(req.params.sessionId);
+        return { ok: true };
       },
     );
   }
