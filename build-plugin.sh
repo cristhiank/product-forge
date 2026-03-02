@@ -206,6 +206,25 @@ for skill in "${ARCH_SKILLS[@]}"; do
   fi
 done
 
+# --- Step 8: Product management skills ---
+echo ""
+echo "📋 Product management skills..."
+PM_SKILLS=("jobs-to-be-done" "made-to-stick" "copywriting" "lean-startup" "storybrand-messaging" "cro-methodology" "page-cro")
+for skill in "${PM_SKILLS[@]}"; do
+  src_dir="$SCRIPT_DIR/skills/$skill"
+  dst_dir="$DIST/skills/$skill"
+  if [ ! -d "$src_dir" ]; then
+    echo "   ⚠️  Optional: skills/$skill/ not found (skipping)"
+    continue
+  fi
+
+  copy_file "$src_dir/SKILL.md" "$dst_dir/SKILL.md" "skills/$skill/SKILL.md"
+
+  if [ -d "$src_dir/references" ]; then
+    copy_dir "$src_dir/references" "$dst_dir/references" "skills/$skill/references/"
+  fi
+done
+
 # --- Cleanup artifacts ---
 if ! $DRY_RUN; then
   find "$DIST" -name '.DS_Store' -delete 2>/dev/null

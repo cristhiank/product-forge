@@ -228,13 +228,13 @@ SUMMARY: [one-line result]
 
 ## PM Skill Integration
 
-These are **external skills** (not bundled with forge plugin). If unavailable, the product subagent operates without them — quality degrades but doesn't fail.
+These skills are bundled with the forge plugin and loaded by the coordinator into the product subagent's Mission Brief.
 
-| Phase | Load These Skills | Required? |
-|-------|------------------|:---------:|
-| DISCOVER | `jobs-to-be-done` | Optional |
-| DESIGN | `made-to-stick`, `copywriting` | Optional |
-| VALIDATE | `copywriting` (for test copy) | Optional |
+| Phase | Load These Skills | Purpose |
+|-------|------------------|---------|
+| DISCOVER | `jobs-to-be-done` | JTBD framework, forces of progress |
+| DESIGN | `made-to-stick`, `copywriting` | SUCCESs check, customer-facing copy |
+| VALIDATE | `lean-startup`, `copywriting` | Experiment design, test copy |
 
 **Instruction to subagent:** Include in Mission Brief:
 ```
