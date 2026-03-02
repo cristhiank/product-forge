@@ -452,13 +452,15 @@ def main():
     import argparse
     parser = argparse.ArgumentParser(description="Forge Loop Eval Suite")
     parser.add_argument("--loop", help="Run specific loop by id prefix")
+    parser.add_argument("--cases", help="Path to test cases JSON (default: loop-test-cases.json)")
     parser.add_argument("--skip-llm", action="store_true")
     parser.add_argument("--report", help="Report from past results")
     args = parser.parse_args()
 
     RESULTS_DIR.mkdir(exist_ok=True)
 
-    with open(LOOP_CASES_FILE) as f:
+    cases_file = Path(args.cases) if args.cases else LOOP_CASES_FILE
+    with open(cases_file) as f:
         cases = json.load(f)
 
     if args.report:
