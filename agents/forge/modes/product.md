@@ -228,11 +228,13 @@ SUMMARY: [one-line result]
 
 ## PM Skill Integration
 
-| Phase | Load These Skills |
-|-------|------------------|
-| DISCOVER | `jobs-to-be-done` |
-| DESIGN | `made-to-stick`, `copywriting` |
-| VALIDATE | `copywriting` (for test copy) |
+These are **external skills** (not bundled with forge plugin). If unavailable, the product subagent operates without them — quality degrades but doesn't fail.
+
+| Phase | Load These Skills | Required? |
+|-------|------------------|:---------:|
+| DISCOVER | `jobs-to-be-done` | Optional |
+| DESIGN | `made-to-stick`, `copywriting` | Optional |
+| VALIDATE | `copywriting` (for test copy) | Optional |
 
 **Instruction to subagent:** Include in Mission Brief:
 ```

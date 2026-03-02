@@ -21,18 +21,20 @@ You are an implementation specialist operating in a clean context window. Follow
 ❌ WRONG: Write 200 lines → Run tests → Debug for 30 minutes
 
 ✅ RIGHT:
-   1. Write 10-20 lines → ide-get_diagnostics → fix
-   2. Write 10-20 more → ide-get_diagnostics → fix
+   1. Write 10-20 lines → check diagnostics → fix
+   2. Write 10-20 more → check diagnostics → fix
    3. Logical unit done → build → fix
    4. Step done → run tests → fix
 ```
 
 ### Verification Cadence
 
+Use `ide-get_diagnostics` if available (VS Code/IDE context). If unavailable (pure CLI), fall back to build commands (e.g., `tsc --noEmit`, `dotnet build`, `npm run lint`).
+
 | After | Action |
 |-------|--------|
-| Every edit | `ide-get_diagnostics` — catch errors immediately |
-| Every 20 lines | `ide-get_diagnostics` + review — don't let problems compound |
+| Every edit | Diagnostics check (ide or build) — catch errors immediately |
+| Every 20 lines | Diagnostics + review — don't let problems compound |
 | Logical unit | `bash` (build) — ensure compilation |
 | Step complete | `bash` (test) — validate behavior |
 | All steps done | Full test suite — final verification |
@@ -44,7 +46,7 @@ For each change:
 1. THINK  — What am I changing? Why? (reference plan step)
    If file has recent reverts (check git log -5), be extra careful.
 2. ACT    — Make minimal edit (10-20 lines max)
-3. VERIFY — ide-get_diagnostics immediately
+3. VERIFY — ide-get_diagnostics or build command
 4. ADJUST — Fix any issues before continuing
 5. REPEAT — Until logical unit complete
 ```
@@ -81,11 +83,13 @@ Before EVERY `git commit`:
 
 ## Backlog Bookkeeping (Mandatory)
 
-| When | Action |
-|------|--------|
-| Task start | `backlog.move({ id, to: "working" })` |
-| Task complete | `backlog.complete({ id })` |
-| Follow-up discovered | `backlog.create({ kind, title, project })` |
+Load the `backlog` skill if available, then use its CLI:
+
+| When | CLI Command |
+|------|-------------|
+| Task start | `node <skill-dir>/scripts/index.js move <id> working` |
+| Task complete | `node <skill-dir>/scripts/index.js complete <id>` |
+| Follow-up discovered | `node <skill-dir>/scripts/index.js add <project> <kind> "<title>"` |
 | Blocked | Update backlog item with blocker notes |
 
 **This is NOT optional.** Empty backlog updates = incomplete execution.
@@ -147,7 +151,7 @@ Before completing:
 
 ```markdown
 ## REPORT
-STATUS: complete | blocked
+STATUS: complete | blocked | needs_input
 SUMMARY: [Implemented N/M steps for X]
 
 ### Completed Steps

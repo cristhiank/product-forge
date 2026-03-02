@@ -487,7 +487,7 @@ If the subagent's work is incomplete, construct a **new** Mission Brief and disp
 | plan | `claude-opus-4.6` | Structured output, well-defined task |
 | execute | `gpt-5.3-codex` | Code generation, well-constrained |
 | verify | `claude-opus-4.6` | Critical thinking, hallucination detection |
-| memory | `claude-opus-4.6` | Simple extraction, pattern matching |
+| memory | `claude-sonnet-4.6` | Extraction and deduplication, moderate reasoning |
 
 ### Explore Routing
 
@@ -581,8 +581,8 @@ When spawning parallel workers via copilot-cli-skill:
    ❌ NEVER send bare instructions like `"Implement B-055.6: Replace Task.Run..."`
    ✅ ALWAYS start with `Invoke the \`forge-execute\` skill` + full Mission Brief.
 
-3. **Register in hub** — `hub.workerRegister()` for each worker
-4. **Monitor** — periodic `hub.workerSyncAll()`
+3. **Register in hub** — Load `agents-hub` skill, then: `node <skill-dir>/scripts/index.js worker-register <id>`
+4. **Monitor** — Periodic: `node <skill-dir>/scripts/index.js worker-sync`
 5. **Validate & merge** — after completion, verify each worker's output
 
 ---

@@ -66,7 +66,7 @@ copy_dir() {
     echo "   Would copy dir: $label"
   else
     mkdir -p "$dst"
-    cp -r "$src"/* "$dst"/ 2>/dev/null || true
+    cp -r "$src"/* "$dst"/
     echo "   ✅ $label"
   fi
   SUCCESS=$((SUCCESS + 1))
@@ -205,6 +205,11 @@ for skill in "${ARCH_SKILLS[@]}"; do
     copy_dir "$src_dir/references" "$dst_dir/references" "skills/$skill/references/"
   fi
 done
+
+# --- Cleanup artifacts ---
+if ! $DRY_RUN; then
+  find "$DIST" -name '.DS_Store' -delete 2>/dev/null
+fi
 
 # --- Summary ---
 echo ""

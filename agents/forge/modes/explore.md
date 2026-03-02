@@ -87,7 +87,7 @@ ambiguity = 1 - (high_confidence_facts / total_relevant_facts)
 
 ```markdown
 ## REPORT
-STATUS: complete | needs_more_exploration
+STATUS: complete | blocked | needs_input
 SUMMARY: [one-line result]
 
 ### Tier Classification
