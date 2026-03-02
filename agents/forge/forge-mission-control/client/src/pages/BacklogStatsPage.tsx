@@ -1,3 +1,4 @@
+import { useState, useEffect, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -11,6 +12,13 @@ import {
 } from "lucide-react";
 import type { ComponentType } from "react";
 import type { LucideProps } from "lucide-react";
+
+interface BacklogInfo {
+  id: string;
+  name: string;
+  relativePath: string;
+  itemCount?: number;
+}
 
 interface ProjectStats {
   next: number;
@@ -44,9 +52,36 @@ const FOLDER_META: {
 ];
 
 export function BacklogStatsPage() {
+  const { data: backlogs = [] } = useQuery<BacklogInfo[]>({
+    queryKey: ["backlogs"],
+    queryFn: () => api.get<BacklogInfo[]>("/api/backlogs"),
+  });
+
+  const sortedBacklogs = useMemo(
+    () => [...backlogs].sort((a, b) => (b.itemCount ?? 0) - (a.itemCount ?? 0)),
+    [backlogs],
+  );
+
+  const [selectedBacklog, setSelectedBacklog] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (sortedBacklogs.length > 0 && selectedBacklog === null) {
+      const saved = localStorage.getItem("selectedBacklog");
+      const valid = saved !== null && sortedBacklogs.some(b => b.id === saved);
+      setSelectedBacklog(valid ? saved! : sortedBacklogs[0].id);
+    }
+  }, [sortedBacklogs, selectedBacklog]);
+
+  useEffect(() => {
+    if (selectedBacklog !== null) localStorage.setItem("selectedBacklog", selectedBacklog);
+  }, [selectedBacklog]);
+
+  const backlogParam = selectedBacklog ?? "";
+
   const { data, isLoading } = useQuery<StatsResponse>({
-    queryKey: ["backlog-stats"],
-    queryFn: () => api.get<StatsResponse>("/api/backlog/stats"),
+    queryKey: ["backlog-stats", backlogParam],
+    queryFn: () => api.get<StatsResponse>(`/api/backlog/stats?backlog=${encodeURIComponent(backlogParam)}`),
+    enabled: selectedBacklog !== null,
   });
 
   if (isLoading) {
@@ -76,6 +111,30 @@ export function BacklogStatsPage() {
   return (
     <div className="space-y-8">
       <h1 className="text-2xl font-bold">📊 Backlog Stats</h1>
+
+      {/* Backlog picker */}
+      {sortedBacklogs.length > 1 && (
+        <div className="flex flex-wrap gap-2">
+          {sortedBacklogs.map((bl) => (
+            <button
+              key={bl.id}
+              type="button"
+              onClick={() => setSelectedBacklog(bl.id)}
+              className={cn(
+                "inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium transition-colors",
+                selectedBacklog === bl.id
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground",
+              )}
+            >
+              {bl.name}
+              {bl.itemCount !== undefined && (
+                <span className="opacity-75">({bl.itemCount})</span>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Metric cards */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">

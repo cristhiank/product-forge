@@ -7,6 +7,13 @@ import { cn } from "@/lib/utils";
 import { DataTable } from "@/components/DataTable";
 import type { ColumnDef } from "@tanstack/react-table";
 
+interface BacklogInfo {
+  id: string;
+  name: string;
+  relativePath: string;
+  itemCount?: number;
+}
+
 interface BacklogItem {
   id: string;
   title: string;
@@ -60,10 +67,36 @@ export function BacklogSearchPage() {
     return () => clearTimeout(timer);
   }, [input]);
 
+  const { data: backlogs = [] } = useQuery<BacklogInfo[]>({
+    queryKey: ["backlogs"],
+    queryFn: () => api.get<BacklogInfo[]>("/api/backlogs"),
+  });
+
+  const sortedBacklogs = useMemo(
+    () => [...backlogs].sort((a, b) => (b.itemCount ?? 0) - (a.itemCount ?? 0)),
+    [backlogs],
+  );
+
+  const [selectedBacklog, setSelectedBacklog] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (sortedBacklogs.length > 0 && selectedBacklog === null) {
+      const saved = localStorage.getItem("selectedBacklog");
+      const valid = saved !== null && sortedBacklogs.some(b => b.id === saved);
+      setSelectedBacklog(valid ? saved! : sortedBacklogs[0].id);
+    }
+  }, [sortedBacklogs, selectedBacklog]);
+
+  useEffect(() => {
+    if (selectedBacklog !== null) localStorage.setItem("selectedBacklog", selectedBacklog);
+  }, [selectedBacklog]);
+
+  const backlogParam = selectedBacklog ?? "";
+
   const { data: results = [], isLoading } = useQuery<BacklogItem[]>({
-    queryKey: ["backlog-search", query],
-    queryFn: () => api.get<BacklogItem[]>(`/api/backlog/search?q=${encodeURIComponent(query)}`),
-    enabled: query.length > 0,
+    queryKey: ["backlog-search", backlogParam, query],
+    queryFn: () => api.get<BacklogItem[]>(`/api/backlog/search?q=${encodeURIComponent(query)}&backlog=${encodeURIComponent(backlogParam)}`),
+    enabled: query.length > 0 && selectedBacklog !== null,
   });
 
   const columns = useMemo<ColumnDef<BacklogItem, unknown>[]>(
@@ -113,6 +146,30 @@ export function BacklogSearchPage() {
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold">🔍 Backlog Search</h1>
+
+      {/* Backlog picker */}
+      {sortedBacklogs.length > 1 && (
+        <div className="flex flex-wrap gap-2">
+          {sortedBacklogs.map((bl) => (
+            <button
+              key={bl.id}
+              type="button"
+              onClick={() => setSelectedBacklog(bl.id)}
+              className={cn(
+                "inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium transition-colors",
+                selectedBacklog === bl.id
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground",
+              )}
+            >
+              {bl.name}
+              {bl.itemCount !== undefined && (
+                <span className="opacity-75">({bl.itemCount})</span>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
 
       <div className="relative">
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />

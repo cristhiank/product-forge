@@ -13,6 +13,7 @@ import {
   LayoutDashboard,
   Puzzle,
   Search,
+  Terminal,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { CommandPalette } from "@/components/CommandPalette";
@@ -58,6 +59,13 @@ const sections: NavSection[] = [
       { to: "/agents/messages", label: "Messages", icon: MessageSquare },
       { to: "/agents/costs", label: "Costs", icon: DollarSign },
       { to: "/agents/incidents", label: "Incidents", icon: AlertTriangle },
+    ],
+  },
+  {
+    label: "SESSIONS",
+    main: { to: "/sessions", label: "Sessions", icon: Terminal },
+    sub: [
+      { to: "/sessions", label: "All Sessions", icon: Terminal, end: true },
     ],
   },
 ];

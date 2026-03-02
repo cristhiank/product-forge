@@ -4,6 +4,8 @@ import { Command } from 'commander';
 import { discover } from './discovery.js';
 import { createServer } from './server.js';
 import open from 'open';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
 
 const program = new Command();
 
@@ -15,13 +17,14 @@ program
   .option('-p, --port <number>', 'Port number', '3700')
   .option('--no-open', 'Don\'t auto-open browser')
   .option('--verbose', 'Show server logs')
-  .action(async (repoPath: string, opts: { port: string; open: boolean; verbose: boolean }) => {
+  .option('--sessions-path <path>', 'Path to Copilot CLI session-state directory', join(homedir(), '.copilot', 'session-state'))
+  .action(async (repoPath: string, opts: { port: string; open: boolean; verbose: boolean; sessionsPath: string }) => {
     const port = parseInt(opts.port, 10);
 
     console.log('🔥 Forge Mission Control');
     console.log(`   Scanning: ${repoPath}\n`);
 
-    const discovery = await discover(repoPath);
+    const discovery = await discover(repoPath, opts.sessionsPath);
 
     if (discovery.systems.length === 0) {
       console.error('❌ No Forge systems found at this path.');

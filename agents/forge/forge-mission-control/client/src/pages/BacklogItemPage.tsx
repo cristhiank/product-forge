@@ -54,9 +54,12 @@ function Badge({ label, className }: { label: string; className?: string }) {
 export function BacklogItemPage() {
   const { id } = useParams<{ id: string }>();
 
+  // Use the backlog selection persisted by BacklogPage/BacklogSearchPage
+  const backlogParam = localStorage.getItem("selectedBacklog") ?? "";
+
   const { data: item, isLoading } = useQuery<BacklogItem>({
-    queryKey: ["backlog", "item", id],
-    queryFn: () => api.get<BacklogItem>(`/api/backlog/item/${id}`),
+    queryKey: ["backlog", "item", backlogParam, id],
+    queryFn: () => api.get<BacklogItem>(`/api/backlog/item/${id}?backlog=${encodeURIComponent(backlogParam)}`),
     enabled: !!id,
   });
 

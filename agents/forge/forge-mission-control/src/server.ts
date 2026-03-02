@@ -1,11 +1,12 @@
 import Fastify from 'fastify';
 import fastifyStatic from '@fastify/static';
-import { existsSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import type { DiscoveryResult } from './discovery.js';
 import { AgentsProvider } from './providers/agents.js';
 import { ProductProvider } from './providers/product.js';
 import { BacklogProvider } from './providers/backlog.js';
+import { SessionsProvider } from './providers/sessions.js';
 import { registerEvents } from './events.js';
 
 interface ServerOptions {
@@ -87,32 +88,68 @@ export async function createServer(discovery: DiscoveryResult, opts: ServerOptio
   }
 
   // --- Backlog API ---
-  if (discovery.hasBacklog) {
-    const backlogApi = new BacklogProvider(discovery.repoRoot);
+  if (discovery.backlogs.length > 0) {
+    // Build a provider per discovered backlog (keyed by relativePath)
+    const backlogProviders = new Map<string, BacklogProvider>();
+    for (const bl of discovery.backlogs) {
+      const parentDir = bl.relativePath ? join(discovery.repoRoot, bl.relativePath) : discovery.repoRoot;
+      backlogProviders.set(bl.relativePath, new BacklogProvider(parentDir));
+    }
+    const defaultKey = discovery.backlogs[0].relativePath;
 
-    app.get('/api/backlog/items', async (_req, reply) => {
+    function resolveBacklog(backlogParam?: string): BacklogProvider {
+      const key = (backlogParam === undefined || backlogParam === null) ? defaultKey : backlogParam;
+      const provider = backlogProviders.get(key);
+      if (!provider) throw new Error(`Backlog not found: ${backlogParam}`);
+      return provider;
+    }
+
+    function countBacklogItems(backlogPath: string): number {
+      let count = 0;
+      for (const folder of ['next', 'working', 'done', 'archive']) {
+        try {
+          const files = readdirSync(join(backlogPath, folder));
+          count += files.filter(f => f.endsWith('.md')).length;
+        } catch { /* folder may not exist */ }
+      }
+      return count;
+    }
+
+    // List all discovered backlogs
+    app.get('/api/backlogs', async () => {
+      return discovery.backlogs.map(bl => ({
+        id: bl.relativePath,
+        name: bl.name,
+        path: bl.path,
+        relativePath: bl.relativePath,
+        itemCount: countBacklogItems(bl.path),
+      }));
+    });
+
+    app.get<{ Querystring: { backlog?: string } }>('/api/backlog/items', async (req, reply) => {
       try {
-        return await backlogApi.listItems();
+        return await resolveBacklog(req.query.backlog).listItems();
       } catch (err) {
         reply.code(500);
         return { error: err instanceof Error ? err.message : String(err) };
       }
     });
 
-    app.get<{ Params: { id: string } }>('/api/backlog/item/:id', async (req, reply) => {
+    app.get<{ Params: { id: string }; Querystring: { backlog?: string } }>('/api/backlog/item/:id', async (req, reply) => {
       try {
-        return await backlogApi.getItem(req.params.id);
+        return await resolveBacklog(req.query.backlog).getItem(req.params.id);
       } catch (err) {
         reply.code(500);
         return { error: err instanceof Error ? err.message : String(err) };
       }
     });
 
-    app.get('/api/backlog/stats', async (_req, reply) => {
+    app.get<{ Querystring: { backlog?: string } }>('/api/backlog/stats', async (req, reply) => {
       try {
+        const api = resolveBacklog(req.query.backlog);
         const [stats, hygiene] = await Promise.all([
-          backlogApi.getStats(),
-          backlogApi.getHygiene(),
+          api.getStats(),
+          api.getHygiene(),
         ]);
         return { stats, hygiene };
       } catch (err) {
@@ -121,10 +158,10 @@ export async function createServer(discovery: DiscoveryResult, opts: ServerOptio
       }
     });
 
-    app.get<{ Querystring: { q?: string } }>('/api/backlog/search', async (req, reply) => {
+    app.get<{ Querystring: { q?: string; backlog?: string } }>('/api/backlog/search', async (req, reply) => {
       try {
         const query = (req.query.q ?? '').trim();
-        const results = query ? await backlogApi.searchItems(query) : [];
+        const results = query ? await resolveBacklog(req.query.backlog).searchItems(query) : [];
         return results;
       } catch (err) {
         reply.code(500);
@@ -132,14 +169,14 @@ export async function createServer(discovery: DiscoveryResult, opts: ServerOptio
       }
     });
 
-    app.post<{ Body: { kind?: string; title?: string; priority?: string; description?: string } }>('/api/backlog/items', async (req, reply) => {
+    app.post<{ Body: { kind?: string; title?: string; priority?: string; description?: string }; Querystring: { backlog?: string } }>('/api/backlog/items', async (req, reply) => {
       try {
         const { kind, title, priority, description } = req.body ?? {};
         if (!kind || !title) {
           reply.code(400);
           return { error: 'kind and title are required' };
         }
-        const item = backlogApi.createItem({ kind, title, priority, description });
+        const item = resolveBacklog(req.query.backlog).createItem({ kind, title, priority, description });
         return item;
       } catch (err) {
         reply.code(500);
@@ -147,15 +184,16 @@ export async function createServer(discovery: DiscoveryResult, opts: ServerOptio
       }
     });
 
-    app.post<{ Params: { id: string }; Body: { to?: string } }>('/api/backlog/item/:id/move', async (req, reply) => {
+    app.post<{ Params: { id: string }; Body: { to?: string }; Querystring: { backlog?: string } }>('/api/backlog/item/:id/move', async (req, reply) => {
       try {
         const destination = req.body?.to;
         if (destination !== 'next' && destination !== 'working' && destination !== 'done' && destination !== 'archive') {
           reply.code(400);
           return { error: 'Invalid destination folder. Must be one of: next, working, done, archive' };
         }
-        await backlogApi.moveItem(req.params.id, destination);
-        const item = await backlogApi.getItem(req.params.id);
+        const api = resolveBacklog(req.query.backlog);
+        await api.moveItem(req.params.id, destination);
+        const item = await api.getItem(req.params.id);
         return item;
       } catch (err) {
         reply.code(500);
@@ -252,6 +290,52 @@ export async function createServer(discovery: DiscoveryResult, opts: ServerOptio
   app.get('/health', async () => {
     return { status: 'ok', uptime: process.uptime() };
   });
+
+  // --- Sessions API ---
+  if (discovery.hasSessions) {
+    const sessionsApi = new SessionsProvider(discovery.sessionsPath);
+
+    app.get('/api/sessions', async (_req, reply) => {
+      try {
+        return await sessionsApi.listSessions();
+      } catch (err) {
+        reply.code(500);
+        return { error: err instanceof Error ? err.message : String(err) };
+      }
+    });
+
+    app.get<{ Params: { id: string } }>('/api/sessions/:id', async (req, reply) => {
+      try {
+        const session = await sessionsApi.getSession(req.params.id);
+        if (!session) {
+          reply.code(404);
+          return { error: `Session ${req.params.id} not found` };
+        }
+        return session;
+      } catch (err) {
+        reply.code(500);
+        return { error: err instanceof Error ? err.message : String(err) };
+      }
+    });
+
+    app.get<{ Params: { id: string } }>('/api/sessions/:id/timeline', async (req, reply) => {
+      try {
+        return await sessionsApi.getTimeline(req.params.id);
+      } catch (err) {
+        reply.code(500);
+        return { error: err instanceof Error ? err.message : String(err) };
+      }
+    });
+
+    app.get<{ Params: { id: string }; Querystring: { type?: string } }>('/api/sessions/:id/events', async (req, reply) => {
+      try {
+        return await sessionsApi.getEvents(req.params.id, req.query.type);
+      } catch (err) {
+        reply.code(500);
+        return { error: err instanceof Error ? err.message : String(err) };
+      }
+    });
+  }
 
   registerEvents(app, discovery);
 

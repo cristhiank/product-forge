@@ -25,6 +25,13 @@ import { cn } from "@/lib/utils";
 
 // ── Types ──────────────────────────────────────────────────
 
+interface BacklogInfo {
+  id: string;
+  name: string;
+  relativePath: string;
+  itemCount?: number;
+}
+
 interface BacklogItem {
   id: string;
   title: string;
@@ -220,9 +227,11 @@ const EMPTY_FORM: NewItemForm = { kind: "", title: "", priority: "", description
 function NewItemDialog({
   open,
   onClose,
+  selectedBacklog,
 }: {
   open: boolean;
   onClose: () => void;
+  selectedBacklog: string;
 }) {
   const queryClient = useQueryClient();
   const [form, setForm] = useState<NewItemForm>(EMPTY_FORM);
@@ -248,9 +257,9 @@ function NewItemDialog({
 
   const createMutation = useMutation({
     mutationFn: (data: NewItemForm) =>
-      api.post("/api/backlog/items", data),
+      api.post(`/api/backlog/items?backlog=${encodeURIComponent(selectedBacklog)}`, data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["backlog"] });
+      queryClient.invalidateQueries({ queryKey: ["backlog", selectedBacklog] });
       onClose();
     },
   });
@@ -377,9 +386,41 @@ export function BacklogPage() {
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
   );
 
+  // Backlog picker
+  const { data: backlogs = [] } = useQuery<BacklogInfo[]>({
+    queryKey: ["backlogs"],
+    queryFn: () => api.get<BacklogInfo[]>("/api/backlogs"),
+  });
+
+  const sortedBacklogs = useMemo(
+    () => [...backlogs].sort((a, b) => (b.itemCount ?? 0) - (a.itemCount ?? 0)),
+    [backlogs],
+  );
+
+  const [selectedBacklog, setSelectedBacklog] = useState<string | null>(null);
+
+  // Initialize selectedBacklog to first backlog once list loads
+  useEffect(() => {
+    if (sortedBacklogs.length > 0 && selectedBacklog === null) {
+      const saved = localStorage.getItem("selectedBacklog");
+      const valid = saved !== null && sortedBacklogs.some(b => b.id === saved);
+      setSelectedBacklog(valid ? saved! : sortedBacklogs[0].id);
+    }
+  }, [sortedBacklogs, selectedBacklog]);
+
+  // Persist selection to localStorage so BacklogItemPage can use it
+  useEffect(() => {
+    if (selectedBacklog !== null) {
+      localStorage.setItem("selectedBacklog", selectedBacklog);
+    }
+  }, [selectedBacklog]);
+
+  const backlogParam = selectedBacklog ?? "";
+
   const { data: items = [], isLoading } = useQuery<BacklogItem[]>({
-    queryKey: ["backlog"],
-    queryFn: () => api.get<BacklogItem[]>("/api/backlog/items?all=true"),
+    queryKey: ["backlog", backlogParam],
+    queryFn: () => api.get<BacklogItem[]>(`/api/backlog/items?backlog=${encodeURIComponent(backlogParam)}`),
+    enabled: selectedBacklog !== null,
   });
 
   const grouped = useMemo(() => {
@@ -406,22 +447,22 @@ export function BacklogPage() {
 
   const moveMutation = useMutation({
     mutationFn: ({ id, to }: { id: string; to: Folder }) =>
-      api.post(`/api/backlog/item/${id}/move`, { to }),
+      api.post(`/api/backlog/item/${id}/move?backlog=${encodeURIComponent(backlogParam)}`, { to }),
     onMutate: async ({ id, to }) => {
-      await queryClient.cancelQueries({ queryKey: ["backlog"] });
-      const previous = queryClient.getQueryData<BacklogItem[]>(["backlog"]);
-      queryClient.setQueryData<BacklogItem[]>(["backlog"], (old) =>
+      await queryClient.cancelQueries({ queryKey: ["backlog", backlogParam] });
+      const previous = queryClient.getQueryData<BacklogItem[]>(["backlog", backlogParam]);
+      queryClient.setQueryData<BacklogItem[]>(["backlog", backlogParam], (old) =>
         old?.map((item) => (item.id === id ? { ...item, folder: to } : item)),
       );
       return { previous };
     },
     onError: (_err, _vars, ctx) => {
       if (ctx?.previous) {
-        queryClient.setQueryData(["backlog"], ctx.previous);
+        queryClient.setQueryData(["backlog", backlogParam], ctx.previous);
       }
     },
     onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: ["backlog"] });
+      queryClient.invalidateQueries({ queryKey: ["backlog", backlogParam] });
     },
   });
 
@@ -451,7 +492,7 @@ export function BacklogPage() {
     }
   }
 
-  if (isLoading) {
+  if (isLoading && selectedBacklog !== null) {
     return (
       <div className="flex items-center justify-center py-20 text-muted-foreground">
         Loading backlog…
@@ -472,7 +513,36 @@ export function BacklogPage() {
           New Item
         </button>
       </div>
-      <NewItemDialog open={dialogOpen} onClose={() => setDialogOpen(false)} />
+
+      {/* Backlog picker */}
+      {sortedBacklogs.length > 1 && (
+        <div className="flex flex-wrap gap-2 mb-4">
+          {sortedBacklogs.map((bl) => (
+            <button
+              key={bl.id}
+              type="button"
+              onClick={() => setSelectedBacklog(bl.id)}
+              className={cn(
+                "inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium transition-colors",
+                selectedBacklog === bl.id
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground",
+              )}
+            >
+              {bl.name}
+              {bl.itemCount !== undefined && (
+                <span className="opacity-75">({bl.itemCount})</span>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
+
+      <NewItemDialog
+        open={dialogOpen}
+        onClose={() => setDialogOpen(false)}
+        selectedBacklog={backlogParam}
+      />
       <DndContext
         sensors={sensors}
         collisionDetection={closestCenter}
