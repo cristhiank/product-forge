@@ -11,18 +11,18 @@ interface ProductMeta {
 
 interface ProductHealth {
   total_docs: number;
-  stale_docs: number;
-  orphaned_features: number;
+  stale_docs: string[];
+  orphaned_features: string[];
 }
 
 interface FeatureOverview {
-  discovery: number;
-  defined: number;
-  validated: number;
-  planned: number;
-  building: number;
-  shipped: number;
-  deprecated?: number;
+  discovery: string[];
+  defined: string[];
+  validated: string[];
+  planned: string[];
+  building: string[];
+  shipped: string[];
+  deprecated?: string[];
 }
 
 interface ProductDoc {
@@ -73,7 +73,7 @@ export function ProductPage() {
 
   const { meta, health, featureOverview, docs } = data ?? ({} as ProductData);
   const maxCount = Math.max(
-    ...pipelineStages.map((s) => featureOverview?.[s] ?? 0),
+    ...pipelineStages.map((s) => (featureOverview?.[s] ?? []).length),
     1,
   );
 
@@ -102,10 +102,10 @@ export function ProductPage() {
       <div className="grid gap-4 sm:grid-cols-3">
         {[
           { label: "Total Docs", value: health?.total_docs ?? 0 },
-          { label: "Stale Docs", value: health?.stale_docs ?? 0 },
+          { label: "Stale Docs", value: health?.stale_docs?.length ?? 0 },
           {
             label: "Orphaned Features",
-            value: health?.orphaned_features ?? 0,
+            value: health?.orphaned_features?.length ?? 0,
           },
         ].map((m) => (
           <div
@@ -125,7 +125,7 @@ export function ProductPage() {
         </h2>
         <div className="space-y-2">
           {pipelineStages.map((stage) => {
-            const count = featureOverview?.[stage] ?? 0;
+            const count = (featureOverview?.[stage] ?? []).length;
             const pct = Math.max((count / maxCount) * 100, count > 0 ? 8 : 0);
             return (
               <div key={stage} className="flex items-center gap-3">

@@ -125,6 +125,87 @@ export async function createServer(discovery: DiscoveryResult, opts: ServerOptio
         return { error: err instanceof Error ? err.message : String(err) };
       }
     });
+
+    app.get<{ Params: { id: string } }>('/api/product/features/:id', async (req, reply) => {
+      try {
+        const { id } = req.params;
+        const features = productApi.listFeatures();
+        const feature = features.find((f) => f.id === id || f.id.startsWith(id));
+        if (!feature) {
+          reply.code(404);
+          return { error: `Feature ${id} not found` };
+        }
+        const doc = productApi.readDoc(feature.path);
+        return { feature, doc };
+      } catch (err) {
+        reply.code(500);
+        return { error: err instanceof Error ? err.message : String(err) };
+      }
+    });
+
+    app.patch<{ Params: { id: string }; Body: { featureStatus: string } }>('/api/product/features/:id/status', async (req, reply) => {
+      try {
+        const { id } = req.params;
+        const { featureStatus } = req.body ?? {};
+        if (!featureStatus) { reply.code(400); return { error: 'featureStatus is required' }; }
+        const features = productApi.listFeatures();
+        const feature = features.find((f) => f.id === id || f.id.startsWith(id));
+        if (!feature) { reply.code(404); return { error: `Feature ${id} not found` }; }
+        const filePath = join(discovery.repoRoot, '.product', feature.path);
+        const productRoot = join(discovery.repoRoot, '.product');
+        if (!filePath.startsWith(productRoot + '/')) { reply.code(400); return { error: 'Invalid feature path' }; }
+        const raw = readFileSync(filePath, 'utf-8');
+        const parsed = matter(raw);
+        parsed.data.feature_status = featureStatus;
+        const newRaw = matter.stringify(parsed.content, parsed.data);
+        writeFileSync(filePath, newRaw, 'utf-8');
+        let commit: ReturnType<GitProvider['commitFile']> | undefined;
+        if (gitProvider) {
+          try {
+            commit = gitProvider.commitFile(`.product/${feature.path}`, `Update feature status: ${id} → ${featureStatus}`);
+          } catch { /* non-blocking */ }
+        }
+        return { success: true, commit };
+      } catch (err) {
+        reply.code(500);
+        return { error: err instanceof Error ? err.message : String(err) };
+      }
+    });
+
+    app.post<{ Body: { title: string; featureStatus?: string; epicId?: string; tags?: string[]; description?: string } }>('/api/product/features', async (req, reply) => {
+      try {
+        const { title, featureStatus = 'discovery', epicId, tags = [], description = '' } = req.body ?? {};
+        if (!title) { reply.code(400); return { error: 'title is required' }; }
+        const featuresDir = join(discovery.repoRoot, '.product', 'features');
+        const existingFiles = existsSync(featuresDir)
+          ? readdirSync(featuresDir).filter((f) => /^F-\d+/i.test(f))
+          : [];
+        const maxNum = existingFiles.reduce((max, f) => {
+          const m = /^F-(\d+)/i.exec(f);
+          return m ? Math.max(max, parseInt(m[1], 10)) : max;
+        }, 0);
+        const nextId = `F-${String(maxNum + 1).padStart(3, '0')}`;
+        const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+        const filename = `${nextId}_${slug}.md`;
+        const relPath = `features/${filename}`;
+        const filePath = join(featuresDir, filename);
+        const today = new Date().toISOString().split('T')[0];
+        const fm: Record<string, unknown> = { type: 'feature', feature_status: featureStatus, version: '0.1.0', tags, created: today, updated: today };
+        if (epicId) fm.epic_id = epicId;
+        const body = description ? `# ${title}\n\n${description}` : `# ${title}\n`;
+        writeFileSync(filePath, matter.stringify(body, fm), 'utf-8');
+        let commit: ReturnType<GitProvider['commitFile']> | undefined;
+        if (gitProvider) {
+          try {
+            commit = gitProvider.commitFile(`.product/${relPath}`, `feat: add feature ${nextId} ${title}`);
+          } catch { /* non-blocking */ }
+        }
+        return { feature: { id: nextId, path: relPath, title }, commit };
+      } catch (err) {
+        reply.code(500);
+        return { error: err instanceof Error ? err.message : String(err) };
+      }
+    });
   }
 
   // --- Backlog API ---

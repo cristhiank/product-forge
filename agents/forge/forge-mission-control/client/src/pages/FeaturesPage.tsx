@@ -1,16 +1,22 @@
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
-import { Loader2 } from "lucide-react";
+import { Link } from "react-router-dom";
+import { Loader2, Plus } from "lucide-react";
 
 interface Feature {
   id: string;
   title: string;
   status: string;
+  featureStatus: string;
+  path: string;
+  epicId?: string;
+  tags?: string[];
+  updated?: string;
   [key: string]: unknown;
 }
 
 interface FeaturesData {
-  featureOverview: Record<string, number>;
+  featureOverview: Record<string, string[]>;
   features: Feature[];
 }
 
@@ -21,7 +27,6 @@ const stages = [
   "planned",
   "building",
   "shipped",
-  "deprecated",
 ];
 
 const stageColors: Record<string, string> = {
@@ -44,6 +49,18 @@ const badgeColors: Record<string, string> = {
   deprecated: "bg-zinc-500/20 text-zinc-400",
 };
 
+function relativeTime(dateStr: string | undefined): string {
+  if (!dateStr) return "";
+  const date = new Date(dateStr);
+  if (isNaN(date.getTime())) return dateStr;
+  const diff = Date.now() - date.getTime();
+  const days = Math.floor(diff / 86400000);
+  if (days === 0) return "today";
+  if (days === 1) return "1d ago";
+  if (days < 30) return `${days}d ago`;
+  return `${Math.floor(days / 30)}mo ago`;
+}
+
 export function FeaturesPage() {
   const { data, isLoading } = useQuery({
     queryKey: ["product", "features"],
@@ -63,61 +80,90 @@ export function FeaturesPage() {
   const byStage = new Map<string, Feature[]>();
   for (const s of stages) byStage.set(s, []);
   for (const f of features) {
-    const bucket = byStage.get(f.status) ?? byStage.get("discovery")!;
+    const stage = f.featureStatus ?? f.status;
+    const bucket = byStage.get(stage) ?? byStage.get("discovery")!;
     bucket.push(f);
   }
 
-  // Only show stages that have features or are in the main pipeline
-  const visibleStages = stages.filter(
-    (s) => (byStage.get(s)?.length ?? 0) > 0,
-  );
-
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold text-foreground">Feature Board</h1>
+      <div className="flex items-center justify-between gap-4">
+        <h1 className="text-2xl font-bold text-foreground">Feature Board</h1>
+        <Link
+          to="/product/features/new"
+          className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:opacity-90 transition-opacity"
+        >
+          <Plus className="h-3.5 w-3.5" />
+          New Feature
+        </Link>
+      </div>
 
-      {visibleStages.length === 0 ? (
-        <p className="text-muted-foreground">No features found.</p>
-      ) : (
-        <div className="flex gap-4 overflow-x-auto pb-4">
-          {visibleStages.map((stage) => {
-            const items = byStage.get(stage)!;
-            const colors = stageColors[stage] ?? stageColors.deprecated;
-            return (
-              <div
-                key={stage}
-                className={`flex w-56 shrink-0 flex-col rounded-xl border ${colors.split(" ").slice(0, 1).join(" ")} bg-card`}
-              >
-                <div className="flex items-center justify-between border-b border-border px-3 py-2">
-                  <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    {stage}
-                  </span>
-                  <span className="text-xs text-muted-foreground">
-                    {items.length}
-                  </span>
-                </div>
-                <div className="flex-1 space-y-2 p-2">
-                  {items.map((f) => (
-                    <div
+      <div className="flex gap-4 overflow-x-auto pb-4">
+        {stages.map((stage) => {
+          const items = byStage.get(stage) ?? [];
+          const colors = stageColors[stage] ?? stageColors.deprecated;
+          const borderClass = colors.split(" ").find((c) => c.startsWith("border-")) ?? "border-border";
+          return (
+            <div
+              key={stage}
+              className={`flex w-60 shrink-0 flex-col rounded-xl border ${borderClass} bg-card`}
+            >
+              <div className="flex items-center justify-between border-b border-border px-3 py-2">
+                <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  {stage}
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  {items.length}
+                </span>
+              </div>
+              <div className="flex-1 space-y-2 p-2">
+                {items.length === 0 ? (
+                  <div className="rounded-lg border border-dashed border-border/50 p-3 text-center">
+                    <p className="text-xs text-muted-foreground/50">
+                      No features in {stage}
+                    </p>
+                  </div>
+                ) : (
+                  items.map((f) => (
+                    <Link
                       key={f.id ?? f.title}
-                      className="rounded-lg border border-border bg-background p-3"
+                      to={`/product/features/${f.id}`}
+                      className="block rounded-lg border border-border bg-background p-3 hover:border-foreground/20 transition-colors"
                     >
-                      <p className="text-sm font-medium text-foreground">
+                      <p className="text-sm font-medium text-foreground leading-snug">
                         {f.title}
                       </p>
-                      <span
-                        className={`mt-1 inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ${badgeColors[f.status] ?? badgeColors.deprecated}`}
-                      >
-                        {f.status}
-                      </span>
-                    </div>
-                  ))}
-                </div>
+                      <p className="mt-0.5 font-mono text-[10px] text-muted-foreground">
+                        {f.id}
+                      </p>
+                      <div className="mt-2 flex items-center gap-1.5 flex-wrap">
+                        {f.epicId && (
+                          <span className="rounded px-1.5 py-0.5 text-[10px] bg-blue-500/10 text-blue-400 font-mono">
+                            {f.epicId}
+                          </span>
+                        )}
+                        {f.tags?.slice(0, 3).map((t) => (
+                          <span
+                            key={t}
+                            className="rounded px-1.5 py-0.5 text-[10px] bg-muted text-muted-foreground"
+                          >
+                            {t}
+                          </span>
+                        ))}
+                      </div>
+                      {f.updated && (
+                        <p className="mt-1.5 text-[10px] text-muted-foreground/60">
+                          {relativeTime(f.updated)}
+                        </p>
+                      )}
+                    </Link>
+                  ))
+                )}
               </div>
-            );
-          })}
-        </div>
-      )}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

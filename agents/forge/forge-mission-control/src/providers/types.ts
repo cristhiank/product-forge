@@ -22,12 +22,15 @@ export interface ProductMeta {
 }
 
 export interface ProductFeature {
+  id: string;
   path: string;
   title: string;
   featureStatus: string;
   epicId?: string;
   version: string;
   tags: string[];
+  updated?: string;
+  created?: string;
 }
 
 export interface ProductHealth {

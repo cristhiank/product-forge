@@ -53,13 +53,20 @@ function normalizeDoc(raw: RawDoc): ProductDoc {
 
 function normalizeFeature(raw: RawDoc): ProductFeature {
   const fm = raw.frontmatter ?? {};
+  const path = raw.path;
+  const filename = path.split('/').pop()?.replace(/\.md$/i, '') ?? path;
+  const idMatch = /^(F-\d+)/i.exec(filename);
+  const id = idMatch ? idMatch[1].toUpperCase() : filename.split('_')[0].toUpperCase();
   return {
+    id,
     path: raw.path,
     title: raw.title ?? extractTitle(raw.content ?? String(fm.content ?? '')),
     featureStatus: raw.featureStatus ?? raw.feature_status ?? String(fm.feature_status ?? fm.featureStatus ?? 'defined'),
     epicId: raw.epicId ?? raw.epic_id ?? (fm.epic_id != null ? String(fm.epic_id) : fm.epicId != null ? String(fm.epicId) : undefined),
     version: raw.version ?? String(fm.version ?? ''),
     tags: raw.tags ?? (Array.isArray(fm.tags) ? fm.tags.map(String) : []),
+    updated: raw.updated ?? (fm.updated != null ? String(fm.updated) : undefined),
+    created: raw.created ?? (fm.created != null ? String(fm.created) : undefined),
   };
 }
 

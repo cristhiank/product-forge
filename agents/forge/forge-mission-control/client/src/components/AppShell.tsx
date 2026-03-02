@@ -14,6 +14,7 @@ import {
   Puzzle,
   Search,
   Terminal,
+  Library,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { CommandPalette } from "@/components/CommandPalette";
@@ -38,8 +39,9 @@ const sections: NavSection[] = [
     label: "PRODUCT",
     main: { to: "/product", label: "Product", icon: FileText },
     sub: [
-      { to: "/product", label: "Overview", icon: FileText, end: true },
-      { to: "/product/features", label: "Features", icon: Puzzle },
+      { to: "/product", label: "Cockpit", icon: LayoutDashboard, end: true },
+      { to: "/product/features", label: "Features", icon: Puzzle, end: true },
+      { to: "/product/library", label: "Library", icon: Library },
     ],
   },
   {
