@@ -1,8 +1,12 @@
 import { useParams, Link } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
-import Markdown from "react-markdown";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState, useEffect } from "react";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { Pencil, History } from "lucide-react";
+import { MarkdownViewer } from "@/components/MarkdownViewer";
+import { MarkdownEditor } from "@/components/MarkdownEditor";
+import { GitHistoryPanel } from "@/components/GitHistoryPanel";
 
 interface BacklogItem {
   id: string;
@@ -53,15 +57,53 @@ function Badge({ label, className }: { label: string; className?: string }) {
 
 export function BacklogItemPage() {
   const { id } = useParams<{ id: string }>();
+  const queryClient = useQueryClient();
 
   // Use the backlog selection persisted by BacklogPage/BacklogSearchPage
   const backlogParam = localStorage.getItem("selectedBacklog") ?? "";
+
+  const [editMode, setEditMode] = useState(false);
+  const [editBody, setEditBody] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [savedMsg, setSavedMsg] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
 
   const { data: item, isLoading } = useQuery<BacklogItem>({
     queryKey: ["backlog", "item", backlogParam, id],
     queryFn: () => api.get<BacklogItem>(`/api/backlog/item/${id}?backlog=${encodeURIComponent(backlogParam)}`),
     enabled: !!id,
   });
+
+  useEffect(() => {
+    if (item?.body !== undefined) {
+      setEditBody(item.body ?? "");
+    }
+  }, [item?.body, id]);
+
+  async function handleSave() {
+    if (!id) return;
+    setSaving(true);
+    try {
+      await api.put(`/api/backlog/item/${id}/body?backlog=${encodeURIComponent(backlogParam)}`, {
+        body: editBody,
+      });
+      await queryClient.invalidateQueries({ queryKey: ["backlog", "item", backlogParam, id] });
+      setEditMode(false);
+      setSavedMsg(true);
+      setTimeout(() => setSavedMsg(false), 2000);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleRevert(sha: string) {
+    if (!id || !item) return;
+    const prefix = backlogParam ? `${backlogParam}/` : "";
+    const filePath = `${prefix}.backlog/${item.folder ?? "next"}/${id}.md`;
+    await api.post("/api/git/revert", { file: filePath, commit: sha });
+    await queryClient.invalidateQueries({ queryKey: ["backlog", "item", backlogParam, id] });
+    setHistoryOpen(false);
+  }
 
   if (isLoading) {
     return (
@@ -82,6 +124,8 @@ export function BacklogItemPage() {
   const meta = item.metadata as
     | { created_at?: string; updated_at?: string }
     | undefined;
+  const prefix = backlogParam ? `${backlogParam}/` : "";
+  const filePath = `${prefix}.backlog/${item.folder ?? "next"}/${item.id}.md`;
 
   return (
     <div className="max-w-3xl">
@@ -95,7 +139,35 @@ export function BacklogItemPage() {
       </nav>
 
       {/* Header */}
-      <h1 className="text-2xl font-bold mb-3">{item.title}</h1>
+      <div className="flex items-start justify-between gap-3 mb-3">
+        <h1 className="text-2xl font-bold">{item.title}</h1>
+        <div className="flex items-center gap-2 shrink-0">
+          {savedMsg && (
+            <span className="text-xs text-green-400 animate-pulse">Saved ✓</span>
+          )}
+          {!editMode && (
+            <>
+              <button
+                onClick={() => {
+                  setEditBody(item.body ?? "");
+                  setEditMode(true);
+                }}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <Pencil className="h-3.5 w-3.5" />
+                Edit
+              </button>
+              <button
+                onClick={() => setHistoryOpen(true)}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <History className="h-3.5 w-3.5" />
+                History
+              </button>
+            </>
+          )}
+        </div>
+      </div>
       <div className="flex flex-wrap gap-2 mb-6">
         {item.kind && (
           <Badge
@@ -180,11 +252,25 @@ export function BacklogItemPage() {
       )}
 
       {/* Body / Description */}
-      {item.body && (
-        <section className="prose prose-invert prose-sm max-w-none">
-          <Markdown>{item.body}</Markdown>
-        </section>
+      {editMode ? (
+        <MarkdownEditor
+          content={editBody}
+          onChange={setEditBody}
+          onSave={handleSave}
+          onCancel={() => setEditMode(false)}
+          saving={saving}
+        />
+      ) : (
+        item.body && <MarkdownViewer content={item.body} size="sm" />
       )}
+
+      {/* Git history panel */}
+      <GitHistoryPanel
+        filePath={filePath}
+        open={historyOpen}
+        onClose={() => setHistoryOpen(false)}
+        onRevert={handleRevert}
+      />
     </div>
   );
 }

@@ -1,9 +1,11 @@
 import { useParams, Link } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState, useEffect } from "react";
 import { api } from "@/lib/api";
-import { Loader2, ChevronRight } from "lucide-react";
-import Markdown from "react-markdown";
-import remarkGfm from "remark-gfm";
+import { Loader2, ChevronRight, Pencil, History } from "lucide-react";
+import { MarkdownViewer } from "@/components/MarkdownViewer";
+import { MarkdownEditor } from "@/components/MarkdownEditor";
+import { GitHistoryPanel } from "@/components/GitHistoryPanel";
 
 interface DocData {
   doc: {
@@ -16,12 +18,51 @@ interface DocData {
 
 export function DocPage() {
   const { "*": path } = useParams();
+  const queryClient = useQueryClient();
+
+  const [editMode, setEditMode] = useState(false);
+  const [editContent, setEditContent] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [savedMsg, setSavedMsg] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["product", "doc", path],
     queryFn: () => api.get<DocData>(`/api/product/doc/${path}`),
     enabled: !!path,
   });
+
+  // Sync edit buffer when doc loads or path changes
+  useEffect(() => {
+    if (data?.doc?.content !== undefined) {
+      setEditContent(data.doc.content);
+    }
+  }, [data?.doc?.content, path]);
+
+  async function handleSave() {
+    if (!path) return;
+    setSaving(true);
+    try {
+      await api.put(`/api/product/doc/${path}`, {
+        content: editContent,
+        commitMessage: "Update via Mission Control",
+      });
+      await queryClient.invalidateQueries({ queryKey: ["product", "doc", path] });
+      setEditMode(false);
+      setSavedMsg(true);
+      setTimeout(() => setSavedMsg(false), 2000);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleRevert(sha: string) {
+    if (!path) return;
+    const filePath = `.product/${path}`;
+    await api.post("/api/git/revert", { file: filePath, commit: sha });
+    await queryClient.invalidateQueries({ queryKey: ["product", "doc", path] });
+    setHistoryOpen(false);
+  }
 
   if (isLoading) {
     return (
@@ -45,17 +86,46 @@ export function DocPage() {
   const metaEntries = Object.entries(fm).filter(
     ([, v]) => v !== null && v !== undefined && v !== "",
   );
+  const filePath = `.product/${path}`;
 
   return (
     <div className="space-y-6">
-      {/* Breadcrumb */}
-      <nav className="flex items-center gap-1 text-sm text-muted-foreground">
-        <Link to="/product" className="hover:text-foreground">
-          Product
-        </Link>
-        <ChevronRight className="h-3 w-3" />
-        <span className="text-foreground">{doc.title || path}</span>
-      </nav>
+      {/* Breadcrumb + actions */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <nav className="flex items-center gap-1 text-sm text-muted-foreground flex-1 min-w-0">
+          <Link to="/product" className="hover:text-foreground">
+            Product
+          </Link>
+          <ChevronRight className="h-3 w-3 shrink-0" />
+          <span className="text-foreground truncate">{doc.title || path}</span>
+        </nav>
+        <div className="flex items-center gap-2 shrink-0">
+          {savedMsg && (
+            <span className="text-xs text-green-400 animate-pulse">Saved ✓</span>
+          )}
+          {!editMode && (
+            <>
+              <button
+                onClick={() => {
+                  setEditContent(doc.content);
+                  setEditMode(true);
+                }}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <Pencil className="h-3.5 w-3.5" />
+                Edit
+              </button>
+              <button
+                onClick={() => setHistoryOpen(true)}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <History className="h-3.5 w-3.5" />
+                History
+              </button>
+            </>
+          )}
+        </div>
+      </div>
 
       {/* Frontmatter card */}
       {metaEntries.length > 0 && (
@@ -76,10 +146,26 @@ export function DocPage() {
         </div>
       )}
 
-      {/* Markdown body */}
-      <article className="prose prose-invert max-w-none prose-headings:text-foreground prose-p:text-foreground/90 prose-a:text-primary prose-strong:text-foreground prose-code:rounded prose-code:bg-muted prose-code:px-1 prose-code:text-foreground prose-pre:bg-muted">
-        <Markdown remarkPlugins={[remarkGfm]}>{doc.content}</Markdown>
-      </article>
+      {/* Markdown body or editor */}
+      {editMode ? (
+        <MarkdownEditor
+          content={editContent}
+          onChange={setEditContent}
+          onSave={handleSave}
+          onCancel={() => setEditMode(false)}
+          saving={saving}
+        />
+      ) : (
+        <MarkdownViewer content={doc.content} />
+      )}
+
+      {/* Git history panel */}
+      <GitHistoryPanel
+        filePath={filePath}
+        open={historyOpen}
+        onClose={() => setHistoryOpen(false)}
+        onRevert={handleRevert}
+      />
     </div>
   );
 }

@@ -50,7 +50,13 @@ program
     }
 
     // Graceful shutdown
+    let shuttingDown = false;
     const shutdown = async () => {
+      if (shuttingDown) {
+        console.log('\n   Force exit.');
+        process.exit(1);
+      }
+      shuttingDown = true;
       console.log('\n   Shutting down...');
       await server.close();
       process.exit(0);

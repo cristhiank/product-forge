@@ -1,12 +1,14 @@
 import { watch } from 'chokidar';
+import type { FSWatcher } from 'chokidar';
 import type { FastifyInstance } from 'fastify';
 import { join } from 'node:path';
 import type { DiscoveryResult } from './discovery.js';
 
 type EventSender = (event: string, data: unknown) => void;
 
-export function registerEvents(app: FastifyInstance, discovery: DiscoveryResult): void {
+export function registerEvents(app: FastifyInstance, discovery: DiscoveryResult): () => Promise<void> {
   const clients = new Set<EventSender>();
+  const watchers: FSWatcher[] = [];
 
   app.get('/events', async (req, reply) => {
     reply.hijack();
@@ -52,6 +54,7 @@ export function registerEvents(app: FastifyInstance, discovery: DiscoveryResult)
 
   const watchDirectory = (directory: string, eventName: string, depth: number) => {
     const watcher = watch(directory, { ignoreInitial: true, depth });
+    watchers.push(watcher);
     watcher.on('all', (eventType, filePath) => {
       broadcast(eventName, {
         type: eventType,
@@ -64,11 +67,22 @@ export function registerEvents(app: FastifyInstance, discovery: DiscoveryResult)
     watchDirectory(join(discovery.repoRoot, '.product'), 'product_change', 3);
   }
 
-  if (discovery.hasBacklog) {
+  if (discovery.backlogs && discovery.backlogs.length > 0) {
+    for (const backlog of discovery.backlogs) {
+      watchDirectory(backlog.path, 'backlog_change', 3);
+    }
+  } else if (discovery.hasBacklog) {
     watchDirectory(join(discovery.repoRoot, '.backlog'), 'backlog_change', 3);
   }
 
   if (discovery.hasWorkers) {
     watchDirectory(join(discovery.repoRoot, '.copilot-workers'), 'worker_update', 2);
   }
+
+  return async () => {
+    for (const send of clients) {
+      clients.delete(send);
+    }
+    await Promise.all(watchers.map(w => w.close()));
+  };
 }

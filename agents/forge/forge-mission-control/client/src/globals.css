@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@plugin "@tailwindcss/typography";
 
 @theme inline {
   --color-background: oklch(0.145 0.02 250);
@@ -64,4 +65,25 @@
     @apply bg-background text-foreground font-sans antialiased;
     margin: 0;
   }
+}
+
+/* Code block refinements */
+.prose pre code.hljs {
+  background: transparent;
+  padding: 0;
+}
+
+.prose pre {
+  overflow-x: auto;
+}
+
+/* Table row hover */
+.prose table tbody tr:hover {
+  background: oklch(0.22 0.02 250 / 0.5);
+}
+
+/* Scrollable tables on mobile */
+.prose table {
+  display: block;
+  overflow-x: auto;
 }

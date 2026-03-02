@@ -1,12 +1,14 @@
 import Fastify from 'fastify';
 import fastifyStatic from '@fastify/static';
-import { existsSync, readdirSync, statSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
+import matter from 'gray-matter';
 import type { DiscoveryResult } from './discovery.js';
 import { AgentsProvider } from './providers/agents.js';
 import { ProductProvider } from './providers/product.js';
 import { BacklogProvider } from './providers/backlog.js';
 import { SessionsProvider } from './providers/sessions.js';
+import { GitProvider } from './providers/git.js';
 import { registerEvents } from './events.js';
 
 interface ServerOptions {
@@ -19,6 +21,9 @@ export async function createServer(discovery: DiscoveryResult, opts: ServerOptio
     logger: opts.verbose ? { level: 'info' } : false,
   });
   const agentsProvider = new AgentsProvider(discovery.repoRoot);
+  const gitProvider = GitProvider.isAvailable(discovery.repoRoot)
+    ? new GitProvider(discovery.repoRoot)
+    : null;
 
   // ===== JSON API Routes =====
 
@@ -85,6 +90,41 @@ export async function createServer(discovery: DiscoveryResult, opts: ServerOptio
         return { error: err instanceof Error ? err.message : String(err) };
       }
     });
+
+    app.put<{ Params: { '*': string }; Body: { content: string; commitMessage?: string } }>('/api/product/doc/*', async (req, reply) => {
+      try {
+        const rawParam = req.params['*'] ?? '';
+        const docPath = decodeURIComponent(rawParam).replace(/^\/+/, '');
+        if (!docPath || docPath.includes('..')) {
+          reply.code(400);
+          return { error: 'Invalid document path' };
+        }
+        const filePath = join(discovery.repoRoot, '.product', docPath);
+        const productRoot = join(discovery.repoRoot, '.product');
+        if (!filePath.startsWith(productRoot + '/') && filePath !== productRoot) {
+          reply.code(400);
+          return { error: 'Invalid document path' };
+        }
+        if (!existsSync(filePath)) {
+          reply.code(404);
+          return { error: 'Document not found' };
+        }
+        const raw = readFileSync(filePath, 'utf-8');
+        const parsed = matter(raw);
+        const newRaw = matter.stringify(req.body.content, parsed.data);
+        writeFileSync(filePath, newRaw, 'utf-8');
+        let commit: ReturnType<GitProvider['commitFile']> | undefined;
+        if (gitProvider) {
+          try {
+            commit = gitProvider.commitFile(`.product/${docPath}`, req.body.commitMessage ?? `Update doc: ${docPath}`);
+          } catch { /* git commit failure is non-blocking */ }
+        }
+        return { success: true, commit };
+      } catch (err) {
+        reply.code(500);
+        return { error: err instanceof Error ? err.message : String(err) };
+      }
+    });
   }
 
   // --- Backlog API ---
@@ -102,6 +142,13 @@ export async function createServer(discovery: DiscoveryResult, opts: ServerOptio
       const provider = backlogProviders.get(key);
       if (!provider) throw new Error(`Backlog not found: ${backlogParam}`);
       return provider;
+    }
+
+    function resolveBacklogPath(backlogParam?: string): string {
+      const key = (backlogParam === undefined || backlogParam === null) ? defaultKey : backlogParam;
+      const bl = discovery.backlogs.find(b => b.relativePath === key);
+      if (!bl) throw new Error(`Backlog not found: ${backlogParam}`);
+      return bl.path;
     }
 
     function countBacklogItems(backlogPath: string): number {
@@ -195,6 +242,53 @@ export async function createServer(discovery: DiscoveryResult, opts: ServerOptio
         await api.moveItem(req.params.id, destination);
         const item = await api.getItem(req.params.id);
         return item;
+      } catch (err) {
+        reply.code(500);
+        return { error: err instanceof Error ? err.message : String(err) };
+      }
+    });
+
+    app.put<{ Params: { id: string }; Body: { body: string; commitMessage?: string }; Querystring: { backlog?: string } }>('/api/backlog/item/:id/body', async (req, reply) => {
+      try {
+        const { id } = req.params;
+        const backlogPath = resolveBacklogPath(req.query.backlog);
+        let itemFilePath: string | null = null;
+        let itemFolder: string | null = null;
+        for (const folder of ['next', 'working', 'done', 'archive']) {
+          const dirPath = join(backlogPath, folder);
+          try {
+            const files = readdirSync(dirPath).filter(
+              f => (f === `${id}.md` || f.startsWith(`${id}_`)) && f.endsWith('.md'),
+            );
+            if (files.length > 0) {
+              itemFilePath = join(dirPath, files[0]);
+              itemFolder = folder;
+              break;
+            }
+          } catch { /* folder may not exist */ }
+        }
+        if (!itemFilePath || !itemFolder) {
+          reply.code(404);
+          return { error: `Backlog item ${id} not found` };
+        }
+        const raw = readFileSync(itemFilePath, 'utf-8');
+        // Backlog items use a markdown separator (---), not YAML frontmatter.
+        // Preserve everything up to and including the separator line, replace body.
+        const sepIdx = raw.indexOf('\n---\n');
+        const newRaw = sepIdx !== -1
+          ? raw.slice(0, sepIdx + 5) + '\n' + req.body.body
+          : raw + '\n\n---\n\n' + req.body.body;
+        writeFileSync(itemFilePath, newRaw, 'utf-8');
+        let commit: ReturnType<GitProvider['commitFile']> | undefined;
+        if (gitProvider) {
+          try {
+            const bl = discovery.backlogs.find(b => b.path === backlogPath)!;
+            const filename = itemFilePath.split('/').pop()!;
+            const relPath = join(bl.relativePath || '', '.backlog', itemFolder, filename);
+            commit = gitProvider.commitFile(relPath, req.body.commitMessage ?? `Update backlog item: ${id}`);
+          } catch { /* git commit failure is non-blocking */ }
+        }
+        return { success: true, commit };
       } catch (err) {
         reply.code(500);
         return { error: err instanceof Error ? err.message : String(err) };
@@ -337,7 +431,57 @@ export async function createServer(discovery: DiscoveryResult, opts: ServerOptio
     });
   }
 
-  registerEvents(app, discovery);
+  // --- Git API ---
+  if (gitProvider) {
+    app.get<{ Querystring: { file: string; limit?: string } }>('/api/git/history', async (req, reply) => {
+      const { file, limit } = req.query;
+      if (!file) { reply.code(400); return { error: 'file parameter required' }; }
+      try {
+        return gitProvider.getHistory(file, parseInt(limit ?? '20', 10));
+      } catch (err) {
+        reply.code(400);
+        return { error: err instanceof Error ? err.message : String(err) };
+      }
+    });
+
+    app.get<{ Querystring: { file: string; commit: string } }>('/api/git/show', async (req, reply) => {
+      const { file, commit } = req.query;
+      if (!file || !commit) { reply.code(400); return { error: 'file and commit parameters required' }; }
+      try {
+        return { content: gitProvider.getFileAtCommit(file, commit) };
+      } catch (err) {
+        reply.code(400);
+        return { error: err instanceof Error ? err.message : String(err) };
+      }
+    });
+
+    app.get<{ Querystring: { file: string; from: string; to?: string } }>('/api/git/diff', async (req, reply) => {
+      const { file, from, to } = req.query;
+      if (!file || !from) { reply.code(400); return { error: 'file and from parameters required' }; }
+      try {
+        return gitProvider.getDiff(file, from, to);
+      } catch (err) {
+        reply.code(400);
+        return { error: err instanceof Error ? err.message : String(err) };
+      }
+    });
+
+    app.post<{ Body: { file: string; commit: string; message?: string } }>('/api/git/revert', async (req, reply) => {
+      const { file, commit, message } = req.body ?? {};
+      if (!file || !commit) { reply.code(400); return { error: 'file and commit required' }; }
+      try {
+        return gitProvider.revertFile(file, commit, message);
+      } catch (err) {
+        reply.code(400);
+        return { error: err instanceof Error ? err.message : String(err) };
+      }
+    });
+  }
+
+  const cleanupEvents = registerEvents(app, discovery);
+  app.addHook('onClose', async () => {
+    await cleanupEvents();
+  });
 
   // --- SPA static serving (production) ---
   const prodClientDir = join(import.meta.dirname, 'client');
