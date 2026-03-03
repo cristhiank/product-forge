@@ -30,6 +30,7 @@ import tempfile
 from pathlib import Path
 from datetime import datetime
 from dataclasses import dataclass, field
+from parsing import _is_mutating_bash
 
 SCRIPT_DIR = Path(__file__).parent
 TEST_CASES_FILE = SCRIPT_DIR / "test-cases.json"
@@ -37,6 +38,9 @@ FIXTURE_DIR = SCRIPT_DIR / "fixtures" / "sample-api"
 RESULTS_DIR = SCRIPT_DIR / "results"
 SESSION_STATE = Path.home() / ".copilot" / "session-state"
 REPO_ROOT = SCRIPT_DIR.parent.parent.parent  # agents/forge/evals -> mcp/
+
+# On Windows, npm/npx are .cmd batch files and require shell=True for subprocess.
+_SHELL = sys.platform == "win32"
 
 
 # ──────────────────────────────────────────────
@@ -63,55 +67,28 @@ def create_worktree(eval_id: str) -> Path:
         env={**os.environ, "GIT_AUTHOR_NAME": "eval", "GIT_AUTHOR_EMAIL": "eval@test",
              "GIT_COMMITTER_NAME": "eval", "GIT_COMMITTER_EMAIL": "eval@test"}
     )
+    # Install deps if package.json exists
+    if (worktree_dir / "package.json").exists():
+        subprocess.run(["npm", "install", "--silent"], cwd=worktree_dir,
+                       capture_output=True, timeout=60, shell=_SHELL)
     return worktree_dir
 
 
 def cleanup_worktree(worktree_dir: Path):
     """Remove worktree after eval."""
     if worktree_dir.exists():
-        shutil.rmtree(worktree_dir)
+        def _onerror(func, path, _exc_info):
+            try:
+                os.chmod(path, 0o700)
+                func(path)
+            except Exception:
+                pass
+        shutil.rmtree(worktree_dir, onerror=_onerror)
 
 
 # ──────────────────────────────────────────────
 # Mechanical Grading (from events.jsonl)
 # ──────────────────────────────────────────────
-
-BUILD_TEST_PATTERNS = [
-    "npm run build", "npm test", "dotnet build", "dotnet test", "dotnet run",
-    "pytest", "cargo build", "cargo test", "make", "go build", "go test",
-    "npx tsc", "npx vitest", "node --test",
-]
-FILE_MUTATION_PATTERNS = [
-    "sed -i", "awk -i", "perl -pi", "patch ",
-    "echo >", "cat >", "tee ", ">>",
-    "npm install", "pip install", "dotnet add",
-]
-SAFE_SEGMENT_PREFIXES = [
-    "node ", "git ", "grep ", "jq ", "head ", "tail ",
-    "ls ", "find ", "wc ", "sort ", "uniq ", "which ", "pwd",
-]
-
-
-def _is_mutating_bash(cmd: str) -> bool:
-    # Neutralize quoted strings so patterns inside args don't trigger matches
-    stripped = re.sub(r'"[^"]*"|\'[^\']*\'', '""', cmd)
-    segments = re.split(r'\s*(?:&&|\|\||[;|])\s*', stripped)
-    for seg in segments:
-        seg = seg.strip()
-        if not seg:
-            continue
-        # Skip known-safe CLI tool invocations (backlog, hub, git, etc.)
-        if any(seg.startswith(p) for p in SAFE_SEGMENT_PREFIXES):
-            continue
-        for p in FILE_MUTATION_PATTERNS:
-            if p in seg:
-                return True
-        for p in BUILD_TEST_PATTERNS:
-            if seg.startswith(p):
-                rest = seg[len(p):]
-                if not rest or rest[0].isspace():
-                    return True
-    return False
 
 
 @dataclass
@@ -141,7 +118,7 @@ def mechanical_grade(session_id: str) -> MechanicalResult:
         return MechanicalResult()
 
     g = MechanicalResult()
-    with open(events_path) as f:
+    with open(events_path, encoding="utf-8", errors="replace") as f:
         for line in f:
             line = line.strip()
             if not line:
@@ -197,24 +174,34 @@ def mechanical_grade(session_id: str) -> MechanicalResult:
 def grade_outcome(worktree_dir: Path) -> dict:
     """Run tests in the worktree after the agent worked on it.
     Returns test pass/fail counts."""
-    result = subprocess.run(
-        ["node", "--test", "tests/bookings.test.js"],
-        cwd=worktree_dir, capture_output=True, text=True, timeout=30
-    )
-    output = result.stdout + result.stderr
+    try:
+        result = subprocess.run(
+            ["node", "--test", "tests/bookings.test.js"],
+            cwd=worktree_dir, capture_output=True, text=True,
+            encoding="utf-8", errors="replace", timeout=30
+        )
+        output = result.stdout + result.stderr
 
-    # Parse node:test output
-    pass_match = re.search(r"# pass (\d+)", output)
-    fail_match = re.search(r"# fail (\d+)", output)
-    total_match = re.search(r"# tests (\d+)", output)
+        # Match both TAP (# pass N) and spec reporter (ℹ pass N) formats
+        pass_match = re.search(r"[#\u2139]\s*pass\s+(\d+)", output)
+        fail_match = re.search(r"[#\u2139]\s*fail\s+(\d+)", output)
+        total_match = re.search(r"[#\u2139]\s*tests\s+(\d+)", output)
 
-    return {
-        "tests_pass": int(pass_match.group(1)) if pass_match else 0,
-        "tests_fail": int(fail_match.group(1)) if fail_match else -1,
-        "tests_total": int(total_match.group(1)) if total_match else 0,
-        "exit_code": result.returncode,
-        "output_tail": output[-500:] if output else "",
-    }
+        return {
+            "tests_pass": int(pass_match.group(1)) if pass_match else 0,
+            "tests_fail": int(fail_match.group(1)) if fail_match else -1,
+            "tests_total": int(total_match.group(1)) if total_match else 0,
+            "exit_code": result.returncode,
+            "output_tail": output[-500:] if output else "",
+        }
+    except Exception as e:
+        return {
+            "tests_pass": 0,
+            "tests_fail": -1,
+            "tests_total": 0,
+            "exit_code": -1,
+            "output_tail": f"grade_outcome error: {e}",
+        }
 
 
 # ──────────────────────────────────────────────
@@ -262,8 +249,9 @@ Assistant output (first 1000 chars):
     try:
         result = subprocess.run(
             ["copilot", "-p", prompt, "--model", "claude-opus-4.6",
-             "--allow-all-tools", "--no-color"],
-            capture_output=True, text=True, timeout=120, cwd=str(SCRIPT_DIR)
+              "--allow-all-tools", "--no-color"],
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            timeout=120, cwd=str(SCRIPT_DIR)
         )
         output = result.stdout.strip()
         start = output.find("{")
@@ -287,7 +275,8 @@ def run_single_turn(case: dict, worktree_dir: Path) -> tuple[str, str]:
         ["copilot", "--agent", "forge/Forge", "-p", case["prompt"],
          "--allow-all-tools", "--max-autopilot-continues", "8",
          "--model", "claude-opus-4.6", "--no-color"],
-        capture_output=True, text=True, timeout=300, cwd=str(worktree_dir)
+        capture_output=True, text=True, encoding="utf-8", errors="replace",
+        timeout=300, cwd=str(worktree_dir)
     )
 
     sessions_after = set(os.listdir(SESSION_STATE)) if SESSION_STATE.exists() else set()
@@ -308,7 +297,8 @@ def run_multi_turn(case: dict, worktree_dir: Path) -> tuple[str, str]:
          "--allow-all-tools", "--max-autopilot-continues", "8",
          "--model", "claude-opus-4.6", "--no-color", "--autopilot"],
         input="\n".join(turns[1:]) + "\n" if len(turns) > 1 else "",
-        capture_output=True, text=True, timeout=600, cwd=str(worktree_dir)
+        capture_output=True, text=True, encoding="utf-8", errors="replace",
+        timeout=600, cwd=str(worktree_dir)
     )
 
     sessions_after = set(os.listdir(SESSION_STATE)) if SESSION_STATE.exists() else set()
@@ -366,14 +356,22 @@ def run_test_case(case: dict, trial: int = 1, skip_llm: bool = False) -> dict:
     # Mechanical grading
     mech = mechanical_grade(session_id)
     mech_pass = True
-    if case["expected"].get("should_dispatch") and mech.dispatches == 0:
+    expected = case.get("expected", {})
+    should_dispatch = expected.get("should_dispatch")
+    if should_dispatch and mech.dispatches == 0:
         mech_pass = False
-    if not case["expected"].get("should_edit", True) and (mech.inline_edits > 0 or mech.inline_creates > 0):
+    if should_dispatch is False and mech.dispatches > 0:
         mech_pass = False
-    if mech.mutating_bashes > 0 and not case["expected"].get("should_edit", True):
+    if not expected.get("should_edit", True) and (mech.inline_edits > 0 or mech.inline_creates > 0):
         mech_pass = False
-    if case["expected"].get("should_clarify") and not mech.has_clarification:
+    if mech.mutating_bashes > 0 and not expected.get("should_edit", True):
         mech_pass = False
+    if expected.get("should_clarify") and not mech.has_clarification:
+        mech_pass = False
+    if expected.get("expected_skills"):
+        loaded = set(mech.skills_loaded)
+        if not all(skill in loaded for skill in expected["expected_skills"]):
+            mech_pass = False
 
     print(f"  Mechanical: {'✅' if mech_pass else '❌'} "
           f"(dispatch={mech.dispatches}, edit={mech.inline_edits}, "
@@ -489,6 +487,7 @@ def main():
     parser = argparse.ArgumentParser(description="Forge Eval Suite")
     parser.add_argument("--filter", help="Filter by category or id prefix")
     parser.add_argument("--case", help="Run single case by ID")
+    parser.add_argument("--cases", help="Path to test cases JSON (default: test-cases.json)")
     parser.add_argument("--trials", type=int, default=1, help="Trials per case (default 1)")
     parser.add_argument("--skip-llm", action="store_true", help="Mechanical grading only")
     parser.add_argument("--report", help="Aggregate from past results dir")
@@ -496,7 +495,13 @@ def main():
 
     RESULTS_DIR.mkdir(exist_ok=True)
 
-    with open(TEST_CASES_FILE) as f:
+    cases_file = Path(args.cases) if args.cases else TEST_CASES_FILE
+    if args.cases and not cases_file.is_absolute():
+        script_relative = SCRIPT_DIR / args.cases
+        if script_relative.exists():
+            cases_file = script_relative
+
+    with open(cases_file) as f:
         test_cases = json.load(f)
 
     if args.report:

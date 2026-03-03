@@ -75,12 +75,12 @@ describe("Booking Service", () => {
 
   it("should exclude cancelled bookings from revenue", () => {
     // FAILS: revenue counts all bookings
-    createBooking({ petName: "Rex", nights: 2, pricePerNight: 50 });
+    const b1 = createBooking({ petName: "Rex", nights: 2, pricePerNight: 50 });
     const b2 = createBooking({ petName: "Luna", nights: 3, pricePerNight: 40 });
     cancelBooking(b2.id);
     const stats = getStats();
-    // Only Rex's booking should count: 2*50=100 (after bug-002 is also fixed)
-    assert.equal(stats.revenue, 100);
+    // Only the non-cancelled booking should count, regardless of BUG-002 math.
+    assert.equal(stats.revenue, b1.totalPrice);
     assert.equal(stats.confirmed, 1);
     assert.equal(stats.cancelled, 1);
   });

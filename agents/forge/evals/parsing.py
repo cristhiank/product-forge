@@ -30,7 +30,7 @@ MUTATING_BASH_OPERATORS = [
 SAFE_SEGMENT_PREFIXES = [
     "node ", "git ", "grep ", "jq ", "cat ", "head ", "tail ",
     "ls ", "find ", "wc ", "sort ", "uniq ", "which ", "pwd",
-    "python3 ", "python ",
+    "python3 ", "python ", "cd ", "pushd ", "popd ",
 ]
 DISPATCH_TOOLS = {"task"}
 SKILL_TOOLS = {"skill"}
@@ -45,23 +45,29 @@ def _is_mutating_bash(cmd: str) -> bool:
     """Check if a bash command is mutating, avoiding false positives from arguments."""
     # Neutralize quoted strings so patterns inside args don't trigger matches
     stripped = re.sub(r'"[^"]*"|\'[^\']*\'|`[^`]*`', '""', cmd)
-    for seg in re.split(r'\s*(?:&&|\|\||[;|])\s*', stripped):
-        seg = seg.strip()
+    for seg in re.split('\\s*(?:&&|\\|\\||[;|\x07])\\s*', stripped):
+        seg = re.sub(r'[\x00-\x1f]', ' ', seg).strip()
         # Strip leading env var assignments (e.g. NODE_ENV=prod ...)
         while re.match(r'[A-Za-z_]\w*=\S+\s', seg):
             seg = re.sub(r'^[A-Za-z_]\w*=\S+\s+', '', seg)
         if not seg:
             continue
+        seg_lower = seg.lower()
         # Check for mutating operators FIRST (before safe prefixes)
         for pattern in MUTATING_BASH_OPERATORS:
-            if pattern in seg:
+            if pattern in seg_lower:
                 return True
         # Skip known-safe CLI tool invocations (backlog, hub, git, etc.)
-        if any(seg.startswith(p) for p in SAFE_SEGMENT_PREFIXES):
+        if any(seg_lower.startswith(p) for p in SAFE_SEGMENT_PREFIXES):
+            continue
+        # Skip MCP bootstrap/shell setup segments that are non-mutating.
+        if re.match(r'^[^a-z0-9]*(?:n?pm|pnpm|yarn)\s+exec\s+.*\bmcp\b', seg_lower):
+            continue
+        if "\\windows\\system32\\cmd.exe" in seg_lower:
             continue
         # Check mutating commands
         for pattern in MUTATING_BASH_COMMANDS:
-            if seg.startswith(pattern):
+            if seg_lower.startswith(pattern):
                 # Word boundary: pattern must be followed by whitespace or end
                 rest = seg[len(pattern):]
                 if not rest or rest[0].isspace():

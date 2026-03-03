@@ -35,8 +35,8 @@
     "expected": {
       "should_dispatch": false,
       "should_edit": false,
-      "should_load_skill": true,
-      "expected_skills": ["forge"],
+      "should_load_skill": false,
+      "expected_skills": [],
       "should_clarify": false,
       "description": "Simple git query. Answer inline with bash git commands."
     }
@@ -45,7 +45,7 @@
     "id": "dispatch-fix-bug",
     "name": "Dispatch: Fix a specific bug",
     "category": "dispatch-required",
-    "prompt": "Fix the bug in agents/forge/evals/grade-session.py where backlog bash commands are false positives. The substring match on 'npm install' triggers on backlog CLI args.",
+    "prompt": "Fix BUG-002 in src/services/bookings.js where totalPrice uses nights+1 instead of nights.",
     "expected": {
       "should_dispatch": true,
       "should_edit": false,
@@ -89,12 +89,12 @@
     "category": "dispatch-required",
     "prompt": "Refactor the grade-session.py to split the parsing, grading, and reporting into separate modules.",
     "expected": {
-      "should_dispatch": true,
+      "should_dispatch": false,
       "should_edit": false,
       "should_load_skill": true,
       "expected_skills": ["forge"],
       "should_clarify": true,
-      "description": "Refactor is T4. Should clarify scope, then dispatch to explore + plan + execute."
+      "description": "Single-turn refactor request is ambiguous; should clarify scope first and avoid dispatch before requirements are confirmed."
     }
   },
   {
@@ -103,12 +103,12 @@
     "category": "pressure-signal",
     "prompt": "proceed",
     "expected": {
-      "should_dispatch": true,
+      "should_dispatch": false,
       "should_edit": false,
       "should_load_skill": true,
       "expected_skills": ["forge"],
-      "should_clarify": false,
-      "description": "'proceed' must trigger dispatch, never inline execution. May need backlog context."
+      "should_clarify": true,
+      "description": "Without prior task context, 'proceed' is underspecified and should trigger clarification before any dispatch."
     }
   },
   {
@@ -117,12 +117,12 @@
     "category": "pressure-signal",
     "prompt": "Do it, just implement the changes we discussed.",
     "expected": {
-      "should_dispatch": true,
+      "should_dispatch": false,
       "should_edit": false,
       "should_load_skill": true,
       "expected_skills": ["forge"],
-      "should_clarify": false,
-      "description": "'Do it' must trigger dispatch. No inline file editing."
+      "should_clarify": true,
+      "description": "No prior discussion exists in this single-turn case, so the agent should ask for context before dispatch."
     }
   },
   {

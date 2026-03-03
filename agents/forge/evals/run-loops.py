@@ -25,12 +25,16 @@ import shutil
 from pathlib import Path
 from datetime import datetime
 from dataclasses import dataclass, field
+from parsing import _is_mutating_bash
 
 SCRIPT_DIR = Path(__file__).parent
 LOOP_CASES_FILE = SCRIPT_DIR / "loop-test-cases.json"
 FIXTURE_DIR = SCRIPT_DIR / "fixtures" / "sample-api"
 RESULTS_DIR = SCRIPT_DIR / "results"
 SESSION_STATE = Path.home() / ".copilot" / "session-state"
+
+# On Windows, npm/npx are .cmd batch files and require shell=True for subprocess.
+_SHELL = sys.platform == "win32"
 
 
 # ── Sandbox Management ──
@@ -51,13 +55,19 @@ def create_sandbox(eval_id: str) -> Path:
     # Install deps if package.json exists
     if (sandbox / "package.json").exists():
         subprocess.run(["npm", "install", "--silent"], cwd=sandbox,
-                       capture_output=True, timeout=60)
+                       capture_output=True, timeout=60, shell=_SHELL)
     return sandbox
 
 
 def cleanup_sandbox(sandbox: Path):
     if sandbox.exists():
-        shutil.rmtree(sandbox)
+        def _onerror(func, path, _exc_info):
+            try:
+                os.chmod(path, 0o700)
+                func(path)
+            except Exception:
+                pass
+        shutil.rmtree(sandbox, onerror=_onerror)
 
 
 # ── Session Discovery ──
@@ -69,21 +79,6 @@ def find_new_session(before: set) -> str | None:
 
 
 # ── Mechanical Grading (per-turn) ──
-
-BUILD_PATTERNS = [
-    "npm run build", "npm test", "dotnet build", "dotnet test", "dotnet run",
-    "pytest", "cargo build", "cargo test", "node --test", "npx tsc",
-]
-MUTATE_PATTERNS = ["sed -i", "awk -i", "perl -pi", "echo >", "cat >", "tee ", ">>"]
-
-
-def _is_mutating_bash(cmd: str) -> bool:
-    for seg in re.split(r'&&|\|\||;', cmd):
-        seg = seg.strip()
-        for p in BUILD_PATTERNS + MUTATE_PATTERNS:
-            if seg.startswith(p) or (seg.startswith("cd ") and p in seg):
-                return True
-    return False
 
 
 @dataclass
@@ -189,6 +184,14 @@ def evaluate_turn(grade: TurnGrade, expected: dict, all_skills_so_far: set = Non
         for s in expected["expect_skills"]:
             if s not in available:
                 passed = False
+    if "expect_auto_council" in expected:
+        available = set(grade.skills_loaded)
+        if all_skills_so_far:
+            available |= all_skills_so_far
+        if expected["expect_auto_council"] and "experts-council" not in available:
+            passed = False
+        if expected["expect_auto_council"] is False and "experts-council" in grade.skills_loaded:
+            passed = False
     # Parallel workers: if expected, check for copilot-cli-skill or multiple task() calls
     if expected.get("expect_parallel_workers") and grade.dispatches < 2:
         passed = False  # at minimum 2+ dispatches indicate parallelism attempt
@@ -206,12 +209,14 @@ def grade_outcome(sandbox: Path, outcome_spec: dict) -> dict:
         try:
             r = subprocess.run(
                 ["node", "--test", "tests/bookings.test.js"],
-                cwd=sandbox, capture_output=True, text=True, timeout=30
+                cwd=sandbox, capture_output=True, text=True,
+                encoding="utf-8", errors="replace", timeout=30
             )
             output = r.stdout + r.stderr
-            pass_m = re.search(r"# pass (\d+)", output)
-            fail_m = re.search(r"# fail (\d+)", output)
-            total_m = re.search(r"# tests (\d+)", output)
+            # Match both TAP (# pass N) and spec reporter (ℹ pass N) formats
+            pass_m = re.search(r"[#\u2139]\s*pass\s+(\d+)", output)
+            fail_m = re.search(r"[#\u2139]\s*fail\s+(\d+)", output)
+            total_m = re.search(r"[#\u2139]\s*tests\s+(\d+)", output)
             tests_pass = int(pass_m.group(1)) if pass_m else 0
             tests_fail = int(fail_m.group(1)) if fail_m else -1
             tests_total = int(total_m.group(1)) if total_m else 0
@@ -222,6 +227,9 @@ def grade_outcome(sandbox: Path, outcome_spec: dict) -> dict:
 
             min_pass = outcome_spec.get("expect_tests_pass_min", 0)
             if tests_pass < min_pass:
+                result["passed"] = False
+            expected_total = outcome_spec.get("expect_tests_total")
+            if expected_total is not None and tests_total != expected_total:
                 result["passed"] = False
         except Exception as e:
             result["details"]["error"] = str(e)
@@ -453,9 +461,15 @@ def main():
     parser = argparse.ArgumentParser(description="Forge Loop Eval Suite")
     parser.add_argument("--loop", help="Run specific loop by id prefix")
     parser.add_argument("--cases", help="Path to test cases JSON (default: loop-test-cases.json)")
-    parser.add_argument("--skip-llm", action="store_true")
+    parser.add_argument(
+        "--skip-llm",
+        action="store_true",
+        help="Compatibility flag (loop runner currently performs mechanical/outcome grading only).",
+    )
     parser.add_argument("--report", help="Report from past results")
     args = parser.parse_args()
+    if args.skip_llm:
+        print("ℹ️  --skip-llm is a no-op in run-loops.py (no LLM grading path is implemented).")
 
     RESULTS_DIR.mkdir(exist_ok=True)
 

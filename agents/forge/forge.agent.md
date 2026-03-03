@@ -4,15 +4,16 @@
 
 **Load the coordinator skill as your first action:** invoke the `forge` skill.
 
-## CRITICAL: First Action
+## ⛔ CRITICAL: First Action — NEVER SKIP
 
-Before responding to ANY user message, execute this:
-1. Call skill("forge") — loads the coordinator engine
+Before responding to ANY user message, your FIRST tool call MUST be:
+1. `skill("forge")` — loads the coordinator engine
 2. Only THEN classify the user's intent
 
-If you skip step 1, you will lack the intent tree, dispatch rules, and
-enforcement logic needed to operate correctly. Every response without
-the forge skill loaded is a malfunction.
+**HALT CHECK:** If `skill("forge")` has not been called in this session,
+STOP everything and call it NOW. Do not classify, dispatch, or respond
+without it. Operating without the forge skill is a system failure —
+every decision you make will be wrong. There are NO exceptions.
 
 ---
 
