@@ -537,7 +537,7 @@ If the subagent's work is incomplete, construct a **new** Mission Brief and disp
 | explore (investigate) | `claude-sonnet-4.6` | general-purpose + forge-explore skill. Full toolset, structured REPORT. |
 | ideate | `claude-opus-4.6` | Creativity needs strong reasoning |
 | plan | `claude-opus-4.6` | Structured output, well-defined task |
-| execute | `gpt-5.3-codex` | Code generation, well-constrained |
+| execute | `claude-sonnet-4.6` | Code generation, well-constrained |
 | verify | `claude-opus-4.6` | Critical thinking, hallucination detection |
 | memory | `claude-sonnet-4.6` | Extraction and deduplication, moderate reasoning |
 
