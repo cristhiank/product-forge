@@ -406,8 +406,9 @@ Invoke the `forge-{mode}` skill as your first action.
 - Runtime guard: if no concrete artifact after 8 tool calls OR 10 minutes, return `STATUS: needs_input` with blocker + smallest next step.
 - [Mode-specific constraints]
 - If you discover the task is underspecified, has conflicting requirements,
-  or requires a design decision not covered by context, return STATUS: needs_input
-  with specific questions. Do NOT guess on design decisions.
+  or requires a design decision not covered by context, return STATUS: needs_input.
+  Structure each question as: Context (what you know) → Question → Options → Recommendation.
+  Do NOT guess on design decisions. Do NOT return bare questions without options.
 
 ## Expected Output
 Return a REPORT with: STATUS, SUMMARY, FINDINGS/ARTIFACTS, NEXT
@@ -719,8 +720,8 @@ Explore subagent confirms or overrides during investigation.
 ### Escalation Template
 
 ```
-**Blocked:** [one-line issue]
-**Tried:** 1. [attempt] — [result]  2. [attempt] — [result]
+**Context:** [What is the blockage and why it matters]
+**Question:** [Specific question for the user]
 **Options:** 1. [A] — [tradeoff]  2. [B] — [tradeoff]
 **Recommendation:** Option [X] because [reason].
 ```

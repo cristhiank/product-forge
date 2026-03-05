@@ -78,54 +78,103 @@ DISCOVER ──→ DESIGN ──→ VALIDATE
 **Tools:** Load `made-to-stick` skill for messaging clarity. Load `copywriting` for customer-facing copy.
 
 **Workflow:**
-1. Read context: `$PHUB list --type customer` + `$PHUB list --type strategy`
-2. Create or update feature spec:
-   ```bash
-   $PHUB feature create F-XXX "Feature Title" "Description"
-   ```
-3. Write the feature spec using this template:
+
+#### Step 1: Read context and validate discovery
+
+1a. Read context: `$PHUB list --type customer` + `$PHUB list --type strategy`
+
+1b. **Discovery handoff check:** If `.product/customers/` contains JTBD, ICP, or SEGMENTS docs, the `## Job to be Done` section MUST reference an existing job statement — do not invent new ones. If NO customer docs exist, return `STATUS: needs_input` recommending a DISCOVER phase first:
+   > "No customer research found in .product/customers/. Recommend running DISCOVER phase (JTBD analysis) before writing a feature spec. Proceed anyway?"
+
+#### Step 2: Create or update feature spec
+
+```bash
+$PHUB feature create F-XXX "Feature Title" "Description"
+```
+
+#### Step 3: Write the spec — first draft
+
+**Requirement language standard:** Use RFC 2119 keywords deliberately:
+- **MUST** = non-negotiable requirement
+- **SHOULD** = expected but deprioritizable with justification
+- **MAY** = optional enhancement
+
+Replace vague qualifiers with measurable targets:
+- ❌ "The page should be fast" → ✅ "Page load time MUST be < 2.5s at p95 on 4G mobile"
+- ❌ "Support major browsers" → ✅ "MUST support Chrome 120+, Firefox 121+, Safari 17+"
+
+Write using this template:
 
 ```markdown
 # [Feature Title]
 
 ## Job to be Done
-[Reference the JTBD this feature serves]
+[Reference an existing JTBD from .product/customers/JTBD.md — do not invent]
 
 ## Problem Statement
 [Concrete, specific problem — use Made-to-Stick: Simple + Concrete]
 
 ## Proposed Solution
-[Solution description — focus on the core concept, not implementation]
+[Solution description — focus on the WHAT, not the HOW]
+[Use MUST/SHOULD/MAY for each requirement]
 
 ## User Stories
-- As a [persona], I want to [action], so I can [outcome]
-  (include at least one story)
+- As a [persona from ICP], I want to [action], so I can [outcome]
+  (include at least one story; each story SHOULD trace to a Success Metric)
 
 ## Success Metrics
-- [Measurable outcome that proves the feature works]
+- [Measurable outcome with target number and timeframe]
+- [Each metric MUST have: what to measure, target value, and baseline if known]
 
 ## Out of Scope
-- [What this feature explicitly does NOT do]
+- [What this feature explicitly does NOT do — MUST be non-empty]
 
 ## Open Questions
-- [Unresolved decisions]
+- [Unresolved decisions with owner and next action]
 ```
 
-4. Apply Made-to-Stick SUCCESs check:
-   - **Simple** — Is the core message obvious in one sentence?
-   - **Unexpected** — Does it break an assumption?
-   - **Concrete** — Does it use specific details, not abstractions?
-   - **Credible** — Is there evidence (data, research, competitor proof)?
-   - **Emotional** — Does it connect to a feeling (frustration, relief, pride)?
-   - **Story** — Can you tell a user story that makes someone nod?
+#### Step 4: Self-review pass (mandatory)
 
-5. Completeness gate before transitioning:
-    - Required headings MUST exist: `## Job to be Done`, `## Problem Statement`, `## Proposed Solution`, `## User Stories`, `## Success Metrics`, `## Out of Scope`
-    - Heading names must match exactly (for example `## User Stories` plural, not `## User Story`)
-    - If unresolved items remain, keep `## Open Questions` with explicit owners/next action
-    - If required sections are missing and cannot be inferred from context, return `STATUS: needs_input` (do not force transition)
-    - Before returning `STATUS: complete`, re-read the final feature file and confirm each required heading exists literally.
-6. Transition: `$PHUB feature transition F-XXX defined`
+After writing the draft, re-read the spec as a **skeptical engineering lead** who must implement it. You are no longer the author — evaluate only what is on the page.
+
+**4a. Anti-pattern checklist** — check each item:
+- ❌ **Vague requirements** — "should be fast", "user-friendly", "seamless" → replace with measurable MUST/SHOULD
+- ❌ **Unmeasurable success metrics** — "increase engagement" → add target number + timeframe
+- ❌ **Assumption-as-requirement** — "Users will always..." → reframe as hypothesis or add to Open Questions
+- ❌ **Technical hand-waving** — "Use standard best practices", "leverage AI" → specify approach or mark as Open Question
+- ❌ **Gold plating** — over-specified implementation details in a product spec → focus on WHAT not HOW
+- ❌ **Missing personas** — user stories without a defined persona → reference ICP or define inline
+- ❌ **Orphaned references** — mentions of documents, features, or phases that don't exist → fix or remove
+- ❌ **Contradictory sections** — Out of Scope contradicts Proposed Solution, metrics misaligned with stories → reconcile
+
+**4b. Made-to-Stick SUCCESs check:**
+- **Simple** — Is the core message obvious in one sentence?
+- **Unexpected** — Does it break an assumption?
+- **Concrete** — Does it use specific details, not abstractions?
+- **Credible** — Is there evidence (data, research, competitor proof)?
+- **Emotional** — Does it connect to a feeling (frustration, relief, pride)?
+- **Story** — Can you tell a user story that makes someone nod?
+
+**4c. Classify each finding:**
+- **Critical** — Blocks implementation (missing section, vague MUST requirement, no success metrics). **Action:** Fix immediately.
+- **Important** — Will cause rework (logical gap, weak metric, missing edge case). **Action:** Fix if straightforward, else add to `## Open Questions` with owner.
+- **Suggestion** — Nice-to-have improvement. **Action:** Fix only if trivial.
+
+**4d. Iterate:** If any Critical findings exist, rewrite the affected sections and review again. **Max 2 iterations.** If Critical findings persist after 2 passes, add them to `## Open Questions` with explicit owners and return `STATUS: needs_input`.
+
+Only Suggestion-level findings may remain in a `STATUS: complete` spec.
+
+#### Step 5: Structural gate (must pass before completion)
+
+- Required headings MUST exist literally: `## Job to be Done`, `## Problem Statement`, `## Proposed Solution`, `## User Stories`, `## Success Metrics`, `## Out of Scope`
+- Heading names must match exactly (e.g., `## User Stories` plural, not `## User Story`)
+- Scan for residual `TBD`, `TODO`, `PLACEHOLDER`, `PRODUCT-GAP-` tokens — any found blocks `STATUS: complete`
+- If unresolved items remain, keep `## Open Questions` with explicit owners/next action
+- Before returning `STATUS: complete`, re-read the final feature file and confirm each required heading exists literally and no Critical anti-patterns remain
+
+#### Step 6: Transition
+
+`$PHUB feature transition F-XXX defined`
 
 ### VALIDATE — Test before building
 
@@ -138,15 +187,19 @@ DISCOVER ──→ DESIGN ──→ VALIDATE
    - **User interview** — structured interview using JTBD forces
    - **A/B test** — landing page variant
    - **Concierge** — manual delivery of the feature to test demand
-3. Create experiment:
+3. Write experiment design with these quality checks:
+   - Hypothesis MUST be falsifiable ("If we do X, metric Y will change by Z%")
+   - Success/failure criteria MUST be measurable with specific thresholds
+   - No vague hypotheses ("users will like it") — apply anti-pattern checklist from DESIGN
+4. Create experiment:
    ```bash
    $PHUB experiment create X-XXX "Hypothesis statement" F-XXX
    ```
-4. After results: update experiment, transition feature:
+5. After results: update experiment, transition feature:
    ```bash
    $PHUB feature transition F-XXX validated
    ```
-5. **Auto-bridge prompt:** When a feature reaches `validated`, prompt:
+6. **Auto-bridge prompt:** When a feature reaches `validated`, prompt:
    > "Feature F-XXX validated. Create backlog epic?"
 
 ---
@@ -236,6 +289,11 @@ SUMMARY: [one-line result]
 ### Product Artifacts
 - [docs created/updated with paths]
 
+### Spec Quality (for DESIGN completions)
+- TBD markers remaining: [count]
+- Anti-pattern check: [Pass / Fail — list any remaining]
+- Review findings: 🔴 [N] Critical · 🟡 [N] Important · 🟢 [N] Suggestion
+
 ### Feature Status
 - [feature transitions made]
 
@@ -254,6 +312,28 @@ For health reports, include this exact subsection structure:
 - Missing: [...]
 - Needs attention: [...]
 ```
+
+---
+
+## Escalation Format (STATUS: needs_input)
+
+When returning `STATUS: needs_input`, structure each question as:
+
+```markdown
+### ⚠️ Input Needed: [topic]
+
+**Context:** [What you know and what you've tried — 2 sentences max]
+**Question:** [Single, specific, answerable question]
+**Options:**
+1. [Option A] — [tradeoff]
+2. [Option B] — [tradeoff]
+**Recommendation:** Option [X] because [reason].
+```
+
+Rules:
+- Never return a bare question. Every `needs_input` MUST include options and a recommendation.
+- One question per escalation block. Multiple questions = multiple blocks.
+- If the blocker is a missing decision, include a default you'd recommend and why.
 
 ---
 
