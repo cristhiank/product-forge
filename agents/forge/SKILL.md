@@ -63,24 +63,32 @@ User message
 │             "bookkeeping", "what should I work on"
 │
 ├── Product (DISCOVER)
-│   └── Delegate to product subagent + jobs-to-be-done skill
+│   └── Dispatch general-purpose product subagent
+│      Line 1 MUST be: "Invoke the `forge-product` skill as your first action."
+│      Line 2 MAY add: jobs-to-be-done
 │   Triggers: "discover", "research", "who are our customers",
 │             "market analysis", "competitive analysis", "JTBD",
 │             "customer segments", "ICP"
 │
 ├── Product (DESIGN)
-│   └── Delegate to product subagent + made-to-stick + copywriting
+│   └── Dispatch general-purpose product subagent
+│      Line 1 MUST be: "Invoke the `forge-product` skill as your first action."
+│      Line 2+ MAY add: made-to-stick, copywriting
 │   Triggers: "define feature", "feature spec", "product spec",
 │             "vision", "positioning", "brand", "GTM", "strategy",
 │             "pricing strategy", "design tokens"
 │
 ├── Product (VALIDATE)
-│   └── Delegate to product subagent
+│   └── Dispatch general-purpose product subagent
+│      Line 1 MUST be: "Invoke the `forge-product` skill as your first action."
+│      Line 2+ MAY add: lean-startup, copywriting
 │   Triggers: "validate", "prototype", "experiment", "test hypothesis",
 │             "A/B test", "user test"
 │
 ├── Product (health/maintenance)
-│   └── Delegate to product subagent
+│   └── Dispatch general-purpose product subagent
+│      Line 1 MUST be: "Invoke the `forge-product` skill as your first action."
+│      Never run product health inline from coordinator
 │   Triggers: "product health", "update specs", "what's stale",
 │             "feature overview", "feature lifecycle"
 │
@@ -133,6 +141,25 @@ User message
     DEFAULT: If in doubt between Ambiguous and another branch, choose Ambiguous.
     Never guess at scope — ask first, dispatch second.
 ```
+
+---
+
+## Product Routing Contract (Hard Gate)
+
+For ANY product intent (discover/design/validate/health), these rules are mandatory:
+
+1. Use `task({ agent_type: "general-purpose", ... })` — never inline execution.
+2. Mission Brief line 1 MUST be: `Invoke the \`forge-product\` skill as your first action.`
+3. Framework skills (`jobs-to-be-done`, `made-to-stick`, `copywriting`, `lean-startup`) are optional line 2+ helpers — never a replacement for `forge-product`.
+4. Never dispatch product intents with `forge-execute` as the primary mode.
+5. For product health, never run tests/build/bash inline in coordinator; dispatch product subagent and require stale/missing/attention output.
+
+**❌ WRONG (framework-only):**
+`Invoke the \`jobs-to-be-done\` skill as your first action.`
+
+**✅ RIGHT (product-first):**
+`Invoke the \`forge-product\` skill as your first action.`
+`Also invoke the \`jobs-to-be-done\` skill for customer switching-force analysis.`
 
 ---
 
@@ -376,6 +403,7 @@ Invoke the `forge-{mode}` skill as your first action.
 ## Constraints
 - Scope: [what's in/out]
 - Budget: [tool call limit]
+- Runtime guard: if no concrete artifact after 8 tool calls OR 10 minutes, return `STATUS: needs_input` with blocker + smallest next step.
 - [Mode-specific constraints]
 - If you discover the task is underspecified, has conflicting requirements,
   or requires a design decision not covered by context, return STATUS: needs_input
@@ -392,6 +420,8 @@ Building a Mission Brief IS your execution. This is not a checklist before real 
 Every dispatch MUST include:
 
 - [ ] Line 1: `Invoke the \`forge-{mode}\` skill as your first action.`
+- [ ] If product intent: line 1 is exactly `Invoke the \`forge-product\` skill as your first action.`
+- [ ] If product intent + framework: framework skill appears on line 2+ (never replaces line 1)
 - [ ] Stack detection applied (backend-architecture / frontend-architecture if applicable)
 - [ ] All 4 sections present: Mission, Context, Constraints, Expected Output
 - [ ] agent_type matches the mode (general-purpose for skills, explore for quick lookups)
@@ -616,6 +646,22 @@ Invoke experts-council **on your own initiative** (no user prompt) when:
 - Complex feature requiring long-term architectural choices
 - Non-obvious tradeoff where evidence doesn't clearly favor one side
 - Planning phase surfaces 3+ competing strategies
+
+### Hard-Trigger Heuristics (must invoke council)
+
+If ANY condition below is true, invoke experts-council before making a recommendation:
+
+1. User explicitly lists 3+ options (e.g., "options are A/B/C", "we could X, Y, or Z").
+2. Tradeoff prompt includes uncertainty markers (`tradeoff`, `vs`, `which approach`, `right approach`).
+3. Security-sensitive architecture decision (`auth`, `PII`, `compliance`, `security is critical`).
+4. Performance/scalability decision with stage ambiguity (`pre-launch`, `0 users`, `10k+`, `future growth`).
+5. High-reversal data model choices (`schema`, `data model`, `multi-tenant`, `migration`).
+
+### No-Council Heuristics (must NOT invoke council)
+
+- Mechanical bug fixes with a clear root cause and explicit patch target.
+- Fully specified backlog execution items with no architectural choice.
+- Pure formatting/rename/refactor tasks without strategic tradeoffs.
 
 Prefix with: `🤖 Auto-consulted the experts council on: [topic]`
 

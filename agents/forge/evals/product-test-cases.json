@@ -11,13 +11,19 @@
         "prompt": "Research who our target customers are for PetBoard. Look at the .product/customers/ folder — there are gaps (GAP-003, GAP-004). Fill them using the jobs-to-be-done framework.",
         "expect_phase": "product-discover",
         "expect_dispatch": true,
-        "expect_skills": ["forge"],
+        "expect_skills": ["forge", "forge-product", "jobs-to-be-done"],
         "expect_no_edits": true,
         "description": "Should dispatch to forge-product subagent in DISCOVER phase. Subagent should use product-hub CLI and JTBD framework."
       }
     ],
     "outcome_check": {
       "check_files": [".product/customers/SEGMENTS.md"],
+      "check_contains": [
+        {
+          "file": ".product/customers/SEGMENTS.md",
+          "not_contains": ["PRODUCT-GAP-003", "PRODUCT-GAP-004"]
+        }
+      ],
       "description": "SEGMENTS.md should be updated with switching triggers and pricing sensitivity data (filling GAP-003 and GAP-004)."
     }
   },
@@ -33,13 +39,19 @@
         "prompt": "Define a feature spec for F-002 (Notification System). The .product/features/F-002.md has open questions that need answers. Fill in the spec using WhatsApp as the channel, immediate notifications, Spanish only.",
         "expect_phase": "product-design",
         "expect_dispatch": true,
-        "expect_skills": ["forge"],
+        "expect_skills": ["forge", "forge-product"],
         "expect_no_edits": true,
         "description": "Should dispatch forge-product in DESIGN phase. Subagent fills F-002 spec, applies SUCCESs check."
       }
     ],
     "outcome_check": {
       "check_files": [".product/features/F-002.md"],
+      "check_contains": [
+        {
+          "file": ".product/features/F-002.md",
+          "contains": ["## Proposed Solution", "## User Stories", "## Success Metrics"]
+        }
+      ],
       "description": "F-002 should have Problem Statement, Proposed Solution, User Stories, Success Metrics filled in. Open Questions should be resolved."
     }
   },
@@ -55,13 +67,14 @@
         "prompt": "Feature F-001 (Booking Management) is at 'building' status. We want to validate that our booking flow actually reduces the time to create a booking from 5 minutes to under 30 seconds. Design a concierge experiment to test this.",
         "expect_phase": "product-validate",
         "expect_dispatch": true,
-        "expect_skills": ["forge"],
+        "expect_skills": ["forge", "forge-product"],
         "expect_no_edits": true,
         "description": "Should dispatch forge-product in VALIDATE phase. Subagent creates experiment X-XXX linked to F-001."
       }
     ],
     "outcome_check": {
       "check_files": [".product/features/F-001.md"],
+      "expect_output_keywords": ["experiment"],
       "description": "An experiment document should be referenced or created."
     }
   },
@@ -77,13 +90,23 @@
         "prompt": "The .product/vision/VISION.md has two gaps: PRODUCT-GAP-001 (missing competitive analysis) and PRODUCT-GAP-002 (no customer interviews). Research online and fill these gaps. Also create a competitive analysis doc at .product/strategy/COMPETITIVE.md.",
         "expect_phase": "product-discover",
         "expect_dispatch": true,
-        "expect_skills": ["forge"],
+        "expect_skills": ["forge", "forge-product"],
         "expect_no_edits": true,
         "description": "Should dispatch forge-product. Subagent should use web_search for competitive research, update VISION.md, create COMPETITIVE.md."
       }
     ],
     "outcome_check": {
       "check_files": [".product/vision/VISION.md", ".product/strategy/COMPETITIVE.md"],
+      "check_contains": [
+        {
+          "file": ".product/vision/VISION.md",
+          "not_contains": ["PRODUCT-GAP-001", "PRODUCT-GAP-002"]
+        },
+        {
+          "file": ".product/strategy/COMPETITIVE.md",
+          "contains": ["competitive"]
+        }
+      ],
       "description": "VISION.md gaps filled. COMPETITIVE.md created with landscape analysis."
     }
   },
@@ -99,12 +122,13 @@
         "prompt": "Run a product health check. What's stale, what's missing, what needs attention?",
         "expect_phase": "product-health",
         "expect_dispatch": true,
-        "expect_skills": ["forge"],
+        "expect_skills": ["forge", "forge-product"],
         "expect_no_edits": true,
         "description": "Should dispatch forge-product for health check. Subagent runs $PHUB health and reports findings."
       }
     ],
     "outcome_check": {
+      "expect_output_keywords": ["stale", "missing", "attention"],
       "description": "Should report stale docs, missing fields, and product gaps in structured format."
     }
   },
@@ -120,7 +144,7 @@
         "prompt": "We're building a pet boarding SaaS called PetBoard. Look at the .product/ folder and research our target customers using the JTBD framework. Focus on small facility owner-operators in Latin America.",
         "expect_phase": "product-discover",
         "expect_dispatch": true,
-        "expect_skills": ["forge"],
+        "expect_skills": ["forge", "forge-product", "jobs-to-be-done"],
         "expect_no_edits": true,
         "description": "DISCOVER phase. Dispatch forge-product + JTBD."
       },
@@ -128,7 +152,7 @@
         "prompt": "Good research. Now define the feature spec for F-002 (Notification System). We want WhatsApp notifications for booking confirmations and cancellations. Spanish only, immediate delivery.",
         "expect_phase": "product-design",
         "expect_dispatch": true,
-        "expect_skills": ["forge"],
+        "expect_skills": ["forge", "forge-product"],
         "expect_no_edits": true,
         "description": "DESIGN phase. Dispatch forge-product. Should fill F-002 spec."
       },
@@ -136,7 +160,7 @@
         "prompt": "The spec looks good. Create a concierge experiment to validate demand — manually send WhatsApp messages for 2 weeks and track response rates.",
         "expect_phase": "product-validate",
         "expect_dispatch": true,
-        "expect_skills": ["forge"],
+        "expect_skills": ["forge", "forge-product"],
         "expect_no_edits": true,
         "description": "VALIDATE phase. Dispatch forge-product. Create experiment."
       },
@@ -146,11 +170,21 @@
         "expect_dispatch": true,
         "expect_skills": ["forge"],
         "expect_no_edits": true,
-        "description": "PLAN phase. AUTO-BRIDGE from product to implementation. Dispatch forge-plan. Feature bridge → backlog epic."
+        "description": "PLAN phase. AUTO-BRIDGE from product to implementation. Dispatch forge-plan or forge-product (either acceptable for bridge)."
       }
     ],
     "outcome_check": {
       "check_files": [".product/features/F-002.md", ".product/customers/SEGMENTS.md"],
+      "check_contains": [
+        {
+          "file": ".product/features/F-002.md",
+          "contains": ["## Proposed Solution", "## User Stories", "## Success Metrics"]
+        },
+        {
+          "file": ".product/customers/SEGMENTS.md",
+          "not_contains": ["PRODUCT-GAP-003", "PRODUCT-GAP-004"]
+        }
+      ],
       "description": "F-002 should be fully specified. Customer docs should be enriched. A backlog epic should exist or be prompted."
     }
   }

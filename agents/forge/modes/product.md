@@ -28,6 +28,14 @@ PHUB="node <skill-dir>/scripts/index.js"
 
 ---
 
+## Gap Resolution Rule
+
+When resolving placeholder markers (for example `PRODUCT-GAP-001`, `PRODUCT-GAP-003`):
+- Replace placeholder headings/content with final content.
+- Do NOT leave `PRODUCT-GAP-XXX` tokens in the final document (including labels like "RESOLVED").
+
+---
+
 ## Product Phases
 
 This skill supports the product side of the double diamond:
@@ -91,6 +99,7 @@ DISCOVER ──→ DESIGN ──→ VALIDATE
 
 ## User Stories
 - As a [persona], I want to [action], so I can [outcome]
+  (include at least one story)
 
 ## Success Metrics
 - [Measurable outcome that proves the feature works]
@@ -110,7 +119,13 @@ DISCOVER ──→ DESIGN ──→ VALIDATE
    - **Emotional** — Does it connect to a feeling (frustration, relief, pride)?
    - **Story** — Can you tell a user story that makes someone nod?
 
-5. Transition: `$PHUB feature transition F-XXX defined`
+5. Completeness gate before transitioning:
+    - Required headings MUST exist: `## Job to be Done`, `## Problem Statement`, `## Proposed Solution`, `## User Stories`, `## Success Metrics`, `## Out of Scope`
+    - Heading names must match exactly (for example `## User Stories` plural, not `## User Story`)
+    - If unresolved items remain, keep `## Open Questions` with explicit owners/next action
+    - If required sections are missing and cannot be inferred from context, return `STATUS: needs_input` (do not force transition)
+    - Before returning `STATUS: complete`, re-read the final feature file and confirm each required heading exists literally.
+6. Transition: `$PHUB feature transition F-XXX defined`
 
 ### VALIDATE — Test before building
 
@@ -192,6 +207,13 @@ Run periodically (Forge coordinator triggers on "product health"):
 $PHUB health
 ```
 
+Health checks in product mode are product-repo diagnostics, not engineering test runs:
+- Scope is `.product/` only: use `$PHUB health` plus targeted reads under `.product/`.
+- Do NOT run app test suites (`npm test`, `node --test`, etc.) from this mode.
+- Do NOT inspect or report code/runtime defects from `src/`, `tests/`, or frontend/backend app files in this mode.
+- Focus on `.product/` freshness, completeness, and lifecycle consistency.
+- Summary MUST explicitly include three buckets: **stale**, **missing**, **needs attention** (use the word `attention` literally).
+
 Reports:
 - Stale docs (>30 days without update)
 - Missing required fields
@@ -222,6 +244,15 @@ SUMMARY: [one-line result]
 
 ### Next
 [recommended next action in product lifecycle]
+```
+
+For health reports, include this exact subsection structure:
+
+```markdown
+### Health Summary
+- Stale: [...]
+- Missing: [...]
+- Needs attention: [...]
 ```
 
 ---
