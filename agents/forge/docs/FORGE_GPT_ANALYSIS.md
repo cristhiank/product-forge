@@ -1,4 +1,107 @@
-# Forge + GPT-Family — Compatibility Analysis
+# Forge + GPT-Family — Compatibility and Architecture Analysis
+
+> Analysis of root causes for GPT/Claude divergence and evaluation of architectural options for a dedicated `forge-gpt` fork.
+
+**Status:** Analysis
+**Author:** Forge subagent (forge-execute) + research synthesis
+**Date:** 2026-03-06
+**Related:** [FORGE_GPT_DESIGN.md](FORGE_GPT_DESIGN.md) | [ENFORCEMENT_ANALYSIS.md](ENFORCEMENT_ANALYSIS.md) | [EVAL_RESULTS.md](EVAL_RESULTS.md)
+
+---
+
+## 1. Architecture Options Evaluation
+
+To address the root causes identified below, three architectural approaches were evaluated.
+
+### Approach A — Prompt-only fork
+
+**Summary:** Create `forge-gpt`, but mostly change prompt structure: XML blocks, named roles, stripped coordinator identity, typed output tokens, minimal mode divergence.
+
+#### Pros
+- Lowest implementation cost.
+- Familiar to the current Forge team.
+- Fastest way to test XML structure, named roles, and terminal tokens.
+- Easy to compare against current Forge because behavior remains mostly prompt-level.
+
+#### Cons
+- Does **not** solve the repo's known structural weaknesses:
+  - lossy Mission Brief / REPORT interface
+  - broken retry semantics
+  - scattered state with no source of truth
+  - missing integration verify after parallel work
+  - unclear risk / T1 / pure-dispatch definitions
+- Leaves governance too implicit for GPT models, which perform better with stronger contracts.
+- Mixed shared modes make failures harder to localize.
+- Produces a better prompt, but not an implementation-ready system design.
+
+#### Complexity / Risk
+- **Implementation complexity:** Low
+- **Operational risk:** Medium-High
+- **Maintainability:** Medium at first, then poor once exceptions accumulate
+- **Scalability:** Weak for multi-step or retried workflows
+- **Team familiarity:** High
+
+#### Verdict
+**Do not pursue as the primary design.** Use its prompt techniques inside Approach B, but not as the architecture itself.
+
+### Approach B — Contract-driven GPT fork
+
+**Summary:** Create a dedicated `forge-gpt` fork with a GPT-specific coordinator, GPT-specific mode contracts, versioned Mission Brief / REPORT schemas, coordinator-owned run ledger, idempotent side-effect rules, and mandatory verify/integration checks.
+
+#### Pros
+- Directly addresses the highest-priority issues already found in Forge.
+- Fits the current repo architecture without inventing a new runtime tier.
+- Gives GPT models the things they respond best to: explicit lanes, stop conditions, schemas, and governed workflows.
+- Makes evals mechanical instead of subjective: parse schema, check terminal token, verify evidence presence, detect dual-action violations.
+- Scales better than Approach A because state and retries have contracts.
+
+#### Cons
+- Higher upfront design and implementation effort than a prompt-only fork.
+- Requires writing and maintaining schema docs, ledger semantics, and GPT-specific mode files.
+- Needs more disciplined rollout because there are more moving parts.
+
+#### Complexity / Risk
+- **Implementation complexity:** Medium
+- **Operational risk:** Medium
+- **Maintainability:** High
+- **Scalability:** High for multi-turn work and retries
+- **Team familiarity:** Medium
+
+#### Verdict
+**Recommended.** This is the strongest implementation-ready design for this repo and goal.
+
+### Approach C — Layered orchestrator
+
+**Summary:** Create `forge-gpt` as a two-layer system: conversational front controller, GPT-5 coordinator, and specialized executors/verifiers with heavier routing and stateful orchestration.
+
+#### Pros
+- Strong long-term framing for large-scale orchestration.
+- Makes room for advanced model routing, specialized verifier pools, and future Responses API state handling.
+- Attractive if Forge later becomes a more platform-like system.
+
+#### Cons
+- Overbuilds for the current environment.
+- The repo already has a natural L0/L1 split; adding another logical controller tier risks duplicated responsibility.
+- Harder for the team to implement and debug.
+- Adds complexity before contract hygiene is fixed.
+- Risks more clarification churn and state duplication, not less.
+
+#### Complexity / Risk
+- **Implementation complexity:** High
+- **Operational risk:** High
+- **Maintainability:** Medium-Low until stabilized
+- **Scalability:** Potentially high later, but poor near-term cost/benefit
+- **Team familiarity:** Low-Medium
+
+#### Verdict
+**Do not pursue for v1.** Keep as a future evolution only after Approach B is stable and measured.
+
+---
+
+## 2. Root Cause Analysis (Why the Current Architecture Fails on GPT)
+
+### Related Docs
+
 
 > Why the current Forge architecture produces measurably different outcomes on GPT models versus Claude Opus, and what the root causes are.
 

@@ -1,0 +1,313 @@
+# Build the Forge-GPT plugin for distribution.
+#
+# Assembles a standalone Forge-GPT plugin bundle from source:
+#   - agents/forge-gpt/forge-gpt.agent.md -> dist-forge-gpt/agents/Forge-GPT.agent.md (with frontmatter)
+#   - agents/forge-gpt/SKILL.md -> dist-forge-gpt/skills/forge-gpt/SKILL.md
+#   - agents/forge-gpt/modes/{execute,verify}.md -> dist-forge-gpt/skills/forge-{mode}-gpt/SKILL.md
+#   - agents/forge/modes/{explore,ideate,plan,memory}.md -> dist-forge-gpt/skills/forge-{mode}/SKILL.md
+#   - agents/forge-gpt/schemas/*.md -> dist-forge-gpt/skills/forge-*/references/schemas/
+#   - skills/{experts-council,backlog,agents-hub,copilot-cli-skill} -> dist-forge-gpt/skills/*
+#   - skills/{backend-architecture,frontend-architecture} -> dist-forge-gpt/skills/*
+#   - plugin.json (rewritten as forge-gpt) -> dist-forge-gpt/plugin.json
+#
+# Notes:
+#   - This bundle intentionally reuses shared forge-* skill names for explore/ideate/plan/memory.
+#   - Treat it as the forge-gpt-focused plugin build unless/until shared-mode names are fully namespaced.
+#
+# Usage:
+#   .\build-forge-gpt-plugin.ps1              # build to dist-forge-gpt/
+#   .\build-forge-gpt-plugin.ps1 -Install     # build + copilot plugin install
+#   .\build-forge-gpt-plugin.ps1 -DryRun      # preview without writing
+
+param(
+    [switch]$DryRun,
+    [switch]$Install
+)
+
+$ErrorActionPreference = 'Stop'
+
+$ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
+$Dist      = Join-Path $ScriptDir 'dist-forge-gpt'
+
+Write-Host "🤖 Forge-GPT Plugin Builder"
+Write-Host "   Source: $ScriptDir"
+Write-Host "   Output: $Dist"
+Write-Host ""
+
+$script:Success = 0
+$script:Total   = 0
+
+function Copy-PluginFile {
+    param([string]$Src, [string]$Dst, [string]$Label)
+    $script:Total++
+    if (-not (Test-Path $Src -PathType Leaf)) {
+        Write-Host "   ❌ Missing: $Src"
+        return $false
+    }
+    if ($DryRun) {
+        Write-Host "   Would copy: $Label"
+    } else {
+        $parent = Split-Path -Parent $Dst
+        if (-not (Test-Path $parent)) { New-Item -ItemType Directory -Path $parent -Force | Out-Null }
+        Copy-Item -Path $Src -Destination $Dst -Force
+        Write-Host "   ✅ $Label"
+    }
+    $script:Success++
+    return $true
+}
+
+function Copy-PluginDir {
+    param([string]$Src, [string]$Dst, [string]$Label)
+    $script:Total++
+    if (-not (Test-Path $Src -PathType Container)) {
+        Write-Host "   ❌ Missing dir: $Src"
+        return $false
+    }
+    if ($DryRun) {
+        Write-Host "   Would copy dir: $Label"
+    } else {
+        if (-not (Test-Path $Dst)) { New-Item -ItemType Directory -Path $Dst -Force | Out-Null }
+        Copy-Item -Path "$Src\*" -Destination $Dst -Recurse -Force
+        Write-Host "   ✅ $Label"
+    }
+    $script:Success++
+    return $true
+}
+
+function Write-ReframedManifest {
+    param([string]$Src, [string]$Dst)
+
+    $script:Total++
+    if (-not (Test-Path $Src -PathType Leaf)) {
+        Write-Host "   ❌ Missing: $Src"
+        return $false
+    }
+
+    $baseManifest = Get-Content $Src -Raw | ConvertFrom-Json
+    $keywords = @('forge-gpt', 'gpt-family', 'contract-driven') + @($baseManifest.keywords)
+    $manifest = [ordered]@{}
+    foreach ($prop in $baseManifest.PSObject.Properties) {
+        $manifest[$prop.Name] = $prop.Value
+    }
+
+    $manifest.name = 'forge-gpt'
+    $manifest.description = 'Forge-GPT dev partner — GPT-family optimized dispatch coordinator with contract-driven execution, verification, and shared Forge exploration modes.'
+    $manifest.keywords = @($keywords | Select-Object -Unique)
+
+    $rendered = ($manifest | ConvertTo-Json -Depth 10) + "`n"
+    if ($DryRun) {
+        Write-Host "   Would write: plugin.json (forge-gpt manifest)"
+    } else {
+        $parent = Split-Path -Parent $Dst
+        if (-not (Test-Path $parent)) { New-Item -ItemType Directory -Path $parent -Force | Out-Null }
+        [System.IO.File]::WriteAllText($Dst, $rendered)
+        Write-Host "   ✅ plugin.json (forge-gpt manifest)"
+    }
+
+    $script:Success++
+    return $true
+}
+
+function Write-AgentBundle {
+    param(
+        [string]$Src,
+        [string]$Dst,
+        [string]$Description,
+        [string]$Model,
+        [string]$SourceLabel,
+        [string]$OutputLabel
+    )
+
+    $script:Total++
+    if (-not (Test-Path $Src -PathType Leaf)) {
+        Write-Host "   ❌ Missing: $Src"
+        return $false
+    }
+
+    $lines = Get-Content $Src -Raw
+    $allLines = $lines -split "`n"
+    $body = $null
+    $found = $false
+    $bodyLines = @()
+
+    for ($i = 1; $i -lt $allLines.Count; $i++) {
+        if (-not $found -and $allLines[$i] -match '^[#*>\[]') { $found = $true }
+        if ($found) { $bodyLines += $allLines[$i] }
+    }
+
+    if ($bodyLines.Count -gt 0) {
+        $body = $bodyLines -join "`n"
+    } else {
+        $body = ($allLines | Select-Object -Skip 2) -join "`n"
+    }
+
+    $frontmatter = @"
+---
+description: '$Description'
+model: $Model
+tools: ["*"]
+---
+"@
+
+    $rendered = "$frontmatter`n`n<!-- AUTO-GENERATED by build-forge-gpt-plugin.ps1 from $SourceLabel. DO NOT EDIT. -->`n`n$body`n"
+    if ($DryRun) {
+        Write-Host "   Would write: $OutputLabel ($($rendered.Length) chars)"
+    } else {
+        $parent = Split-Path -Parent $Dst
+        if (-not (Test-Path $parent)) { New-Item -ItemType Directory -Path $parent -Force | Out-Null }
+        [System.IO.File]::WriteAllText($Dst, $rendered)
+        Write-Host "   ✅ $OutputLabel ($($rendered.Length) chars)"
+    }
+
+    $script:Success++
+    return $true
+}
+
+# --- Clean ---
+if (-not $DryRun) {
+    if (Test-Path $Dist) { Remove-Item -Recurse -Force $Dist }
+    New-Item -ItemType Directory -Path $Dist -Force | Out-Null
+}
+
+# --- Step 1: Plugin manifest ---
+Write-Host "📦 Plugin manifest..."
+Write-ReframedManifest "$ScriptDir\plugin.json" "$Dist\plugin.json" | Out-Null
+
+# --- Step 2: Agent ---
+Write-Host ""
+Write-Host "🤖 Agent..."
+Write-AgentBundle `
+    "$ScriptDir\agents\forge-gpt\forge-gpt.agent.md" `
+    "$Dist\agents\Forge-GPT.agent.md" `
+    "Contract-driven GPT coordinator. Routes work, constructs Mission Briefs, validates REPORTs, and stops." `
+    "gpt-5.4" `
+    "forge-gpt.agent.md" `
+    "agents/Forge-GPT.agent.md" | Out-Null
+
+# --- Step 3: GPT coordinator skill ---
+Write-Host ""
+Write-Host "📜 GPT coordinator skill..."
+Copy-PluginFile `
+    "$ScriptDir\agents\forge-gpt\SKILL.md" `
+    "$Dist\skills\forge-gpt\SKILL.md" `
+    "skills/forge-gpt/SKILL.md" | Out-Null
+
+# --- Step 4: GPT mode skills ---
+Write-Host ""
+Write-Host "⚙️  GPT mode skills..."
+$gptModes = @(
+    @{ Source = 'execute'; SkillName = 'forge-execute-gpt' },
+    @{ Source = 'verify'; SkillName = 'forge-verify-gpt' }
+)
+foreach ($mode in $gptModes) {
+    Copy-PluginFile `
+        "$ScriptDir\agents\forge-gpt\modes\$($mode.Source).md" `
+        "$Dist\skills\$($mode.SkillName)\SKILL.md" `
+        "skills/$($mode.SkillName)/SKILL.md" | Out-Null
+}
+
+# --- Step 5: Shared forge mode skills ---
+Write-Host ""
+Write-Host "🔁 Shared forge modes..."
+$sharedModes = @('explore', 'ideate', 'plan', 'memory')
+foreach ($mode in $sharedModes) {
+    Copy-PluginFile `
+        "$ScriptDir\agents\forge\modes\$mode.md" `
+        "$Dist\skills\forge-$mode\SKILL.md" `
+        "skills/forge-$mode/SKILL.md" | Out-Null
+}
+
+# --- Step 6: GPT schema references ---
+Write-Host ""
+Write-Host "🧾 Schema references..."
+$schemaTargets = @('forge-gpt', 'forge-execute-gpt', 'forge-verify-gpt')
+$schemaFiles = @('mission-brief.v1.md', 'report.v1.md')
+foreach ($target in $schemaTargets) {
+    foreach ($schemaFile in $schemaFiles) {
+        Copy-PluginFile `
+            "$ScriptDir\agents\forge-gpt\schemas\$schemaFile" `
+            "$Dist\skills\$target\references\schemas\$schemaFile" `
+            "skills/$target/references/schemas/$schemaFile" | Out-Null
+    }
+}
+
+# --- Step 7: Infrastructure skills ---
+Write-Host ""
+Write-Host "🔧 Infrastructure skills..."
+$infraSkills = @('experts-council', 'backlog', 'agents-hub', 'copilot-cli-skill')
+foreach ($skill in $infraSkills) {
+    $srcDir = "$ScriptDir\skills\$skill"
+    $dstDir = "$Dist\skills\$skill"
+    if (-not (Test-Path $srcDir -PathType Container)) {
+        Write-Host "   ❌ Missing: skills/$skill/"
+        $script:Total++
+        continue
+    }
+    Copy-PluginFile "$srcDir\SKILL.md" "$dstDir\SKILL.md" "skills/$skill/SKILL.md" | Out-Null
+    $scriptIndex = "$srcDir\scripts\index.js"
+    if (Test-Path $scriptIndex -PathType Leaf) {
+        Copy-PluginFile $scriptIndex "$dstDir\scripts\index.js" "skills/$skill/scripts/index.js" | Out-Null
+    }
+    $refsDir = "$srcDir\references"
+    if (Test-Path $refsDir -PathType Container) {
+        Copy-PluginDir $refsDir "$dstDir\references" "skills/$skill/references/" | Out-Null
+    }
+}
+
+# --- Step 8: Architecture skills ---
+Write-Host ""
+Write-Host "🏗️  Architecture skills..."
+$archSkills = @('backend-architecture', 'frontend-architecture')
+foreach ($skill in $archSkills) {
+    $srcDir = "$ScriptDir\skills\$skill"
+    $dstDir = "$Dist\skills\$skill"
+    if (-not (Test-Path $srcDir -PathType Container)) {
+        Write-Host "   ❌ Missing: skills/$skill/"
+        $script:Total++
+        continue
+    }
+    Copy-PluginFile "$srcDir\SKILL.md" "$dstDir\SKILL.md" "skills/$skill/SKILL.md" | Out-Null
+    $refsDir = "$srcDir\references"
+    if (Test-Path $refsDir -PathType Container) {
+        Copy-PluginDir $refsDir "$dstDir\references" "skills/$skill/references/" | Out-Null
+    }
+}
+
+# --- Cleanup artifacts ---
+if (-not $DryRun) {
+    Get-ChildItem -Path $Dist -Recurse -Filter '.DS_Store' -ErrorAction SilentlyContinue |
+        Remove-Item -Force -ErrorAction SilentlyContinue
+}
+
+# --- Summary ---
+Write-Host ""
+Write-Host "═══════════════════════════════════════════════"
+if ($DryRun) {
+    Write-Host "📊 Dry-run: would build $($script:Success)/$($script:Total) components"
+} else {
+    Write-Host "✅ Built $($script:Success)/$($script:Total) components → $Dist\"
+    Write-Host ""
+    Write-Host "Plugin structure:"
+    Get-ChildItem -Path $Dist -Recurse -File |
+        ForEach-Object { $_.FullName.Replace("$Dist\", "  ") } |
+        Sort-Object |
+        Select-Object -First 60 |
+        ForEach-Object { Write-Host $_ }
+    $totalSize = "{0:N2} MB" -f ((Get-ChildItem -Path $Dist -Recurse -File | Measure-Object -Property Length -Sum).Sum / 1MB)
+    Write-Host ""
+    Write-Host "Total size: $totalSize"
+}
+
+# --- Install ---
+if ($Install -and -not $DryRun) {
+    Write-Host ""
+    Write-Host "🚀 Installing plugin..."
+    try { copilot plugin uninstall forge-gpt 2>$null } catch {}
+    copilot plugin install $Dist
+    Write-Host ""
+    copilot plugin list
+}
+
+Write-Host ""
+Write-Host "═══════════════════════════════════════════════"
+if ($script:Success -ne $script:Total) { exit 1 }
