@@ -17,6 +17,8 @@
 | [CONSOLIDATION_MAP.md](CONSOLIDATION_MAP.md) | DevPartner v17 → Forge mapping (which agents became which skills) |
 | [MODE_CONTRACTS.md](MODE_CONTRACTS.md) | Input/output contracts for each forge-{mode} skill |
 | [ROUTING_RULES.md](ROUTING_RULES.md) | Intent classification tree and routing logic |
+| [FORGE_GPT_ANALYSIS.md](FORGE_GPT_ANALYSIS.md) | Why Forge is Claude-optimized: root-cause analysis of GPT compatibility gaps |
+| [FORGE_GPT_DESIGN.md](FORGE_GPT_DESIGN.md) | Full Forge-GPT fork design: XML constraints, named roles, migration path, eval plan |
 
 ---
 

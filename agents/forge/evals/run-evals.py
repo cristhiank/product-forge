@@ -20,9 +20,9 @@ Usage:
 """
 
 import json
+import os
 import subprocess
 import sys
-import os
 import re
 import time
 import shutil
@@ -30,7 +30,7 @@ import tempfile
 from pathlib import Path
 from datetime import datetime
 from dataclasses import dataclass, field
-from parsing import _is_mutating_bash
+from parsing import _is_mutating_bash, _is_workspace_path
 
 SCRIPT_DIR = Path(__file__).parent
 TEST_CASES_FILE = SCRIPT_DIR / "test-cases.json"
@@ -118,6 +118,7 @@ def mechanical_grade(session_id: str) -> MechanicalResult:
         return MechanicalResult()
 
     g = MechanicalResult()
+    workspace_root = ""
     with open(events_path, encoding="utf-8", errors="replace") as f:
         for line in f:
             line = line.strip()
@@ -127,15 +128,23 @@ def mechanical_grade(session_id: str) -> MechanicalResult:
             etype = event.get("type", "")
             data = event.get("data", {})
 
+            if etype == "session.start":
+                ctx = data.get("context", {})
+                workspace_root = ctx.get("gitRoot") or ctx.get("cwd") or workspace_root
+
             if etype == "tool.execution_start":
                 tool = data.get("toolName", "")
                 args = data.get("arguments", {})
+                if data.get("parentToolCallId"):
+                    continue
                 g.tools_used.append(tool)
 
                 if tool == "edit":
-                    g.inline_edits += 1
+                    if _is_workspace_path(args.get("path", ""), workspace_root):
+                        g.inline_edits += 1
                 elif tool == "create":
-                    g.inline_creates += 1
+                    if _is_workspace_path(args.get("path", ""), workspace_root):
+                        g.inline_creates += 1
                 elif tool == "task":
                     g.dispatches += 1
                     prompt = args.get("prompt", "")
@@ -152,7 +161,7 @@ def mechanical_grade(session_id: str) -> MechanicalResult:
                 elif tool == "skill":
                     g.skill_loads += 1
                     g.skills_loaded.append(args.get("skill", ""))
-                elif tool == "bash":
+                elif tool in {"bash", "powershell"}:
                     cmd = args.get("command", "")
                     if _is_mutating_bash(cmd):
                         g.mutating_bashes += 1
@@ -160,7 +169,11 @@ def mechanical_grade(session_id: str) -> MechanicalResult:
                     g.has_clarification = True
 
             elif etype == "assistant.message":
-                g.assistant_text += data.get("content", "") + "\n"
+                content = data.get("content", "")
+                g.assistant_text += content + "\n"
+                # Detect clarification questions in text (simple heuristic)
+                if "?" in content:
+                    g.has_clarification = True
 
     total = g.dispatches + g.inline_edits + g.inline_creates + g.mutating_bashes
     g.dispatch_score = (g.dispatches / total * 100) if total > 0 else 100.0
@@ -267,7 +280,7 @@ Assistant output (first 1000 chars):
 # Multi-Turn Runner
 # ──────────────────────────────────────────────
 
-def run_single_turn(case: dict, worktree_dir: Path) -> tuple[str, str]:
+def run_single_turn(case: dict, worktree_dir: Path, timeout: int = 300) -> tuple[str, str]:
     """Run a single-turn eval via copilot -p."""
     sessions_before = set(os.listdir(SESSION_STATE)) if SESSION_STATE.exists() else set()
 
@@ -276,7 +289,7 @@ def run_single_turn(case: dict, worktree_dir: Path) -> tuple[str, str]:
          "--allow-all-tools", "--max-autopilot-continues", "8",
          "--model", "claude-opus-4.6", "--no-color"],
         capture_output=True, text=True, encoding="utf-8", errors="replace",
-        timeout=300, cwd=str(worktree_dir)
+        timeout=timeout, cwd=str(worktree_dir)
     )
 
     sessions_after = set(os.listdir(SESSION_STATE)) if SESSION_STATE.exists() else set()
@@ -285,7 +298,7 @@ def run_single_turn(case: dict, worktree_dir: Path) -> tuple[str, str]:
     return session_id, result.stdout
 
 
-def run_multi_turn(case: dict, worktree_dir: Path) -> tuple[str, str]:
+def run_multi_turn(case: dict, worktree_dir: Path, timeout: int = 600) -> tuple[str, str]:
     """Run a multi-turn eval via copilot -i with piped turns."""
     turns = case.get("turns", [case["prompt"]])
     input_text = "\n".join(turns) + "\n/exit\n"
@@ -298,7 +311,7 @@ def run_multi_turn(case: dict, worktree_dir: Path) -> tuple[str, str]:
          "--model", "claude-opus-4.6", "--no-color", "--autopilot"],
         input="\n".join(turns[1:]) + "\n" if len(turns) > 1 else "",
         capture_output=True, text=True, encoding="utf-8", errors="replace",
-        timeout=600, cwd=str(worktree_dir)
+        timeout=timeout, cwd=str(worktree_dir)
     )
 
     sessions_after = set(os.listdir(SESSION_STATE)) if SESSION_STATE.exists() else set()
@@ -311,7 +324,7 @@ def run_multi_turn(case: dict, worktree_dir: Path) -> tuple[str, str]:
 # Main Runner
 # ──────────────────────────────────────────────
 
-def run_test_case(case: dict, trial: int = 1, skip_llm: bool = False) -> dict:
+def run_test_case(case: dict, trial: int = 1, skip_llm: bool = False, timeout: int = 300) -> dict:
     case_id = case["id"]
     needs_fixture = case.get("needs_fixture", False)
     is_multi_turn = "turns" in case
@@ -336,9 +349,9 @@ def run_test_case(case: dict, trial: int = 1, skip_llm: bool = False) -> dict:
     start_time = time.time()
     try:
         if is_multi_turn:
-            session_id, output = run_multi_turn(case, worktree_dir)
+            session_id, output = run_multi_turn(case, worktree_dir, timeout=timeout)
         else:
-            session_id, output = run_single_turn(case, worktree_dir)
+            session_id, output = run_single_turn(case, worktree_dir, timeout=timeout)
     except subprocess.TimeoutExpired:
         session_id, output = None, "TIMEOUT"
     except Exception as e:
@@ -489,6 +502,7 @@ def main():
     parser.add_argument("--case", help="Run single case by ID")
     parser.add_argument("--cases", help="Path to test cases JSON (default: test-cases.json)")
     parser.add_argument("--trials", type=int, default=1, help="Trials per case (default 1)")
+    parser.add_argument("--timeout", type=int, default=600, help="Timeout per run in seconds (default 600)")
     parser.add_argument("--skip-llm", action="store_true", help="Mechanical grading only")
     parser.add_argument("--report", help="Aggregate from past results dir")
     args = parser.parse_args()
@@ -533,7 +547,7 @@ def main():
     results = []
     for case in test_cases:
         for trial in range(1, args.trials + 1):
-            result = run_test_case(case, trial=trial, skip_llm=args.skip_llm)
+            result = run_test_case(case, trial=trial, skip_llm=args.skip_llm, timeout=args.timeout)
             results.append(result)
             rf = run_dir / f"{case['id']}_t{trial}.result.json"
             with open(rf, "w") as f:

@@ -25,7 +25,7 @@ import shutil
 from pathlib import Path
 from datetime import datetime
 from dataclasses import dataclass, field
-from parsing import _is_mutating_bash
+from parsing import _is_mutating_bash, _is_workspace_path
 
 SCRIPT_DIR = Path(__file__).parent
 LOOP_CASES_FILE = SCRIPT_DIR / "loop-test-cases.json"
@@ -107,8 +107,9 @@ def grade_session_per_turn(session_id: str, turn_prompts: list[str]) -> list[Tur
     turns = []
     current_turn_idx = -1
     current_grade: TurnGrade | None = None
+    workspace_root = ""
 
-    with open(events_path) as f:
+    with open(events_path, encoding="utf-8", errors="replace") as f:
         for line in f:
             line = line.strip()
             if not line:
@@ -117,7 +118,11 @@ def grade_session_per_turn(session_id: str, turn_prompts: list[str]) -> list[Tur
             etype = event.get("type", "")
             data = event.get("data", {})
 
-            if etype == "user.message":
+            if etype == "session.start":
+                ctx = data.get("context", {})
+                workspace_root = ctx.get("gitRoot") or ctx.get("cwd") or workspace_root
+
+            elif etype == "user.message":
                 if current_grade:
                     turns.append(current_grade)
                 current_turn_idx += 1
@@ -127,11 +132,15 @@ def grade_session_per_turn(session_id: str, turn_prompts: list[str]) -> list[Tur
             elif etype == "tool.execution_start" and current_grade:
                 tool = data.get("toolName", "")
                 args = data.get("arguments", {})
+                if data.get("parentToolCallId"):
+                    continue
 
                 if tool == "edit":
-                    current_grade.inline_edits += 1
+                    if _is_workspace_path(args.get("path", ""), workspace_root):
+                        current_grade.inline_edits += 1
                 elif tool == "create":
-                    current_grade.inline_creates += 1
+                    if _is_workspace_path(args.get("path", ""), workspace_root):
+                        current_grade.inline_creates += 1
                 elif tool == "task":
                     current_grade.dispatches += 1
                     prompt_text = args.get("prompt", "")
@@ -144,14 +153,17 @@ def grade_session_per_turn(session_id: str, turn_prompts: list[str]) -> list[Tur
                         current_grade.briefs_with_sections += 1
                 elif tool == "skill":
                     current_grade.skills_loaded.append(args.get("skill", ""))
-                elif tool == "bash":
+                elif tool in {"bash", "powershell"}:
                     if _is_mutating_bash(args.get("command", "")):
                         current_grade.mutating_bashes += 1
                 elif tool == "ask_user":
                     current_grade.has_clarification = True
 
             elif etype == "assistant.message" and current_grade:
-                current_grade.assistant_text += data.get("content", "") + "\n"
+                content = data.get("content", "")
+                current_grade.assistant_text += content + "\n"
+                if "?" in content:
+                    current_grade.has_clarification = True
 
     if current_grade:
         turns.append(current_grade)
@@ -267,8 +279,15 @@ def run_loop_resume(case: dict, sandbox: Path) -> tuple[str | None, list[TurnGra
 
         try:
             timeout = turn.get("timeout", 600)
-            r = subprocess.run(cmd, capture_output=True, text=True,
-                               timeout=timeout, cwd=str(sandbox))
+            r = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=timeout,
+                cwd=str(sandbox),
+            )
         except subprocess.TimeoutExpired:
             print(f"    Turn {i}: TIMEOUT")
             break
@@ -313,8 +332,16 @@ def run_loop_interactive(case: dict, sandbox: Path) -> tuple[str | None, list[Tu
            "--model", "claude-opus-4.6", "--no-color", "--autopilot"]
 
     try:
-        r = subprocess.run(cmd, input=remaining + "\n", capture_output=True,
-                           text=True, timeout=600, cwd=str(sandbox))
+        r = subprocess.run(
+            cmd,
+            input=remaining + "\n",
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=600,
+            cwd=str(sandbox),
+        )
     except subprocess.TimeoutExpired:
         print(f"    Interactive: TIMEOUT")
         return None, []
@@ -363,7 +390,7 @@ def run_loop(case: dict) -> dict:
 
     # Per-turn pass rate
     turns_passed = sum(1 for tg in turn_grades if tg.passed)
-    total_turns = len(turn_grades)
+    total_turns = len(case["turns"])
     print(f"  Turns: {turns_passed}/{total_turns} passed")
 
     # Outcome grading

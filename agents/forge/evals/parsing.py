@@ -4,6 +4,7 @@ Reads events.jsonl and produces structured Turn objects for downstream grading.
 """
 
 import json
+import os
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -21,9 +22,15 @@ MUTATING_BASH_COMMANDS = [
 ]
 # Operator patterns are checked per-segment (not across the full command)
 # to avoid false positives when operators appear in CLI tool arguments.
-MUTATING_BASH_OPERATORS = [
-    "sed -i", "awk -i", "perl -pi", "patch ",
-    "echo >", "cat >", "tee ", ">>",
+MUTATING_BASH_OPERATOR_PATTERNS = [
+    r"\bsed\s+-i\b",
+    r"\bawk\s+-i\b",
+    r"\bperl\s+-pi\b",
+    r"\bpatch\b",
+    r"\becho\s*>",
+    r"\bcat\s*>",
+    r"\btee\b",
+    r">>",
 ]
 # Segments starting with these prefixes are known-safe CLI tool invocations
 # (backlog CLI, hub CLI, git, read-only utilities) and skip mutation checks.
@@ -54,8 +61,8 @@ def _is_mutating_bash(cmd: str) -> bool:
             continue
         seg_lower = seg.lower()
         # Check for mutating operators FIRST (before safe prefixes)
-        for pattern in MUTATING_BASH_OPERATORS:
-            if pattern in seg_lower:
+        for pattern in MUTATING_BASH_OPERATOR_PATTERNS:
+            if re.search(pattern, seg_lower):
                 return True
         # Skip known-safe CLI tool invocations (backlog, hub, git, etc.)
         if any(seg_lower.startswith(p) for p in SAFE_SEGMENT_PREFIXES):
@@ -77,6 +84,18 @@ def _is_mutating_bash(cmd: str) -> bool:
     return False
 
 
+def _is_workspace_path(path: str, workspace_root: str) -> bool:
+    """True when path is inside the evaluated workspace (or unknown)."""
+    if not path or not workspace_root:
+        return True
+    try:
+        path_norm = os.path.normcase(os.path.abspath(path))
+        root_norm = os.path.normcase(os.path.abspath(workspace_root))
+        return os.path.commonpath([path_norm, root_norm]) == root_norm
+    except Exception:
+        return True
+
+
 @dataclass
 class Turn:
     index: int
@@ -87,6 +106,7 @@ class Turn:
     has_edit: bool = False
     has_create: bool = False
     has_mutating_bash: bool = False
+    has_clarification: bool = False
     bash_commands: list = field(default_factory=list)
     assistant_content: str = ""
     is_pressure_signal: bool = False
@@ -98,8 +118,9 @@ def parse_session(events_path: Path) -> tuple[list[Turn], str]:
     current_turn: Optional[Turn] = None
     turn_idx = 0
     agent = ""
+    workspace_root = ""
 
-    with open(events_path) as f:
+    with open(events_path, encoding="utf-8", errors="replace") as f:
         for line in f:
             line = line.strip()
             if not line:
@@ -111,6 +132,7 @@ def parse_session(events_path: Path) -> tuple[list[Turn], str]:
             if etype == "session.start":
                 ctx = data.get("context", {})
                 agent = ctx.get("agent", data.get("agent", ""))
+                workspace_root = ctx.get("gitRoot") or ctx.get("cwd") or workspace_root
 
             elif etype == "user.message":
                 current_turn = Turn(index=turn_idx)
@@ -124,14 +146,24 @@ def parse_session(events_path: Path) -> tuple[list[Turn], str]:
                 turn_idx += 1
 
             elif etype == "assistant.message" and current_turn:
-                current_turn.assistant_content += data.get("content", "")
+                content = data.get("content", "")
+                current_turn.assistant_content += content
+                if "?" in content:
+                    current_turn.has_clarification = True
 
             elif etype == "tool.execution_start" and current_turn:
                 tool_name = data.get("toolName", "")
                 args = data.get("arguments", {})
+                if data.get("parentToolCallId"):
+                    continue
                 current_turn.tools_used.append(tool_name)
 
+                if tool_name == "ask_user":
+                    current_turn.has_clarification = True
+                
                 if tool_name in MUTATING_TOOLS:
+                    if not _is_workspace_path(args.get("path", ""), workspace_root):
+                        continue
                     if tool_name == "edit":
                         current_turn.has_edit = True
                     elif tool_name == "create":
@@ -143,7 +175,7 @@ def parse_session(events_path: Path) -> tuple[list[Turn], str]:
                 elif tool_name in SKILL_TOOLS:
                     current_turn.has_skill_load = True
 
-                elif tool_name == "bash":
+                elif tool_name in {"bash", "powershell"}:
                     cmd = args.get("command", "")
                     current_turn.bash_commands.append(cmd)
                     if _is_mutating_bash(cmd):
