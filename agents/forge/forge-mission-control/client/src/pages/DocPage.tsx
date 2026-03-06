@@ -2,10 +2,11 @@ import { useParams, Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, useEffect } from "react";
 import { api } from "@/lib/api";
-import { Loader2, ChevronRight, Pencil, History } from "lucide-react";
+import { Loader2, ChevronRight, Pencil, History, MessageCircle } from "lucide-react";
 import { MarkdownViewer } from "@/components/MarkdownViewer";
 import { MarkdownEditor } from "@/components/MarkdownEditor";
 import { GitHistoryPanel } from "@/components/GitHistoryPanel";
+import { AIChatPanel } from "@/components/AIChatPanel";
 
 interface DocData {
   doc: {
@@ -25,6 +26,7 @@ export function DocPage() {
   const [saving, setSaving] = useState(false);
   const [savedMsg, setSavedMsg] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["product", "doc", path],
@@ -89,7 +91,7 @@ export function DocPage() {
   const filePath = `.product/${path}`;
 
   return (
-    <div className="space-y-6">
+    <div className={chatOpen ? "space-y-6 lg:pr-96" : "space-y-6"}>
       {/* Breadcrumb + actions */}
       <div className="flex items-center gap-2 flex-wrap">
         <nav className="flex items-center gap-1 text-sm text-muted-foreground flex-1 min-w-0">
@@ -121,6 +123,14 @@ export function DocPage() {
               >
                 <History className="h-3.5 w-3.5" />
                 History
+              </button>
+              <button
+                onClick={() => setChatOpen((v) => !v)}
+                title="AI Chat"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <MessageCircle className="h-3.5 w-3.5" />
+                Chat
               </button>
             </>
           )}
@@ -165,6 +175,20 @@ export function DocPage() {
         open={historyOpen}
         onClose={() => setHistoryOpen(false)}
         onRevert={handleRevert}
+      />
+
+      <AIChatPanel
+        open={chatOpen}
+        onClose={() => setChatOpen(false)}
+        scope="doc"
+        contextId={path}
+        docContent={editMode ? editContent : doc.content}
+        onInsert={(inserted) => {
+          const base = editMode ? editContent : doc.content;
+          const newContent = base ? `${base}\n\n---\n\n${inserted}` : inserted;
+          setEditContent(newContent);
+          if (!editMode) setEditMode(true);
+        }}
       />
     </div>
   );

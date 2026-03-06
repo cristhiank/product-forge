@@ -80,6 +80,30 @@ def find_new_session(before: set) -> str | None:
 
 # ── Mechanical Grading (per-turn) ──
 
+BUILD_PATTERNS = [
+    "npm run build", "npm test", "dotnet build", "dotnet test", "dotnet run",
+    "pytest", "cargo build", "cargo test", "node --test", "npx tsc",
+]
+MUTATE_PATTERNS = ["sed -i", "awk -i", "perl -pi", "echo >", "cat >", "tee ", ">>"]
+PROMPT_SKILL_RE = re.compile(r"invoke the [`']([^`']+)[`'] skill", re.IGNORECASE)
+
+
+def _is_coordinator_tool_call(event_data: dict) -> bool:
+    """Coordinator actions have no parentToolCallId in session events."""
+    return not bool(event_data.get("parentToolCallId"))
+
+
+def _is_mutating_bash(cmd: str) -> bool:
+    for seg in re.split(r'&&|\|\||;', cmd):
+        seg = seg.strip()
+        for p in BUILD_PATTERNS + MUTATE_PATTERNS:
+            if seg.startswith(p) or (seg.startswith("cd ") and p in seg):
+                return True
+    return False
+
+def _extract_prompt_skills(prompt: str) -> list[str]:
+    return [s.strip().lower() for s in PROMPT_SKILL_RE.findall(prompt or "") if s.strip()]
+
 
 @dataclass
 class TurnGrade:
@@ -99,7 +123,12 @@ class TurnGrade:
 
 
 def grade_session_per_turn(session_id: str, turn_prompts: list[str]) -> list[TurnGrade]:
-    """Grade a session on a per-user-turn basis."""
+    """Grade a session on a per-user-turn basis.
+    
+    Filters phantom user.message events (e.g. empty or system-injected messages
+    in interactive mode) by only advancing the turn counter when the message
+    content matches an expected prompt or we haven't exceeded expected turns.
+    """
     events_path = SESSION_STATE / session_id / "events.jsonl"
     if not events_path.exists():
         return []
@@ -107,7 +136,7 @@ def grade_session_per_turn(session_id: str, turn_prompts: list[str]) -> list[Tur
     turns = []
     current_turn_idx = -1
     current_grade: TurnGrade | None = None
-    workspace_root = ""
+    max_turns = len(turn_prompts)
 
     with open(events_path, encoding="utf-8", errors="replace") as f:
         for line in f:
@@ -118,18 +147,27 @@ def grade_session_per_turn(session_id: str, turn_prompts: list[str]) -> list[Tur
             etype = event.get("type", "")
             data = event.get("data", {})
 
-            if etype == "session.start":
-                ctx = data.get("context", {})
-                workspace_root = ctx.get("gitRoot") or ctx.get("cwd") or workspace_root
-
-            elif etype == "user.message":
+            if etype == "user.message":
+                content = (data.get("content") or "").strip()
+                # Skip phantom/empty user messages beyond expected turn count
+                next_idx = current_turn_idx + 1
+                if next_idx >= max_turns and not content:
+                    continue
+                # Skip if content doesn't match any remaining expected prompt
+                # (guards against system-injected messages in interactive mode)
+                if next_idx >= max_turns:
+                    remaining = [p for i, p in enumerate(turn_prompts) if i > current_turn_idx]
+                    if remaining and not any(content.startswith(p[:40]) for p in remaining):
+                        continue
                 if current_grade:
                     turns.append(current_grade)
                 current_turn_idx += 1
-                prompt = turn_prompts[current_turn_idx] if current_turn_idx < len(turn_prompts) else data.get("content", "")[:100]
+                prompt = turn_prompts[current_turn_idx] if current_turn_idx < len(turn_prompts) else content[:100]
                 current_grade = TurnGrade(turn_index=current_turn_idx, prompt=prompt)
 
             elif etype == "tool.execution_start" and current_grade:
+                if not _is_coordinator_tool_call(data):
+                    continue
                 tool = data.get("toolName", "")
                 args = data.get("arguments", {})
                 if data.get("parentToolCallId"):
@@ -151,9 +189,14 @@ def grade_session_per_turn(session_id: str, turn_prompts: list[str]) -> list[Tur
                                    if s in prompt_text)
                     if sections >= 3:
                         current_grade.briefs_with_sections += 1
+                    for s in _extract_prompt_skills(prompt_text):
+                        if s not in current_grade.skills_loaded:
+                            current_grade.skills_loaded.append(s)
                 elif tool == "skill":
-                    current_grade.skills_loaded.append(args.get("skill", ""))
-                elif tool in {"bash", "powershell"}:
+                    skill_name = (args.get("skill", "") or "").strip().lower()
+                    if skill_name and skill_name not in current_grade.skills_loaded:
+                        current_grade.skills_loaded.append(skill_name)
+                elif tool == "bash":
                     if _is_mutating_bash(args.get("command", "")):
                         current_grade.mutating_bashes += 1
                 elif tool == "ask_user":
@@ -177,8 +220,13 @@ def evaluate_turn(grade: TurnGrade, expected: dict, all_skills_so_far: set = Non
     all_skills_so_far: accumulated skills from previous turns (they persist in session).
     """
     passed = True
+    available = set(grade.skills_loaded)
+    if all_skills_so_far:
+        available |= all_skills_so_far
 
     if expected.get("expect_dispatch") and grade.dispatches == 0:
+        passed = False
+    if expected.get("expect_dispatch") is False and grade.dispatches > 0:
         passed = False
     if expected.get("expect_no_edits") and (grade.inline_edits > 0 or grade.inline_creates > 0):
         passed = False
@@ -190,19 +238,33 @@ def evaluate_turn(grade: TurnGrade, expected: dict, all_skills_so_far: set = Non
         passed = False
     # Skill check: consider accumulated skills from prior turns (they persist)
     if expected.get("expect_skills"):
-        available = set(grade.skills_loaded)
-        if all_skills_so_far:
-            available |= all_skills_so_far
         for s in expected["expect_skills"]:
             if s not in available:
                 passed = False
+    # Phase-to-skill route assertions for critical phases
+    phase_hints = {
+        "experts": {"experts-council"},
+        "experts-delta": {"experts-council"},
+        "product-discover": {"forge-product"},
+        "product-design": {"forge-product"},
+        "product-validate": {"forge-product"},
+        "product-health": {"forge-product"},
+    }
+    phase = expected.get("expect_phase")
+    if phase in phase_hints and not (phase_hints[phase] & available):
+        passed = False
+    # Auto-council assertion (positive + negative cases)
     if "expect_auto_council" in expected:
-        available = set(grade.skills_loaded)
-        if all_skills_so_far:
-            available |= all_skills_so_far
-        if expected["expect_auto_council"] and "experts-council" not in available:
+        assistant_lower = grade.assistant_text.lower()
+        auto_council_detected = (
+            "experts-council" in available
+            or grade.dispatches >= 3
+            or "auto-consulted" in assistant_lower
+            or "auto consulted" in assistant_lower
+        )
+        if expected.get("expect_auto_council") and not auto_council_detected:
             passed = False
-        if expected["expect_auto_council"] is False and "experts-council" in grade.skills_loaded:
+        if expected.get("expect_auto_council") is False and auto_council_detected:
             passed = False
     # Parallel workers: if expected, check for copilot-cli-skill or multiple task() calls
     if expected.get("expect_parallel_workers") and grade.dispatches < 2:
@@ -214,7 +276,7 @@ def evaluate_turn(grade: TurnGrade, expected: dict, all_skills_so_far: set = Non
 
 # ── Outcome Grading ──
 
-def grade_outcome(sandbox: Path, outcome_spec: dict) -> dict:
+def grade_outcome(sandbox: Path, outcome_spec: dict, assistant_text: str = "") -> dict:
     result = {"passed": True, "details": {}}
 
     if outcome_spec.get("run_tests"):
@@ -252,6 +314,38 @@ def grade_outcome(sandbox: Path, outcome_spec: dict) -> dict:
             exists = (sandbox / f).exists()
             result["details"][f"file_{f}"] = exists
             if not exists:
+                result["passed"] = False
+
+    if outcome_spec.get("check_contains"):
+        for check in outcome_spec["check_contains"]:
+            rel_file = check.get("file", "")
+            file_path = sandbox / rel_file
+            if not file_path.exists():
+                result["details"][f"contains_file_{rel_file}"] = False
+                result["passed"] = False
+                continue
+            content = file_path.read_text(errors="ignore")
+            case_insensitive = check.get("case_insensitive", True)
+            content_cmp = content.lower() if case_insensitive else content
+            for token in check.get("contains", []):
+                token_cmp = token.lower() if case_insensitive else token
+                ok = token_cmp in content_cmp
+                result["details"][f"contains::{rel_file}::{token}"] = ok
+                if not ok:
+                    result["passed"] = False
+            for token in check.get("not_contains", []):
+                token_cmp = token.lower() if case_insensitive else token
+                ok = token_cmp not in content_cmp
+                result["details"][f"not_contains::{rel_file}::{token}"] = ok
+                if not ok:
+                    result["passed"] = False
+
+    if outcome_spec.get("expect_output_keywords"):
+        output_lower = assistant_text.lower()
+        for keyword in outcome_spec["expect_output_keywords"]:
+            ok = keyword.lower() in output_lower
+            result["details"][f"output_keyword::{keyword}"] = ok
+            if not ok:
                 result["passed"] = False
 
     return result
@@ -332,16 +426,8 @@ def run_loop_interactive(case: dict, sandbox: Path) -> tuple[str | None, list[Tu
            "--model", "claude-opus-4.6", "--no-color", "--autopilot"]
 
     try:
-        r = subprocess.run(
-            cmd,
-            input=remaining + "\n",
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            timeout=600,
-            cwd=str(sandbox),
-        )
+        r = subprocess.run(cmd, input=(remaining + "\n") if remaining else "", capture_output=True,
+                           text=True, timeout=600, cwd=str(sandbox))
     except subprocess.TimeoutExpired:
         print(f"    Interactive: TIMEOUT")
         return None, []
@@ -396,7 +482,8 @@ def run_loop(case: dict) -> dict:
     # Outcome grading
     outcome = None
     if case.get("outcome_check"):
-        outcome = grade_outcome(sandbox, case["outcome_check"])
+        assistant_text = "\n".join(tg.assistant_text for tg in turn_grades)
+        outcome = grade_outcome(sandbox, case["outcome_check"], assistant_text=assistant_text)
         oc = outcome["details"]
         if "tests_pass" in oc:
             print(f"  Outcome: tests {oc['tests_pass']}/{oc['tests_total']} pass "

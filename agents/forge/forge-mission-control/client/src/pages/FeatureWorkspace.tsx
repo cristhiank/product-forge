@@ -8,11 +8,13 @@ import {
   Pencil,
   History,
   Sparkles,
+  MessageCircle,
 } from "lucide-react";
 import { MarkdownViewer } from "@/components/MarkdownViewer";
 import { MarkdownEditor } from "@/components/MarkdownEditor";
 import { GitHistoryPanel } from "@/components/GitHistoryPanel";
 import { AIAssistPanel } from "@/components/product/AIAssistPanel";
+import { AIChatPanel } from "@/components/AIChatPanel";
 
 interface ProductFeature {
   id: string;
@@ -80,6 +82,7 @@ export function FeatureWorkspace() {
   const [savedMsg, setSavedMsg] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
 
   // Fetch features list to find the matching feature
   const { data: featuresData, isLoading: featuresLoading } = useQuery({
@@ -179,7 +182,7 @@ export function FeatureWorkspace() {
   const filePath = `.product/${feature.path}`;
 
   return (
-    <div className="space-y-6">
+    <div className={chatOpen ? "space-y-6 lg:pr-96" : "space-y-6"}>
       {/* Breadcrumb + Actions */}
       <div className="flex items-center gap-2 flex-wrap">
         <nav className="flex items-center gap-1 text-sm text-muted-foreground flex-1 min-w-0">
@@ -228,6 +231,14 @@ export function FeatureWorkspace() {
               >
                 <Sparkles className="h-3.5 w-3.5" />
                 AI
+              </button>
+              <button
+                onClick={() => setChatOpen((v) => !v)}
+                title="AI Chat"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <MessageCircle className="h-3.5 w-3.5" />
+                Chat
               </button>
             </>
           )}
@@ -382,6 +393,22 @@ export function FeatureWorkspace() {
         onClose={() => setAiOpen(false)}
         featureId={feature.id}
         specContent={editMode ? editContent : (doc?.content ?? "")}
+        onInsert={(inserted) => {
+          const base = editMode ? editContent : (doc?.content ?? "");
+          const newContent = base
+            ? `${base}\n\n---\n\n${inserted}`
+            : inserted;
+          setEditContent(newContent);
+          if (!editMode) setEditMode(true);
+        }}
+      />
+
+      <AIChatPanel
+        open={chatOpen}
+        onClose={() => setChatOpen(false)}
+        scope="feature"
+        contextId={feature.id}
+        docContent={editMode ? editContent : (doc?.content ?? "")}
         onInsert={(inserted) => {
           const base = editMode ? editContent : (doc?.content ?? "");
           const newContent = base

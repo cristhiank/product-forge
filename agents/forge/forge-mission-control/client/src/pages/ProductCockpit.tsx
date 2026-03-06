@@ -7,9 +7,12 @@ import {
   Target,
   Users,
   Palette,
+  MessageCircle,
 } from "lucide-react";
+import { useState } from "react";
 import type { ComponentType } from "react";
 import type { LucideProps } from "lucide-react";
+import { AIChatPanel } from "@/components/AIChatPanel";
 
 interface ProductMeta {
   name: string;
@@ -92,6 +95,7 @@ const quickAccessConfig: Record<
 
 export function ProductCockpit() {
   const navigate = useNavigate();
+  const [chatOpen, setChatOpen] = useState(false);
 
   const { data, isLoading } = useQuery({
     queryKey: ["product"],
@@ -133,7 +137,7 @@ export function ProductCockpit() {
   }
 
   return (
-    <div className="space-y-8">
+    <div className={chatOpen ? "space-y-8 lg:pr-96" : "space-y-8"}>
       {/* Header */}
       <div>
         <div className="flex items-center gap-3 flex-wrap">
@@ -152,6 +156,14 @@ export function ProductCockpit() {
               v{meta.version}
             </span>
           )}
+          <button
+            onClick={() => setChatOpen((v) => !v)}
+            title="AI Chat"
+            className="ml-auto inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <MessageCircle className="h-3.5 w-3.5" />
+            Chat
+          </button>
         </div>
         {meta?.description && (
           <p className="mt-1.5 text-sm text-muted-foreground max-w-2xl">
@@ -306,6 +318,12 @@ export function ProductCockpit() {
           </Link>
         </div>
       </div>
+
+      <AIChatPanel
+        open={chatOpen}
+        onClose={() => setChatOpen(false)}
+        scope="product"
+      />
     </div>
   );
 }

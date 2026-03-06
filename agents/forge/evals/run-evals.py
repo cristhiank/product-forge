@@ -74,6 +74,29 @@ def create_worktree(eval_id: str) -> Path:
     return worktree_dir
 
 
+def create_repo_sandbox(eval_id: str) -> Path:
+    """Create an isolated sandbox snapshot of the current repository."""
+    sandbox_root = Path(tempfile.mkdtemp(prefix=f"forge-eval-{eval_id}-"))
+    sandbox_dir = sandbox_root / "repo"
+
+    ignore = shutil.ignore_patterns(
+        ".git", "node_modules", "__pycache__", ".pytest_cache", ".DS_Store",
+        "sandbox", "results", "dist"
+    )
+    shutil.copytree(REPO_ROOT, sandbox_dir, ignore=ignore)
+
+    # Init as a fresh git repo so the agent has git context
+    subprocess.run(["git", "init", "-q"], cwd=sandbox_dir, capture_output=True)
+    subprocess.run(["git", "add", "."], cwd=sandbox_dir, capture_output=True)
+    subprocess.run(
+        ["git", "commit", "-q", "-m", "initial: repo sandbox snapshot"],
+        cwd=sandbox_dir, capture_output=True,
+        env={**os.environ, "GIT_AUTHOR_NAME": "eval", "GIT_AUTHOR_EMAIL": "eval@test",
+             "GIT_COMMITTER_NAME": "eval", "GIT_COMMITTER_EMAIL": "eval@test"}
+    )
+    return sandbox_dir
+
+
 def cleanup_worktree(worktree_dir: Path):
     """Remove worktree after eval."""
     if worktree_dir.exists():
@@ -89,6 +112,52 @@ def cleanup_worktree(worktree_dir: Path):
 # ──────────────────────────────────────────────
 # Mechanical Grading (from events.jsonl)
 # ──────────────────────────────────────────────
+
+BUILD_TEST_PATTERNS = [
+    "npm run build", "npm test", "dotnet build", "dotnet test", "dotnet run",
+    "pytest", "cargo build", "cargo test", "make", "go build", "go test",
+    "npx tsc", "npx vitest", "node --test",
+]
+FILE_MUTATION_PATTERNS = [
+    "sed -i", "awk -i", "perl -pi", "patch ",
+    "echo >", "cat >", "tee ", ">>",
+    "npm install", "pip install", "dotnet add",
+]
+SAFE_SEGMENT_PREFIXES = [
+    "node ", "git ", "grep ", "jq ", "head ", "tail ",
+    "ls ", "find ", "wc ", "sort ", "uniq ", "which ", "pwd",
+]
+PROMPT_SKILL_RE = re.compile(r"invoke the [`']([^`']+)[`'] skill", re.IGNORECASE)
+
+
+def _is_coordinator_tool_call(event_data: dict) -> bool:
+    """Coordinator actions have no parentToolCallId in session events."""
+    return not bool(event_data.get("parentToolCallId"))
+
+
+def _is_mutating_bash(cmd: str) -> bool:
+    # Neutralize quoted strings so patterns inside args don't trigger matches
+    stripped = re.sub(r'"[^"]*"|\'[^\']*\'', '""', cmd)
+    segments = re.split(r'\s*(?:&&|\|\||[;|])\s*', stripped)
+    for seg in segments:
+        seg = seg.strip()
+        if not seg:
+            continue
+        # Skip known-safe CLI tool invocations (backlog, hub, git, etc.)
+        if any(seg.startswith(p) for p in SAFE_SEGMENT_PREFIXES):
+            continue
+        for p in FILE_MUTATION_PATTERNS:
+            if p in seg:
+                return True
+        for p in BUILD_TEST_PATTERNS:
+            if seg.startswith(p):
+                rest = seg[len(p):]
+                if not rest or rest[0].isspace():
+                    return True
+    return False
+
+def _extract_prompt_skills(prompt: str) -> list[str]:
+    return [s.strip().lower() for s in PROMPT_SKILL_RE.findall(prompt or "") if s.strip()]
 
 
 @dataclass
@@ -133,6 +202,8 @@ def mechanical_grade(session_id: str) -> MechanicalResult:
                 workspace_root = ctx.get("gitRoot") or ctx.get("cwd") or workspace_root
 
             if etype == "tool.execution_start":
+                if not _is_coordinator_tool_call(data):
+                    continue
                 tool = data.get("toolName", "")
                 args = data.get("arguments", {})
                 if data.get("parentToolCallId"):
@@ -158,10 +229,15 @@ def mechanical_grade(session_id: str) -> MechanicalResult:
                         g.briefs_with_4_sections += 1
                     if "backend-architecture" in prompt or "frontend-architecture" in prompt:
                         g.briefs_with_arch_skill += 1
+                    for s in _extract_prompt_skills(prompt):
+                        if s not in g.skills_loaded:
+                            g.skills_loaded.append(s)
                 elif tool == "skill":
                     g.skill_loads += 1
-                    g.skills_loaded.append(args.get("skill", ""))
-                elif tool in {"bash", "powershell"}:
+                    skill_name = (args.get("skill", "") or "").strip().lower()
+                    if skill_name and skill_name not in g.skills_loaded:
+                        g.skills_loaded.append(skill_name)
+                elif tool == "bash":
                     cmd = args.get("command", "")
                     if _is_mutating_bash(cmd):
                         g.mutating_bashes += 1
@@ -283,19 +359,23 @@ Assistant output (first 1000 chars):
 def run_single_turn(case: dict, worktree_dir: Path, timeout: int = 300) -> tuple[str, str]:
     """Run a single-turn eval via copilot -p."""
     sessions_before = set(os.listdir(SESSION_STATE)) if SESSION_STATE.exists() else set()
+    timeout = int(case.get("timeout", 300))
 
-    result = subprocess.run(
-        ["copilot", "--agent", "forge/Forge", "-p", case["prompt"],
-         "--allow-all-tools", "--max-autopilot-continues", "8",
-         "--model", "claude-opus-4.6", "--no-color"],
-        capture_output=True, text=True, encoding="utf-8", errors="replace",
-        timeout=timeout, cwd=str(worktree_dir)
-    )
+    try:
+        result = subprocess.run(
+            ["copilot", "--agent", "forge/Forge", "-p", case["prompt"],
+             "--allow-all-tools", "--max-autopilot-continues", "8",
+             "--model", "claude-opus-4.6", "--no-color", "--autopilot"],
+            capture_output=True, text=True, timeout=timeout, cwd=str(worktree_dir)
+        )
+        output = (result.stdout or "") + (result.stderr or "")
+    except subprocess.TimeoutExpired as e:
+        output = f"[TIMEOUT after {timeout}s]\n{(e.stdout or '')}\n{(e.stderr or '')}"
 
     sessions_after = set(os.listdir(SESSION_STATE)) if SESSION_STATE.exists() else set()
     new = sessions_after - sessions_before
     session_id = list(new)[0] if new else None
-    return session_id, result.stdout
+    return session_id, output
 
 
 def run_multi_turn(case: dict, worktree_dir: Path, timeout: int = 600) -> tuple[str, str]:
@@ -304,20 +384,24 @@ def run_multi_turn(case: dict, worktree_dir: Path, timeout: int = 600) -> tuple[
     input_text = "\n".join(turns) + "\n/exit\n"
 
     sessions_before = set(os.listdir(SESSION_STATE)) if SESSION_STATE.exists() else set()
+    timeout = int(case.get("timeout", 600))
 
-    result = subprocess.run(
-        ["copilot", "--agent", "forge/Forge", "-i", turns[0],
-         "--allow-all-tools", "--max-autopilot-continues", "8",
-         "--model", "claude-opus-4.6", "--no-color", "--autopilot"],
-        input="\n".join(turns[1:]) + "\n" if len(turns) > 1 else "",
-        capture_output=True, text=True, encoding="utf-8", errors="replace",
-        timeout=timeout, cwd=str(worktree_dir)
-    )
+    try:
+        result = subprocess.run(
+            ["copilot", "--agent", "forge/Forge", "-i", turns[0],
+             "--allow-all-tools", "--max-autopilot-continues", "8",
+             "--model", "claude-opus-4.6", "--no-color", "--autopilot"],
+            input="\n".join(turns[1:]) + "\n" if len(turns) > 1 else "",
+            capture_output=True, text=True, timeout=timeout, cwd=str(worktree_dir)
+        )
+        output = (result.stdout or "") + (result.stderr or "")
+    except subprocess.TimeoutExpired as e:
+        output = f"[TIMEOUT after {timeout}s]\n{(e.stdout or '')}\n{(e.stderr or '')}"
 
     sessions_after = set(os.listdir(SESSION_STATE)) if SESSION_STATE.exists() else set()
     new = sessions_after - sessions_before
     session_id = list(new)[0] if new else None
-    return session_id, result.stdout
+    return session_id, output
 
 
 # ──────────────────────────────────────────────
@@ -328,6 +412,7 @@ def run_test_case(case: dict, trial: int = 1, skip_llm: bool = False, timeout: i
     case_id = case["id"]
     needs_fixture = case.get("needs_fixture", False)
     is_multi_turn = "turns" in case
+    workspace = case.get("workspace", "fixture")
 
     print(f"\n{'━'*60}")
     print(f"  📋 {case['name']} [{case['category']}] (trial {trial})")
@@ -340,11 +425,11 @@ def run_test_case(case: dict, trial: int = 1, skip_llm: bool = False, timeout: i
     worktree_dir = None
     eval_id = f"{case_id}-t{trial}-{int(time.time())}"
 
-    if needs_fixture:
-        worktree_dir = create_worktree(eval_id)
-        print(f"  Sandbox: {worktree_dir}")
+    if workspace == "repo":
+        worktree_dir = create_repo_sandbox(eval_id)
     else:
-        worktree_dir = create_worktree(eval_id)  # always use sandbox for isolation
+        worktree_dir = create_worktree(eval_id)
+    print(f"  Sandbox: {worktree_dir}")
 
     start_time = time.time()
     try:
@@ -361,19 +446,25 @@ def run_test_case(case: dict, trial: int = 1, skip_llm: bool = False, timeout: i
     if not session_id:
         print(f"  ❌ No session created ({output[:80]})")
         cleanup_worktree(worktree_dir)
-        return {"case_id": case_id, "trial": trial, "error": "no session",
-                "elapsed": round(elapsed, 1)}
+        return {
+            "case_id": case_id,
+            "trial": trial,
+            "error": "no session",
+            "elapsed": round(elapsed, 1),
+            "output_tail": output[-1500:] if output else "",
+        }
 
     print(f"  Session: {session_id} ({elapsed:.0f}s)")
 
     # Mechanical grading
     mech = mechanical_grade(session_id)
+    expected = case["expected"]
+    expected_skills = expected.get("expected_skills", [])
+
     mech_pass = True
-    expected = case.get("expected", {})
-    should_dispatch = expected.get("should_dispatch")
-    if should_dispatch and mech.dispatches == 0:
+    if expected.get("should_dispatch") and mech.dispatches == 0:
         mech_pass = False
-    if should_dispatch is False and mech.dispatches > 0:
+    if expected.get("should_dispatch") is False and mech.dispatches > 0:
         mech_pass = False
     if not expected.get("should_edit", True) and (mech.inline_edits > 0 or mech.inline_creates > 0):
         mech_pass = False
@@ -381,16 +472,18 @@ def run_test_case(case: dict, trial: int = 1, skip_llm: bool = False, timeout: i
         mech_pass = False
     if expected.get("should_clarify") and not mech.has_clarification:
         mech_pass = False
-    if expected.get("expected_skills"):
-        loaded = set(mech.skills_loaded)
-        if not all(skill in loaded for skill in expected["expected_skills"]):
-            mech_pass = False
+    if expected.get("should_load_skill") and mech.skill_loads == 0:
+        mech_pass = False
+    missing_skills = [s for s in expected_skills if s not in set(mech.skills_loaded)]
+    if missing_skills:
+        mech_pass = False
 
     print(f"  Mechanical: {'✅' if mech_pass else '❌'} "
           f"(dispatch={mech.dispatches}, edit={mech.inline_edits}, "
           f"create={mech.inline_creates}, bash!={mech.mutating_bashes}, "
           f"skills={','.join(mech.skills_loaded) or 'none'}, "
-          f"briefs_ok={mech.briefs_with_skill_line}/{mech.dispatches})")
+          f"briefs_ok={mech.briefs_with_skill_line}/{mech.dispatches}, "
+          f"missing_skills={','.join(missing_skills) or 'none'})")
 
     # Outcome grading (if fixture)
     outcome = None
@@ -419,12 +512,14 @@ def run_test_case(case: dict, trial: int = 1, skip_llm: bool = False, timeout: i
         "elapsed": round(elapsed, 1),
         "mechanical": {
             "pass": mech_pass,
+            "workspace": workspace,
             "dispatch_score": round(mech.dispatch_score, 1),
             "dispatches": mech.dispatches,
             "inline_edits": mech.inline_edits,
             "inline_creates": mech.inline_creates,
             "mutating_bashes": mech.mutating_bashes,
             "skills_loaded": mech.skills_loaded,
+            "missing_skills": missing_skills,
             "has_clarification": mech.has_clarification,
             "briefs_with_skill_line": mech.briefs_with_skill_line,
             "briefs_with_4_sections": mech.briefs_with_4_sections,

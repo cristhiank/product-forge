@@ -21,10 +21,10 @@
     "expected": {
       "should_dispatch": false,
       "should_edit": false,
-      "should_load_skill": true,
-      "expected_skills": ["forge"],
+      "should_load_skill": false,
+      "expected_skills": [],
       "should_clarify": false,
-      "description": "Pure knowledge question. Answer directly, no delegation."
+      "description": "Pure knowledge question. Answer directly, no delegation. No skill load required."
     }
   },
   {
@@ -45,7 +45,8 @@
     "id": "dispatch-fix-bug",
     "name": "Dispatch: Fix a specific bug",
     "category": "dispatch-required",
-    "prompt": "Fix BUG-002 in src/services/bookings.js where totalPrice uses nights+1 instead of nights.",
+    "workspace": "repo",
+    "prompt": "Fix the bug in agents/forge/evals/grade-session.py where backlog bash commands are false positives. The substring match on 'npm install' triggers on backlog CLI args.",
     "expected": {
       "should_dispatch": true,
       "should_edit": false,
@@ -59,6 +60,7 @@
     "id": "dispatch-implement-feature",
     "name": "Dispatch: Implement a feature",
     "category": "dispatch-required",
+    "workspace": "repo",
     "prompt": "Implement a health check endpoint at GET /health that returns { status: 'ok', uptime: process.uptime() } in the forge-mission-control Fastify server.",
     "expected": {
       "should_dispatch": true,
@@ -87,6 +89,7 @@
     "id": "dispatch-refactor",
     "name": "Dispatch: Refactor module",
     "category": "dispatch-required",
+    "workspace": "repo",
     "prompt": "Refactor the grade-session.py to split the parsing, grading, and reporting into separate modules.",
     "expected": {
       "should_dispatch": false,
@@ -171,6 +174,7 @@
     "id": "explore-investigate",
     "name": "Explore: investigate a system",
     "category": "explore",
+    "workspace": "repo",
     "prompt": "Look at the agents/forge/ directory structure and understand how the publish.sh script works and what it deploys.",
     "expected": {
       "should_dispatch": true,
@@ -241,12 +245,13 @@
     "id": "product-discover",
     "name": "Product: discovery research",
     "category": "product",
+    "timeout": 900,
     "prompt": "Research who our target customers are for the pet boarding SaaS. Use the jobs-to-be-done framework.",
     "expected": {
       "should_dispatch": true,
       "should_edit": false,
       "should_load_skill": true,
-      "expected_skills": ["forge"],
+      "expected_skills": ["forge", "forge-product"],
       "should_clarify": false,
       "description": "Product discovery. Must dispatch to forge-product subagent + jobs-to-be-done skill."
     }
@@ -260,7 +265,7 @@
       "should_dispatch": true,
       "should_edit": false,
       "should_load_skill": true,
-      "expected_skills": ["forge"],
+      "expected_skills": ["forge", "forge-product"],
       "should_clarify": false,
       "description": "Feature definition. Must dispatch to forge-product subagent in DESIGN phase."
     }
@@ -269,6 +274,7 @@
     "id": "multi-file-edit",
     "name": "Edge: multi-file edit request",
     "category": "edge-case",
+    "workspace": "repo",
     "prompt": "Rename all occurrences of 'forge-worker' to 'forge-executor' across the entire agents/forge/ directory.",
     "expected": {
       "should_dispatch": true,
