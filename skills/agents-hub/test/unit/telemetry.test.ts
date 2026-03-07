@@ -231,7 +231,7 @@ describe('telemetry module', () => {
           {
             id: 'e1',
             type: 'session.model_change',
-            data: { previousModel: 'gpt-4.1', newModel: 'gpt-5.3-codex' },
+            data: { previousModel: 'gpt-4.1', newModel: 'gpt-5.4' },
             timestamp: '2024-01-01T10:02:05Z',
             parentId: null,
           },
@@ -241,7 +241,7 @@ describe('telemetry module', () => {
         expect(items.length).toBe(1);
         expect(items[0].type).toBe('session_event');
         expect(items[0].content).toContain('model changed');
-        expect(items[0].content).toContain('gpt-5.3-codex');
+        expect(items[0].content).toContain('gpt-5.4');
       });
 
       it('should convert error events', () => {

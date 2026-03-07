@@ -4,7 +4,7 @@
 
 **Status:** Built + Eval Phase  
 **Previous:** DevPartner v17 (8 agents + constitution)  
-**Author:** Cris Lopez + AI Council (Gemini 3 Pro, Opus 4.6, GPT-5.3 Codex)  
+**Author:** Cris Lopez + AI Council (Gemini 3 Pro, Opus 4.6, GPT-5.4)  
 **Date:** 2026-02-28 (design), 2026-03-01 (evals + enforcement)
 
 ## Related Docs
@@ -334,4 +334,4 @@ The agents-hub serves as persistent shared state:
 - [ROUTING_RULES.md](./ROUTING_RULES.md) — Decision tree for task classification and routing
 - DevPartner v17 agents: `agents/devpartner/*.agent.md`
 - Session evidence: `dee8b796` (16 turns, 3 epics), `78fe96e9` (56 turns, 4 epics)
-- Expert council verdict: 2026-02-28 (Gemini 3 Pro, Opus 4.6, GPT-5.3 Codex)
+- Expert council verdict: 2026-02-28 (Gemini 3 Pro, Opus 4.6, GPT-5.4)

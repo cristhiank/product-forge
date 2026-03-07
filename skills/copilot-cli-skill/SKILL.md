@@ -265,7 +265,7 @@ $WORKER exec --agent Orchestrator --autopilot \
 ```bash
 $WORKER exec 'return [
   sdk.spawnWorker("implement auth refactor", { agent: "Orchestrator", model: "claude-opus-4.6" }),
-  sdk.spawnWorker("implement auth refactor", { agent: "Orchestrator", model: "gpt-5.3-codex" }),
+  sdk.spawnWorker("implement auth refactor", { agent: "Orchestrator", model: "gpt-5.4" }),
   sdk.spawnWorker("implement auth refactor", { agent: "Orchestrator", model: "gemini-3-pro-preview" })
 ]'
 ```

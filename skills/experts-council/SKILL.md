@@ -13,7 +13,7 @@ description: "ALWAYS use when the user says \"ask the experts\", \"explore optio
 |------|----------|----------|
 | 1 | `gemini-3-pro-preview` | Google |
 | 2 | `claude-opus-4.6` | Anthropic |
-| 3 | `gpt-5.3-codex` | OpenAI |
+| 3 | `gpt-5.4` | OpenAI |
 
 ## Invocation Modes
 
@@ -279,7 +279,7 @@ Present the chairman's synthesis to the user as:
 *Effort: S (<1hr) · M (half-day) · L (1-2 days) · XL (3+ days)*
 
 ---
-*Council: Gemini 3 Pro · Opus 4.6 · GPT-5.3 Codex | Chairman: [model]*
+*Council: Gemini 3 Pro · Opus 4.6 · GPT-5.4 | Chairman: [model]*
 *Responses were anonymized during synthesis to prevent bias*
 ```
 
@@ -313,7 +313,7 @@ When re-reviewing after implementation, use this variant:
 [same as standard format]
 
 ---
-*Council: Gemini 3 Pro · Opus 4.6 · GPT-5.3 Codex | Chairman: [model]*
+*Council: Gemini 3 Pro · Opus 4.6 · GPT-5.4 | Chairman: [model]*
 *Delta review against [N] previous findings*
 ```
 

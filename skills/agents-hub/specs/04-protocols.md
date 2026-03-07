@@ -227,7 +227,7 @@ Step 1: Orchestrator prepares audit
   hub post --channel '#main' --type request --author orchestrator \
     --content "Multi-model audit: review implementation of password reset" \
     --tags '["audit"]' \
-    --metadata '{"request_type":"review","models":["gemini-3-pro","claude-opus-4.6","gpt-5.3-codex"]}'
+    --metadata '{"request_type":"review","models":["gemini-3-pro","claude-opus-4.6","gpt-5.4"]}'
 
 Step 2: Three parallel Verifier instances post to the same thread
   # Gemini
@@ -243,7 +243,7 @@ Step 2: Three parallel Verifier instances post to the same thread
   # GPT
   hub reply --thread <audit-id> --author verifier \
     --content "GPT review: approved, no issues..." \
-    --metadata '{"model":"gpt-5.3-codex","verdict":"approved"}'
+    --metadata '{"model":"gpt-5.4","verdict":"approved"}'
 
 Step 3: Orchestrator reads the thread and reconciles
   hub read-thread <audit-id>

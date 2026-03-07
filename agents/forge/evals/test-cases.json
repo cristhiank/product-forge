@@ -175,7 +175,7 @@
     "name": "Explore: investigate a system",
     "category": "explore",
     "workspace": "repo",
-    "prompt": "Look at the agents/forge/ directory structure and understand how the publish.sh script works and what it deploys.",
+    "prompt": "Look at the agents/forge/ directory structure and understand how the build-plugin.sh script works and what it deploys.",
     "expected": {
       "should_dispatch": true,
       "should_edit": false,

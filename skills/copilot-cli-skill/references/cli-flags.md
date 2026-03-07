@@ -92,7 +92,7 @@ copilot --stream off --allow-all-tools -p "quiet non-streaming run"
 ## Agent + Model Selection
 
 ```bash
-copilot --agent Scout --model gpt-5.3-codex --allow-all-tools -p "explore auth architecture"
+copilot --agent Scout --model gpt-5.4 --allow-all-tools -p "explore auth architecture"
 ```
 
 ## Combined Example (Modern Worker)

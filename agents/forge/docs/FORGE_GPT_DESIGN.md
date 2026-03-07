@@ -462,8 +462,8 @@ If these conditions are not proven, stay serial.
 | Coordinator | `gpt-5.4` | Strongest GPT-family reasoning for dispatch and contract adherence |
 | Explore (shared) | `gpt-5.1-codex-mini` | Fast, cheap, read-only search and orientation |
 | Ideate / Plan (shared) | `gpt-5.4` | These are reasoning-heavy modes |
-| Execute | `gpt-5.3-codex` | Code-heavy implementation with strong tool use |
-| Verify | `gpt-5.3-codex` | Tool-heavy validation and evidence checks |
+| Execute | `gpt-5.4` | Code-heavy implementation with strong tool use |
+| Verify | `gpt-5.4` | Tool-heavy validation and evidence checks |
 | Memory (shared) | `gpt-5-mini` or equivalent cheap GPT model | Extraction and cleanup do not need flagship cost |
 
 **Baseline rule:** keep v1 inside the GPT family. Cross-provider subagents can be evaluated later, but they should not define the first `forge-gpt` baseline.

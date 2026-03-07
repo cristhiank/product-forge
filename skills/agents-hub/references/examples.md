@@ -495,7 +495,7 @@ The T3+ multi-model audit (Gemini, Opus, GPT) uses hub for coordination.
 AUDIT_ID=$($HUB post --channel '#main' --type request --author orchestrator \
   --content "Multi-model audit: Review implementation of password reset flow" \
   --tags '["audit","verification"]' \
-  --metadata '{"request_type":"review","models":["gemini-3-pro-preview","claude-opus-4.6","gpt-5.3-codex"],"files":["src/auth/reset.ts","src/routes/auth.ts","tests/reset.test.ts"]}' | jq -r '.id')
+  --metadata '{"request_type":"review","models":["gemini-3-pro-preview","claude-opus-4.6","gpt-5.4"],"files":["src/auth/reset.ts","src/routes/auth.ts","tests/reset.test.ts"]}' | jq -r '.id')
 ```
 
 ### Step 2: Three Verifier Instances Post Reviews
@@ -518,7 +518,7 @@ $HUB reply --thread $AUDIT_ID --author verifier \
 ```bash
 $HUB reply --thread $AUDIT_ID --author verifier \
   --content "## GPT Review\n\n**Verdict:** Approved\n\n**Issues Found:** 0\n\n**Strengths:**\n- Cryptographically secure token generation\n- Proper async/await usage\n- Comprehensive test coverage\n- Good error messages\n\n**Recommendation:** Approve as-is." \
-  --metadata '{"model":"gpt-5.3-codex","verdict":"approved","issues_count":0}'
+  --metadata '{"model":"gpt-5.4","verdict":"approved","issues_count":0}'
 ```
 
 ### Step 3: Orchestrator Reconciles Reviews

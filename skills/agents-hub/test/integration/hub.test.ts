@@ -482,7 +482,7 @@ describe('Hub integration', () => {
           type: 'session.model_change',
           timestamp: '2026-02-23T00:00:00.000Z',
           data: {
-            newModel: 'gpt-5.3-codex',
+            newModel: 'gpt-5.4',
           },
         },
         {
@@ -513,7 +513,7 @@ describe('Hub integration', () => {
 
       const sync = hub.workerSync('ops-worker-requests-only');
       const worker = hub.workerGet('ops-worker-requests-only');
-      const modelSummary = sync.modelUsage?.['gpt-5.3-codex'];
+      const modelSummary = sync.modelUsage?.['gpt-5.4'];
       const providerSummary = sync.providerUsage?.openai;
 
       expect(sync.ok).toBe(true);
@@ -522,7 +522,7 @@ describe('Hub integration', () => {
       expect(modelSummary?.requests).toBe(1);
       expect(providerSummary).toBeDefined();
       expect(providerSummary?.requests).toBe(1);
-      expect(worker?.modelUsage?.['gpt-5.3-codex']?.requests).toBe(1);
+      expect(worker?.modelUsage?.['gpt-5.4']?.requests).toBe(1);
     });
 
     it('parses nested token usage payloads from tool results', () => {
@@ -532,7 +532,7 @@ describe('Hub integration', () => {
           type: 'session.model_change',
           timestamp: '2026-02-23T00:00:00.000Z',
           data: {
-            newModel: 'gpt-5.3-codex',
+            newModel: 'gpt-5.4',
           },
         },
         {
@@ -574,7 +574,7 @@ describe('Hub integration', () => {
       expect(sync.usage?.inputTokens).toBe(120);
       expect(sync.usage?.outputTokens).toBe(30);
       expect(sync.usage?.totalTokens).toBe(150);
-      expect(sync.modelUsage?.['gpt-5.3-codex']?.totalTokens).toBe(150);
+      expect(sync.modelUsage?.['gpt-5.4']?.totalTokens).toBe(150);
       expect(worker?.usage?.totalTokens).toBe(150);
     });
   });

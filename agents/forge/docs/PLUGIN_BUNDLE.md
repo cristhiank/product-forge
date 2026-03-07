@@ -305,25 +305,19 @@ const forgePermissionHandler = async (request, { sessionId }) => {
 };
 ```
 
-## Publish Script Update
+## Build & Install
 
-The current `publish.sh` copies files to `~/.copilot/agents/` and `~/.copilot/skills/`.
-With the plugin system, we need BOTH:
-
-1. **Plugin packaging** — for distribution via `copilot plugin install`
-2. **Direct install** — for local development (keeps current publish.sh behavior)
+The canonical method is `build-plugin.sh`, which assembles the plugin into `dist/` and optionally installs it:
 
 ```bash
-# Development: direct install (current behavior)
-./publish.sh
+# Build only
+./build-plugin.sh
 
-# Distribution: package as plugin
-./package-plugin.sh  # creates dist/ with plugin.json + agents/ + skills/
+# Build + install locally
+./build-plugin.sh --install
 
-# User installation
-copilot plugin install cristhiank/mcps
-# or
-copilot plugin install ./dist/
+# Preview without writing
+./build-plugin.sh --dry-run
 ```
 
 ## Loading Order & Precedence
