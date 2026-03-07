@@ -411,18 +411,44 @@ When intent is Dispatch, evaluate how to dispatch:
 
 | Criteria | Single Subagent | Parallel Workers |
 |----------|:-:|:-:|
-| Item count | 1-2 items | 3+ independent items |
-| Independence | Same module | Different modules, no file overlap |
+| Item count | 1-2 items | 3+ items |
+| File overlap | Items touch same files | Items touch different files |
 | Change size | < 50 lines each | > 50 lines, multiple files |
+
+<rule name="epic-parallelization-checkpoint">
+### Parallelization Checkpoint (Mandatory for Epics)
+
+Before dispatching any epic or multi-item request, perform this evaluation:
+
+1. **List items with target files** — for each backlog item, identify which files it touches
+2. **Group by file overlap** — items touching the same files go in the same group
+3. **Evaluate independence:**
+
+```
+Independent groups = 1 → Single execute subagent (sequential)
+Independent groups = 2+ → Parallel workers via copilot-cli-skill
+```
+
+4. **Present the plan to the user:**
+   - "Epic has N items in M independent groups. Spawning M workers."
+   - OR "All N items touch overlapping files. Executing sequentially in one subagent."
+
+**Do not default to single subagent when parallelism is available.** Workers via copilot-cli-skill are full Copilot instances — they can load skills, call `task()`, and run the complete explore→execute→verify cycle independently. A `task()` subagent cannot nest further dispatches.
+
+</rule>
+
+<rationale>
+In past sessions, epics with 7+ independent items were always dispatched to a single sequential subagent — even when the user explicitly requested parallelization. The root causes: (1) the routing matrix defaulted too aggressively to "single subagent," (2) the copilot-cli-skill spawn ceremony was too complex for the model to choose voluntarily, and (3) there was no mandatory checkpoint forcing the evaluation. This rule makes parallelization a first-class decision point.
+</rationale>
 
 ### Routing Decision
 
 ```
-├── 1-2 items, each < 20 lines → Single execute subagent
-├── 3+ items, all independent  → Parallel workers (copilot-cli-skill)
-├── 3+ items, some dependent   → Batch by dependency order
-├── 20+ surgical items (< 20 lines each) → Single subagent, batched
-└── Mixed → Workers for substantial, subagent for trivial
+├── 1-2 items → Single execute subagent
+├── 3+ items, all in same files → Single subagent, sequential
+├── 3+ items, in different files → Parallel workers (copilot-cli-skill)
+├── 3+ items, some dependent → Group by dependency, workers per independent group
+└── User says "parallelize" → Workers unless items literally share files
 ```
 ---
 
@@ -633,26 +659,92 @@ After any phase completes:
 
 ## Worker Spawning Protocol
 
-When spawning parallel workers via copilot-cli-skill:
+Workers are full Copilot instances in isolated git worktrees. Unlike `task()` subagents, workers CAN call `task()`, load skills, and run the complete Forge protocol independently.
 
-1. **Validate independence** — confirm items don't overlap on files
-2. **Create worker prompts** — use the Mission Brief template with `forge-execute` skill:
-   ```
-   Invoke the `forge-execute` skill as your first action.
-   [Architecture skill line if applicable]
+<rationale>
+A `task()` subagent (Level 1) cannot spawn its own subagents — it's limited to direct tool use. For complex items that benefit from explore→execute→verify cycles, or items that need expert council review, only a copilot-cli-skill worker has the full capability stack. This is why workers exist: they're full peers, not limited executors.
+</rationale>
 
-   ## Mission
-   Implement [task ID]: [Description]
+### When to Spawn Workers (vs. Single Subagent)
 
-   ## Context / ## Constraints / ## Expected Output
-   [Same structure as Mission Brief template]
-   ```
+| Condition | Use Workers | Use Single Subagent |
+|-----------|:-:|:-:|
+| 3+ items in different files | ✅ | |
+| Items need their own explore phase | ✅ | |
+| User says "parallelize" | ✅ | |
+| Items are complex (T3+ each) | ✅ | |
+| 1-2 items, or all items in same file | | ✅ |
+| Items are trivial (< 20 lines each, same module) | | ✅ |
 
-   Do not send bare instructions — start with the skill invocation line + full Mission Brief.
+### Spawn Ceremony (Simplified)
 
-3. **Register in hub** — Load `agents-hub` skill, then: `node <skill-dir>/scripts/index.js worker-register <id>`
-4. **Monitor** — Periodic: `node <skill-dir>/scripts/index.js worker-sync`
-5. **Validate & merge** — after completion, verify each worker's output
+```bash
+# Step 1: Load the skill
+skill("copilot-cli-skill")
+
+# Step 2: Set the worker command shorthand
+WORKER="node <skill-dir>/scripts/index.js --repo-root ."
+
+# Step 3: Spawn each worker with a Mission Brief
+$WORKER exec --agent Forge --autopilot \
+  'return sdk.spawnWorker("Invoke the `forge-execute` skill as your first action.\nAlso invoke the `backend-architecture` skill.\n\n## Mission\nImplement B-055.3: [description]\n\n## Context\n[findings]\n\n## Constraints\n- Scope: [files]\n\n## Expected Output\nReturn a REPORT with: STATUS, SUMMARY, ARTIFACTS, NEXT")'
+
+# Step 4: Repeat for each independent group
+$WORKER exec --agent Forge --autopilot \
+  'return sdk.spawnWorker("[next mission brief]")'
+
+# Step 5: Check all workers spawned
+$WORKER exec 'return sdk.listAll()'
+```
+
+### Post-Spawn Monitoring
+
+```bash
+# Check status of all workers
+$WORKER exec 'return sdk.listAll()'
+
+# Check specific worker
+$WORKER exec 'return sdk.checkWorker("<worker-id>")'
+
+# After all complete: clean up
+$WORKER exec 'return sdk.cleanupAll()'
+```
+
+After workers complete:
+1. Review each worker's output (check hub for results)
+2. Merge branches if workers used separate branches
+3. Run integration tests across all changes
+4. Update backlog items to done
+
+<examples>
+<example type="right">
+**Epic B-055 with 18 items across 6 modules → 6 parallel workers:**
+```
+User: "Work on epic B-055 until completion. Parallelize."
+
+Coordinator:
+  1. Read backlog → 18 items, 6 independent file groups
+  2. "Epic has 18 items in 6 independent groups. Spawning 6 workers."
+  3. Load copilot-cli-skill
+  4. Spawn 6 workers, each with 3 items in their file group
+  5. Monitor via hub
+  6. Merge and verify after completion
+```
+</example>
+
+<example type="wrong">
+**Same epic dispatched to single subagent (what used to happen):**
+```
+User: "Work on epic B-055 until completion. Parallelize."
+
+Coordinator:
+  task({ prompt: "Implement all 18 items..." })
+  → Single subagent does all 18 sequentially
+  → Takes 30 minutes instead of 8
+  → Subagent can't delegate further if it hits problems
+```
+</example>
+</examples>
 ---
 
 ## Autonomous Council Triggers

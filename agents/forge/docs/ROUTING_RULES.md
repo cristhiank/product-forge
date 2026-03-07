@@ -76,49 +76,59 @@ User message
 
 <rules name="execution_routing">
 
-When the intent is EXECUTE, evaluate complexity to decide HOW to execute:
+When the intent is EXECUTE, evaluate complexity to decide HOW to execute.
+
+**Key architectural distinction:** A `task()` subagent (Level 1) cannot call `task()` itself — it's limited to direct tool use. A copilot-cli-skill worker is a full Copilot instance that CAN call `task()`, load skills, and run the complete Forge protocol (explore→execute→verify) independently. Workers are peers, not limited executors.
+
+### Parallelization Checkpoint (Mandatory for Epics)
+
+Before dispatching any epic or multi-item request:
+
+1. **List items with target files** — for each backlog item, identify which files it touches
+2. **Group by file overlap** — items touching the same files go in the same group
+3. **Evaluate independence:**
+   - Independent groups = 1 → Single execute subagent (sequential)
+   - Independent groups = 2+ → Parallel workers via copilot-cli-skill
+4. **Present the plan to the user:**
+   - "Epic has N items in M independent groups. Spawning M workers."
+   - OR "All N items touch overlapping files. Executing sequentially."
 
 ### Decision Matrix
 
-| Criteria | Direct Subagent | Parallel Workers |
+| Criteria | Single Subagent | Parallel Workers (copilot-cli-skill) |
 |----------|:-:|:-:|
-| Item count | 1-2 items | 3+ independent items |
-| Change size per item | < 50 lines | > 50 lines, multiple files |
-| Independence | Same module, sequential | Different modules, no file overlap |
-| Estimated time per item | < 5 min | > 5 min |
-| Isolation needed | Low (simple edits) | High (risky changes, new features) |
+| Item count | 1-2 items | 3+ items in different files |
+| File overlap | Items share files | Items in separate files/modules |
+| Complexity per item | Simple (T1-T2) | Complex (T3+ each, benefits from own explore phase) |
+| User request | No parallelization mention | "parallelize", "orchestrate" |
 
 ### Routing Decision
 
 ```
-Count items in epic/request
+Count items + check file overlap
 │
-├── 1-2 items, each < 20 lines change
-│   └── Single EXECUTE mode subagent (sequential)
+├── 1-2 items → Single execute subagent
 │
-├── 3+ items, all independent (different files/modules)
-│   └── Parallel workers via copilot-cli-skill
-│   Pattern: Spawn → Register in hub → Sync → Await → Validate → Merge
+├── 3+ items, all in same files → Single subagent, sequential
 │
-├── 3+ items, some dependent
-│   └── Batch into dependency-ordered groups
-│   Each batch: parallel workers for independent items
-│   Between batches: merge, build check, then next batch
+├── 3+ items, in different files → Parallel workers (copilot-cli-skill)
+│   Each worker: full Copilot instance, can explore + execute + verify
 │
-├── Mixed (some trivial, some substantial)
-│   └── Workers for substantial items, single subagent for trivial
+├── 3+ items, some dependent → Group by dependency
+│   Independent groups → parallel workers
+│   Dependent items within group → sequential in one worker
 │
-└── 20+ items, all surgical (< 20 lines each)
-    └── Single EXECUTE mode subagent, batched by file
-    Evidence: B-051 (20 surgical fixes done directly, not via workers)
+└── User says "parallelize" → Workers unless items literally share files
 ```
+
+Do not default to single subagent when parallelism is available. The cost of spawning workers (~15-30s per worker) is recovered when items take >2 minutes each.
 
 <rationale name="execution_routing_decisions">
 
-- **1-2 small items → single subagent:** Worker spawn overhead (~15-30s) exceeds the time to apply the fix directly. The coordination cost of parallel workers outweighs the benefit for small changes.
-- **3+ independent items → parallel workers:** When items touch different modules with no file overlap, parallelism gain exceeds spawn overhead. Each worker operates in an isolated worktree, eliminating merge conflicts.
-- **Mixed trivial + substantial → split approach:** Spawning a worker for a 1-line fix wastes resources. Trivial items execute faster inline while substantial items benefit from isolation.
-- **20+ surgical items → single subagent, batched:** Worker overhead multiplied by 20+ exceeds sequential execution time. Grouping by file minimizes file I/O and keeps context coherent.
+- **1-2 items → single subagent:** Worker spawn overhead exceeds the fix time. Coordination cost outweighs benefit.
+- **3+ items in different files → workers:** Each worker operates in an isolated worktree, eliminating merge conflicts. Workers can run the full Forge protocol independently — if one item needs investigation, its worker can explore without blocking the others.
+- **Historical evidence:** In past sessions, epics with 7+ independent items were always dispatched to a single sequential subagent — even when the user explicitly requested parallelization. The mandatory checkpoint above prevents this.
+- **Why workers over background task():** A background `task()` subagent is "dumb" — it cannot spawn further subagents, invoke experts-council, or delegate sub-tasks. Workers are full Copilot peers with the complete capability stack.
 
 </rationale>
 
