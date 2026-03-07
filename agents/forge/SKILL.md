@@ -132,10 +132,14 @@ User message
 │             "decompose", "user stories", "plan the implementation"
 │
 ├── Dispatch (implementation)
-│   └── Construct Mission Brief → task() subagent or parallel workers
+│   └── Route via dispatch decision:
+│       1-2 items or overlapping files → task() subagent
+│       3+ independent items → copilot-cli-skill workers (see Worker Spawning Protocol)
 │   Triggers: "implement", "fix", "do your job", "work on epic",
 │             "proceed", "keep going", "build", "refactor", "migrate"
-│   YOUR ACTION: Build Mission Brief. Call task(). Report result.
+│   KEY CONSTRAINT: task() subagents CANNOT call task() (no nesting).
+│   Workers CAN call task(), load skills, and run full Forge protocol.
+│   YOUR ACTION: Run dispatch routing → Build Mission Brief → dispatch.
 │   NOT YOUR ACTION: edit files, create files, run builds, run tests.
 │
 ├── Verify
@@ -199,20 +203,22 @@ Everything else gets delegated — regardless of project size, fix complexity, o
 
 ## Pressure Signal Reinterpretation
 
-All user pressure signals ("proceed", "just fix it", "do your job") mean: dispatch a subagent now.
+All user pressure signals ("proceed", "just fix it", "do your job") mean: dispatch now. Run the Dispatch Routing decision to select the mechanism.
 
 | User says | You hear | You do |
 |-----------|----------|--------|
-| "proceed" | "dispatch next item" | `task()` with Mission Brief |
-| "do it" | "dispatch now" | `task()` with Mission Brief |
-| "just fix it" | "dispatch immediately" | `task()` with Mission Brief |
-| "keep going" | "dispatch next" | `task()` with Mission Brief |
-| "stop asking, implement" | "dispatch without questions" | `task()` with Mission Brief |
-| "do your job" | "dispatch" | `task()` with Mission Brief |
-| "continue" | "dispatch next item" | `task()` with Mission Brief |
-| "yes" (after plan) | "dispatch the plan" | `task()` with Mission Brief |
+| "proceed" | "dispatch next item" | Dispatch via routing decision |
+| "do it" | "dispatch now" | Dispatch via routing decision |
+| "just fix it" | "dispatch immediately" | Dispatch via routing decision |
+| "keep going" | "dispatch next" | Dispatch via routing decision |
+| "stop asking, implement" | "dispatch without questions" | Dispatch via routing decision |
+| "do your job" | "dispatch" | Dispatch via routing decision |
+| "continue" | "dispatch next item" | Dispatch via routing decision |
+| "yes" (after plan) | "dispatch the plan" | Dispatch via routing decision |
+| "parallelize" | "use workers" | copilot-cli-skill workers |
 
 There is no user signal that means "edit files yourself in the main context."
+Always run the Dispatch Routing decision (from forge.agent.md) to select task() vs copilot-cli-skill workers.
 ---
 
 <examples>
@@ -299,7 +305,7 @@ Coordinator: "On it. Dispatching now."
 ## Dispatch Protocol
 
 <rule name="dispatch-not-edit">
-The coordinator does not edit, create, or build. It constructs Mission Briefs and dispatches subagents via `task()`. If a task requires changing source files, running builds, or running tests, dispatch a subagent.
+The coordinator does not edit, create, or build. It constructs Mission Briefs and dispatches via `task()` or `copilot-cli-skill` workers (per the Dispatch Routing decision). If a task requires changing source files, running builds, or running tests, dispatch.
 </rule>
 
 <rationale>
@@ -308,7 +314,8 @@ Subagents run in fresh context windows with their full token budget dedicated to
 
 ### Coordinator Toolkit
 
-- **task** — Primary tool. Dispatch subagents with Mission Briefs.
+- **task** — Single-item dispatch. Subagents with Mission Briefs.
+- **copilot-cli-skill** — Parallel dispatch. Workers in isolated git worktrees.
 - **skill** — Load skills (forge, backlog, experts-council, etc.)
 - **view/grep/glob** — Orient yourself. Read files to build context for Mission Briefs.
 - **bash** — Git commands, backlog CLI, hub CLI. Read-only operations.
@@ -317,13 +324,14 @@ Subagents run in fresh context windows with their full token budget dedicated to
 ### Pre-Dispatch Checkpoint
 
 Before each tool call, run this mental check:
-- About to call `edit` or `create`? → Pause and dispatch instead. Build a Mission Brief → `task()`.
-- About to call `bash` with build/test? → Pause and dispatch instead. Build a Mission Brief → `task()`.
+- About to call `edit` or `create`? → Pause and dispatch instead. Build a Mission Brief.
+- About to call `bash` with build/test? → Pause and dispatch instead. Build a Mission Brief.
 - About to answer a codebase question inline? → Dispatch an explore subagent.
+- About to dispatch 3+ independent items? → Use copilot-cli-skill workers, not a single task().
 
 ### Dispatch Isolation
 
-When calling `task()`, it should be the only mutating tool in that response. You may combine `task()` with read-only tools (view, grep, glob) that gather context before the dispatch, but do not combine `task()` with `edit`, `create`, or build/test bash.
+When dispatching, it should be the only mutating tool in that response. You may combine dispatch with read-only tools (view, grep, glob) that gather context before the dispatch, but do not combine dispatch with `edit`, `create`, or build/test bash.
 
 ### bash Usage Policy
 
@@ -340,11 +348,11 @@ Do not use bash for:
 - Test commands: `npm test`, `dotnet test`, `pytest`, `cargo test`
 - Package install: `npm install`, `pip install`, `dotnet add`
 
-If you need to build, test, or modify files → delegate to a `task` subagent.
+If you need to build, test, or modify files → delegate via dispatch routing.
 
 ### Post-Dispatch Protocol
 
-After `task()` returns a REPORT, your job for that dispatch is done. Follow this sequence:
+After a dispatch returns (task() REPORT or workers complete), your job for that dispatch is done. Follow this sequence:
 
 1. **Summarize** — Tell the user the outcome (STATUS + SUMMARY from REPORT)
 2. **Bookkeep** — Update backlog item status, post to hub if needed
@@ -676,45 +684,57 @@ A `task()` subagent (Level 1) cannot spawn its own subagents — it's limited to
 | 1-2 items, or all items in same file | | ✅ |
 | Items are trivial (< 20 lines each, same module) | | ✅ |
 
-### Spawn Ceremony (Simplified)
+### When NOT to Use Workers
 
-```bash
-# Step 1: Load the skill
+Workers have ~15-30s spawn overhead per instance. Do NOT use workers when:
+- **Single item** — task() is faster, no nesting needed
+- **Items share files** — git merge conflicts defeat the purpose of isolation
+- **Items are trivial** — < 20 lines each, same module → single task() handles them sequentially in seconds
+- **Quick exploration** — use explore agent, not a worker
+
+The Dispatch Routing decision in forge.agent.md and the intent classification above are the authoritative decision points.
+
+### Spawn Ceremony
+
+**Step 1: Load the skill**
+```
 skill("copilot-cli-skill")
+```
 
-# Step 2: Set the worker command shorthand
+**Step 2: Spawn workers** (one per independent group)
+```bash
 WORKER="node <skill-dir>/scripts/index.js --repo-root ."
 
-# Step 3: Spawn each worker with a Mission Brief
-$WORKER exec --agent Forge --autopilot \
-  'return sdk.spawnWorker("Invoke the `forge-execute` skill as your first action.\nAlso invoke the `backend-architecture` skill.\n\n## Mission\nImplement B-055.3: [description]\n\n## Context\n[findings]\n\n## Constraints\n- Scope: [files]\n\n## Expected Output\nReturn a REPORT with: STATUS, SUMMARY, ARTIFACTS, NEXT")'
+# Worker 1
+$WORKER exec --agent Forge --autopilot 'return sdk.spawnWorker(`
+Invoke the \`forge-execute\` skill as your first action.
+Also invoke the \`backend-architecture\` skill.
 
-# Step 4: Repeat for each independent group
-$WORKER exec --agent Forge --autopilot \
-  'return sdk.spawnWorker("[next mission brief]")'
+## Mission
+[Clear objective for this group]
 
-# Step 5: Check all workers spawned
-$WORKER exec 'return sdk.listAll()'
+## Context
+[Relevant findings, code refs, constraints]
+
+## Constraints
+- Scope: [files this worker touches]
+
+## Expected Output
+Return a REPORT with: STATUS, SUMMARY, ARTIFACTS, NEXT
+`)'
+
+# Worker 2 — same pattern, different mission
+$WORKER exec --agent Forge --autopilot 'return sdk.spawnWorker(`[Mission Brief 2]`)'
 ```
 
-### Post-Spawn Monitoring
-
+**Step 3: Monitor and merge**
 ```bash
-# Check status of all workers
-$WORKER exec 'return sdk.listAll()'
-
-# Check specific worker
-$WORKER exec 'return sdk.checkWorker("<worker-id>")'
-
-# After all complete: clean up
-$WORKER exec 'return sdk.cleanupAll()'
+$WORKER exec 'return sdk.listAll()'                    # Status of all
+$WORKER exec 'return sdk.checkWorker("<worker-id>")'   # Specific worker
+$WORKER exec 'return sdk.cleanupAll()'                  # After all complete
 ```
 
-After workers complete:
-1. Review each worker's output (check hub for results)
-2. Merge branches if workers used separate branches
-3. Run integration tests across all changes
-4. Update backlog items to done
+After all workers complete → review → merge branches → update backlog.
 
 <examples>
 <example type="right">
