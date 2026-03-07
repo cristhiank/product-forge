@@ -134,6 +134,8 @@ When Forge delegates to a subagent via `task`, it must package context:
 4. Code snippets — only code the subagent needs to see
 5. Constraints — scope boundaries, forbidden files, time limits
 6. Prior decisions — only if the subagent needs them for context
+7. Design artifacts — when DESIGN phase completed, include agreed contracts
+8. Tier classification — so the subagent knows the complexity level
 ```
 
 ### What NOT to Include
@@ -160,6 +162,10 @@ You are operating in [MODE] mode.
 ## Context
 [relevant findings, code snippets, constraints]
 
+## Design Contracts (when available)
+[agreed types, interfaces, and signatures from DESIGN phase]
+[Note: these contracts are FROZEN — deviations require escalation]
+
 ## Expected Output
 [what format the response should be in]
 ```
@@ -180,10 +186,57 @@ After any phase completes, Forge automatically:
 | Completed Phase | Default Next | Alternative |
 |----------------|-------------|-------------|
 | REVIEW (findings) | PLAN (create items) | Report to user if informational only |
+| IDEATE (approach selected) | DESIGN (T2+) | PLAN directly for T1 |
+| DESIGN (contracts agreed) | PLAN (grounded in contracts) | EXECUTE if plan is trivial (T2) |
 | PLAN (epic created) | Wait for user "proceed" | Auto-proceed if user said "work on it" |
 | EXECUTE (items done) | VERIFY (review results) | Skip if trivial (T1) |
 | VERIFY (clean) | ITERATE (what's next) | PLAN if findings need new items |
 | VERIFY (findings) | PLAN (new items) | Report if informational only |
+
+---
+
+## Design-Depth Calibration
+
+When routing through the DESIGN phase, Forge selects the entry point based on task tier:
+
+| Forge Tier | Design Entry | Levels Covered | Rationale | Examples |
+|-----------|-------------|----------------|-----------|---------|
+| T1 (0-2) | Skip DESIGN | None | No design needed, overhead not justified | Date formatter, typo fix, config change |
+| T2 (3-4) | Level 4: Contracts | Contracts only | Single component — just align interfaces | Validation helper, new API endpoint |
+| T3 (5-6) | Level 2: Components | Components → Interactions → Contracts | Multi-component — need architectural alignment | Notification service, auth flow |
+| T4-T5 (7+) | Level 1: Capabilities | Full progression (all 4 levels) | System integration — need full scope + design | Third-party API, event pipeline, payment integration |
+
+### Design Routing Decision
+
+```
+Approach selected (from IDEATE or user)
+│
+├── Tier classification available?
+│   ├── No → Dispatch EXPLORE first to classify tier
+│   └── Yes ↓
+│
+├── T1 (0-2)
+│   └── Skip DESIGN → route to PLAN or direct EXECUTE
+│
+├── T2 (3-4)
+│   └── DESIGN (Level 4 only: Contracts)
+│       Brief session — align types/signatures, then → PLAN
+│
+├── T3 (5-6)
+│   └── DESIGN (Level 2→4: Components, Interactions, Contracts)
+│       Standard design — catch architectural misalignment, then → PLAN
+│
+└── T4-T5 (7+)
+    └── DESIGN (Level 1→4: Full Capabilities through Contracts)
+        Thorough design — full scope alignment, then → PLAN
+```
+
+### User Override
+
+The user can always override design depth:
+- "Skip the design" → route to PLAN directly (note: design skipped)
+- "Just give me contracts" → DESIGN Level 4 only
+- "Full design please" → DESIGN Level 1→4 regardless of tier
 
 ---
 

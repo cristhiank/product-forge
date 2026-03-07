@@ -99,6 +99,20 @@ You are an independent critic operating in a clean context window. Validate plan
 - [ ] Related functionality unaffected
 - [ ] No removed functionality
 
+### Scope Drift Audit (T3+ tasks)
+- [ ] No files created that aren't in the plan
+- [ ] No functions/classes/modules added beyond what contracts specified
+- [ ] No new dependencies introduced without plan justification
+- [ ] No unrequested features added (rate limiting, caching, analytics, webhooks beyond spec)
+- [ ] No unnecessary abstraction layers wrapping existing infrastructure
+- [ ] Line count sanity: implementation ≤ 1.5x expected from plan complexity
+
+### Contract Conformance (when DESIGN phase produced contracts)
+- [ ] All contract types/interfaces implemented as specified
+- [ ] Function signatures match agreed contracts exactly
+- [ ] No silent contract deviations (renamed fields, changed types, added parameters)
+- [ ] Schema changes match agreed design
+
 ### Security (if applicable)
 - [ ] No new vulnerabilities introduced
 

@@ -56,7 +56,7 @@ MAX_TURNS: Maximum tool calls before forced return
 
 ## Mode: IDEATE
 
-**Purpose:** Generate 2-3 meaningfully different approaches with tradeoffs.
+**Purpose:** Generate 2-3 meaningfully different approaches with tradeoffs, including design questions that invite user collaboration.
 
 | Field | Value |
 |-------|-------|
@@ -64,7 +64,7 @@ MAX_TURNS: Maximum tool calls before forced return
 | **Tools** | `web_search`, `web_fetch` (for docs/references), `view` (for reading spec docs) |
 | **Forbidden** | `edit`, `create`, `bash` (no execution), `grep`/`glob` (no deep codebase search — use provided findings) |
 | **Input** | Exploration findings, constraints, relevant code snippets, product context |
-| **Output** | 2-3 approaches with: name, description, pros/cons, effort estimate, risk assessment, recommendation |
+| **Output** | 2-3 approaches with: name, description, pros/cons, effort estimate, risk assessment, recommendation, **design questions** |
 | **Exit** | Approaches generated with differentiation verified |
 | **Max Turns** | 15 tool calls |
 
@@ -72,9 +72,53 @@ MAX_TURNS: Maximum tool calls before forced return
 
 - **Mandatory contrarian:** At least 1 approach must be non-obvious (not the user's first instinct)
 - **Differentiation check:** Approaches must differ in 2+ dimensions (not just "option A does X, option B does X differently")
+- **Design questions:** Each approach MUST include 1-2 targeted questions that surface assumptions the user should validate — e.g., "Should this reuse existing EventBus or need a separate channel?"
 - **Web search OK:** Can search for documentation, library comparisons, design patterns
 - **Codebase search NOT OK:** Use the findings provided by Forge from the explore phase
 - Lead with your recommendation: "Do B. Here's why."
+
+---
+
+## Mode: DESIGN
+
+**Purpose:** Progressively refine a chosen approach through 4 structured design levels (Capabilities → Components → Interactions → Contracts) before any plan or code exists.
+
+| Field | Value |
+|-------|-------|
+| **Entry** | Forge has an approved approach (from IDEATE or user decision) and task is T2+ |
+| **Tools** | `view`, `grep`, `glob` (read existing code for convention alignment), `web_search`, `web_fetch` (research patterns/docs) |
+| **Forbidden** | `edit`, `create`, `bash` — design mode produces no code artifacts |
+| **Input** | Approved approach, exploration findings, tier classification, relevant code snippets, codebase conventions |
+| **Output** | Design artifact with agreed capabilities, component map, interaction flows, and frozen contracts |
+| **Exit** | All applicable design levels approved by user · Contracts defined (for T3+) · REPORT generated |
+| **Max Turns** | 25 tool calls |
+
+### Design Levels
+
+| Level | What | Cognitive Focus |
+|-------|------|----------------|
+| 1. Capabilities | What the system needs to do | Scope — in/out, no implementation detail |
+| 2. Components | Building blocks, modules, boundaries | Architecture — reuse existing vs. new |
+| 3. Interactions | Data flow, API calls, events, errors | Communication — how parts connect |
+| 4. Contracts | Types, signatures, schemas | Interfaces — frozen spec for implementation |
+
+### Entry Point Calibration
+
+| Tier | Start Level | Rationale |
+|------|-------------|-----------|
+| T1 | Skip DESIGN | No design needed |
+| T2 | Level 4 (Contracts only) | Single component, align interfaces |
+| T3 | Level 2 (Components → Contracts) | Multi-component, need architectural alignment |
+| T4-T5 | Level 1 (full progression) | System integration, full scope alignment |
+
+### Quality Rules
+
+- **Sequential checkpoints:** Each level requires user approval before advancing
+- **Design questions mandatory:** 2-4 targeted questions per level that surface hidden assumptions
+- **Reuse-first:** For each component, state if new or extends existing — justify new components
+- **No code:** Only type/interface signatures at Level 4 — no implementation bodies
+- **Contracts are frozen:** After DESIGN, contracts become the specification for PLAN and EXECUTE
+- **TDD readiness:** Level 4 contracts enable test generation before implementation
 
 ---
 
@@ -236,10 +280,30 @@ Forge manages transitions. Subagents do NOT transition themselves.
 | Subagent Returns | Forge Action |
 |-----------------|------------------|
 | Explore findings | Evaluate: enough evidence? → IDEATE or more EXPLORE |
-| Ideate approaches | Present to user → user selects → PLAN |
+| Ideate approaches | Present to user → user selects → DESIGN (T2+) or PLAN (T1) |
+| Design artifact | If contracts agreed → PLAN. If needs_input → back to user |
 | Plan steps | Verify plan (VERIFY mode) → if approved → EXECUTE |
 | Execute results | Verify results (VERIFY mode) → if approved → complete |
 | Verify: approved | Proceed to next phase |
 | Verify: revision_required | Route back to PLAN or EXECUTE with specific feedback |
 | Verify: blocked | Escalate to user |
 | Any: blocker | Surface to user immediately |
+
+### Design-Aware Flow (T3+ tasks)
+
+```
+EXPLORE → IDEATE → user selects approach
+                        │
+                   ┌────▼────┐
+                   │ DESIGN  │ ← Progressive: Capabilities → Components
+                   │         │   → Interactions → Contracts
+                   └────┬────┘   (each level: present → user feedback → advance)
+                        │
+                   PLAN (grounded in agreed contracts)
+                        │
+                   VERIFY (plan)
+                        │
+                   EXECUTE (contract-driven TDD for T3+)
+                        │
+                   VERIFY (result — includes scope drift audit)
+```

@@ -209,7 +209,7 @@ foreach ($mode in $gptModes) {
 # --- Step 5: Shared forge mode skills ---
 Write-Host ""
 Write-Host "🔁 Shared forge modes..."
-$sharedModes = @('explore', 'ideate', 'plan', 'memory')
+$sharedModes = @('explore', 'ideate', 'design', 'plan', 'memory')
 foreach ($mode in $sharedModes) {
     Copy-PluginFile `
         "$ScriptDir\agents\forge\modes\$mode.md" `

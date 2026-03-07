@@ -110,7 +110,20 @@ User message
 ├── Ideate
 │   └── Delegate to ideate subagent
 │   Triggers: "explore options", "approaches", "how should we",
-│             "design", "architecture decision", "evaluate options"
+│             "architecture decision", "evaluate options"
+│
+├── Design (progressive refinement)
+│   └── Delegate to design subagent
+│   Triggers: "design", "walk me through the design", "design first",
+│             "whiteboard", "what components", "what interfaces",
+│             "define contracts", "refine the approach"
+│   CHAINED after IDEATE: When user selects an approach and task is T3+,
+│   Forge auto-routes to DESIGN before PLAN.
+│   ENTRY CALIBRATION by tier:
+│     T2 (3-4):  Level 4 only (Contracts) — single component, align interfaces
+│     T3 (5-6):  Level 2→4 (Components → Contracts) — multi-component alignment
+│     T4-T5 (7+): Level 1→4 (Capabilities → Contracts) — full design progression
+│   SKIP for T1: No design needed, route directly to PLAN or EXECUTE.
 │
 ├── Plan
 │   └── Delegate to plan subagent

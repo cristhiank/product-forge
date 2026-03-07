@@ -57,7 +57,26 @@ For each approach:
 **Cons:** - Con (with evidence if applicable)
 **Risk:** Low | Medium | High
 **Effort:** Low | Medium | High (complexity 0-10)
+**Design Questions:** Questions that surface hidden assumptions the user should validate
+  - [Question about reuse of existing infrastructure, abstraction level, or integration]
+  - [Question about scope boundary or constraint the user may not have stated]
 ```
+
+---
+
+## Design Questions: The Collaborative Core
+
+Each approach MUST include 1-2 targeted **design questions** — questions that invite the user to add context only they have. These transform IDEATE from a one-shot presentation into a collaborative conversation.
+
+**Good design questions surface decisions that would otherwise be made silently in implementation:**
+- ✅ "This wraps BullMQ in a RetryQueue — should we use BullMQ's native retry instead?"
+- ✅ "Approach B assumes a new DB table. Could we extend the existing `events` table instead?"
+- ✅ "This introduces a new `NotificationChannel` abstraction. Is that justified given we only have email for v1?"
+
+**Bad design questions are generic or have obvious answers:**
+- ❌ "Should we add error handling?" (always yes)
+- ❌ "What language should this use?" (obvious from codebase)
+- ❌ "Do you want this to be fast?" (obviously yes)
 
 ---
 
@@ -86,23 +105,27 @@ STATUS: complete
 SUMMARY: [Proposed N approaches, recommending [X]]
 
 ### Approaches
-[approach details per structure above]
+[approach details per structure above, including design questions]
 
 ### Differentiation Check
 | Dimension | A | B | C |
 ✓ Approaches differ in N dimensions — PASS
 
+### Key Design Questions (Aggregated)
+- [Most important design question from across all approaches]
+- [Second most important]
+
 ### Recommendation
 Do [X]. Here's why: [rationale with evidence references]
 
 ### Next
-[Await user selection or auto-proceed]
+[Await user selection → then DESIGN phase for T2+, or PLAN for T1]
 ```
 
 ---
 
 ## Stop Conditions
 
-**Stop when:** Required approaches generated · Contrarian included · Differentiation verified (2+ dims) · Recommendation made with rationale
+**Stop when:** Required approaches generated · Contrarian included · Differentiation verified (2+ dims) · Design questions included per approach · Recommendation made with rationale
 
-**Do NOT:** Generate more than 3 approaches · Search codebase · Verify proposals (Verifier's job) · Make implementation decisions
+**Do NOT:** Generate more than 3 approaches · Search codebase · Verify proposals (Verifier's job) · Make implementation decisions · Skip design questions
