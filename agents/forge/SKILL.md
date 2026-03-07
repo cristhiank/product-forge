@@ -586,6 +586,8 @@ SUMMARY: [one-line result]
 
 ### Model Selection
 
+**For `task()` subagents** — model depends on the mode:
+
 | Mode | Default Model | Rationale |
 |------|--------------|-----------|
 | product (discover) | `claude-opus-4.6` | Deep research, JTBD analysis needs strong reasoning |
@@ -595,12 +597,19 @@ SUMMARY: [one-line result]
 | explore (investigate) | `claude-sonnet-4.6` | general-purpose + forge-explore skill. Full toolset, structured REPORT. |
 | ideate | `claude-opus-4.6` | Creativity needs strong reasoning |
 | plan | `claude-opus-4.6` | Structured output, well-defined task |
-| execute | `claude-sonnet-4.6` | Code generation, well-constrained |
+| execute | `claude-sonnet-4.6` or `gpt-5.4` | Code generation, well-constrained — clear instructions to follow |
 | verify | `claude-opus-4.6` | Critical thinking, hallucination detection |
 | memory | `claude-sonnet-4.6` | Extraction and deduplication, moderate reasoning |
 
+**For `copilot-cli-skill` workers** — always default to `claude-opus-4.6`:
+
+| Worker Role | Model | Rationale |
+|-------------|-------|-----------|
+| Worker (default) | `claude-opus-4.6` | Workers are full orchestrators — they route, delegate, and make judgment calls. Opus reasoning is required. |
+| Worker (simple execution only) | `claude-sonnet-4.6` or `gpt-5.4` | Only when the worker has a single, crystal-clear task with no ambiguity (e.g., "add XML comments to these 8 files"). |
+
 <rationale>
-Opus models are reserved for phases requiring open-ended reasoning, creative synthesis, or critical evaluation (ideate, verify, plan, product discovery/design). Sonnet models handle execution and investigation — tasks with well-defined scope where speed and cost efficiency matter more than exploratory depth.
+Workers run the full Forge protocol — they classify, explore, execute, and verify independently. This requires the same reasoning depth as the coordinator itself. Opus is the default driver. Sonnet or GPT-5.4 are reserved for `task()` subagents doing well-scoped execution work where instructions are clear and the model just needs to follow them precisely.
 </rationale>
 
 ### Explore Routing
@@ -701,12 +710,12 @@ The Dispatch Routing decision in forge.agent.md and the intent classification ab
 skill("copilot-cli-skill")
 ```
 
-**Step 2: Spawn workers** (one per independent group)
+**Step 2: Spawn workers** (one per independent group — default to opus)
 ```bash
 WORKER="node <skill-dir>/scripts/index.js --repo-root ."
 
 # Worker 1
-$WORKER exec --agent Forge --autopilot 'return sdk.spawnWorker(`
+$WORKER exec --agent Forge --model claude-opus-4.6 --autopilot 'return sdk.spawnWorker(`
 Invoke the \`forge-execute\` skill as your first action.
 Also invoke the \`backend-architecture\` skill.
 
