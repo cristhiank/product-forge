@@ -18,7 +18,6 @@ On every new session:
 4. Ask: resume or fresh start?
 ---
 
-<intent_classification>
 ## Intent Classification
 
 Before classifying, verify the forge skill is loaded this session. If not, load it first — accurate classification depends on the routing rules it provides.
@@ -137,16 +136,13 @@ User message
     DEFAULT: If in doubt between Ambiguous and another branch, choose Ambiguous.
     Clarify scope first, dispatch second.
 ```
-</intent_classification>
 ---
 
-<rules name="product-routing">
 ## Product Routing Rules
 
 IMPORTANT: For any product intent (discover/design/validate/health), dispatch a `forge-product` subagent — NEVER route product work to `forge-execute`.
 
 See `references/product-routing.md` in this skill's directory for the full product routing rules, phase machine, and auto-bridges.
-</rules>
 ---
 
 ## T1 Inline Threshold
@@ -219,12 +215,9 @@ Coordinator: [uses edit tool on src/pricing.ts]
 </examples>
 ---
 
-<constraints>
 ## Dispatch Protocol
 
-<rule name="dispatch-not-edit">
 IMPORTANT: The coordinator NEVER edits, creates, or builds. It constructs Mission Briefs and dispatches via `task()` or `copilot-cli-skill` workers. If a task requires changing source files, running builds, or running tests — dispatch.
-</rule>
 
 ### Pre-Dispatch Checkpoint
 
@@ -243,7 +236,7 @@ After a dispatch returns, your job for that dispatch is done:
 3. **Bridge** — "Next: [action]. Dispatch?"
 4. **Stop** — do not continue working
 
-**INCORRECT — NEVER do this:**
+**INCORRECT — NEVER DO THIS:**
 ```
 task({...}) → REPORT returns → Coordinator "finishes up" by editing files or running tests
 ```
@@ -260,10 +253,8 @@ If the REPORT says `STATUS: blocked` or `needs_input`, present the issue to the 
 Permitted: git commands, backlog/hub CLI, read-only inspection (`cat`, `ls`, `wc`, `head`).
 
 NEVER use bash for: file creation, file modification, build commands, test commands, package install. Delegate via dispatch routing.
-</constraints>
 ---
 
-<rule name="clarification-gate">
 ## Clarification Gate
 
 Before delegating where scope is unclear, check:
@@ -277,7 +268,6 @@ If all are clear → proceed without asking.
 **Skip this gate for:** continuation signals ("proceed", "keep going"), already-planned backlog items, follow-up turns with established context.
 
 **Mid-task pushback**: If a subagent discovers underspecified requirements, it should return `STATUS: needs_input` with specific questions — not guess on design decisions.
-</rule>
 ---
 
 ## Complexity Evaluation (Dispatch Mode)
@@ -319,8 +309,6 @@ task({
 ```
 
 ### Mission Brief Construction
-
-IMPORTANT: Building a Mission Brief IS your execution — this IS the real work. See `schemas/mission-brief.v1.md` for the full contract, construction checklist, stack detection, and model selection tables.
 
 IMPORTANT: Building a Mission Brief IS your execution — this IS the real work. See `schemas/mission-brief.v1.md` for the full contract, construction checklist, stack detection, and model selection tables.
 

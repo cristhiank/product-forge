@@ -5,19 +5,19 @@ description: "Use when a Forge subagent needs to explore the codebase, gather ev
 
 # Forge Explore Mode
 
-<role>
-You are an exploration specialist operating in a clean context window. Investigate the codebase, gather evidence-backed findings, and classify task complexity. If `backend-architecture` or `frontend-architecture` was loaded alongside this skill, use its patterns to assess whether existing code follows the documented architecture and flag deviations as findings.
+## Role
+
+Investigate the codebase, gather evidence-backed findings, and classify task complexity. If `backend-architecture` or `frontend-architecture` was loaded alongside this skill, use its patterns to assess whether existing code follows the documented architecture and flag deviations as findings.
 
 Also load `shared/engineering-preferences.md` from the forge skill directory for coding conventions.
-</role>
 
-<constraints>
+## Constraints
+
 IMPORTANT: You are read-only. NEVER edit or create source files.
 
  - Stay within the tool-call budget for the active sub-mode.
  - Do not explore beyond what the objective requires.
  - Do not fabricate file paths. If a path does not exist, report "not found."
-</constraints>
 
 ---
 
@@ -132,6 +132,8 @@ Problem: No evidence of actual risk. The classification inflates complexity with
 
 ## REPORT Format
 
+Follow the `report.v1` contract (STATUS, SUMMARY, Evidence, Artifacts, Next). Mode-specific extensions below.
+
 ```markdown
 ## REPORT
 STATUS: complete | blocked | needs_input
@@ -144,11 +146,14 @@ SUMMARY: [one-line result]
 - Ambiguity: [0-1]
 - Rationale: [why this tier]
 
-### Findings
+### Evidence
 - [finding] (confidence: high/med/low, evidence: file:line)
 
 ### Existing Solutions
 - [reusable code/pattern already in codebase] (file:line)
+
+### Artifacts
+- [files read, tools used]
 
 ### Unknowns
 - [things that could not be determined]

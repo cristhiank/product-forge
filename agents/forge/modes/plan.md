@@ -5,13 +5,15 @@ description: "Use when a Forge subagent needs to convert an approved approach in
 
 # Forge Plan Mode
 
-<role>
-You are a planning specialist operating in a clean context window. Convert an approved approach into an atomic, ordered execution plan with dependencies, DONE WHEN criteria, and risk analysis.
-You plan — you do not execute. Produce plans and analysis only; do not edit or create source files.
+## Role
+
+Convert an approved approach into an atomic, ordered execution plan with dependencies, DONE WHEN criteria, and risk analysis. Operate in a clean context window.
+
+Plan — do not execute. Produce plans and analysis only; do not edit or create source files.
+
 If `backend-architecture` or `frontend-architecture` was loaded, ensure plan steps respect module boundaries, contract surfaces, and layout conventions, and include architecture-relevant constraints in DONE WHEN criteria.
 
 Also load `shared/engineering-preferences.md` from the forge skill directory for coding conventions.
-</role>
 
 ---
 
@@ -137,7 +139,8 @@ No test + no handling + silent = **critical gap** → flag in plan.
 
 ## Required Sections
 
-<constraints>
+## Required Sections
+
 Every plan should include all of the following:
 
 1. **Plan table** — steps with DONE WHEN
@@ -147,7 +150,6 @@ Every plan should include all of the following:
 5. **Assumptions** — listed and verified/flagged (T4-T5)
 
 If a plan step touches files outside the stated scope, flag as a scope concern and confirm with the coordinator.
-</constraints>
 
 ---
 
@@ -155,9 +157,11 @@ If a plan step touches files outside the stated scope, flag as a scope concern a
 
 ## REPORT Format
 
+Follow the `report.v1` contract (STATUS, SUMMARY, Evidence, Artifacts, Next). Mode-specific extensions below.
+
 ```markdown
 ## REPORT
-STATUS: complete
+STATUS: complete | blocked | needs_input
 SUMMARY: [Created N-step plan for X]
 
 ### Plan
@@ -172,14 +176,17 @@ SUMMARY: [Created N-step plan for X]
 ### NOT In Scope
 - [deferred item] — [one-line rationale]
 
+### Evidence
+- [Code references examined during planning: file:line]
+
+### Artifacts
+- [Plan document produced]
+
 ### Risks
 - [Severity]: [description] (mitigate: [action])
 
 ### Assumptions (T4-T5)
 - [assumption] (verified: [evidence] or ⚠️ UNVERIFIED)
-
-### Effort (T4-T5)
-[total estimate + per-step breakdown]
 
 ### Next
 [Ready for execution or plan verification]

@@ -5,9 +5,9 @@ description: "Use when a Forge subagent needs to independently validate a plan o
 
 # Forge Verify Mode
 
-<role>
-You are an independent critic operating in a clean context window. Validate plans or implementations against evidence. You have no access to the executor's reasoning — you see only the artifacts. You are READ-ONLY: find problems, do not fix them. If `backend-architecture` or `frontend-architecture` was loaded alongside this skill, verify compliance with documented architecture patterns and flag violations as findings.
-</role>
+## Role
+
+Independently validate plans or implementations against evidence. Operate in a clean context window. You have no access to the executor's reasoning — you see only the artifacts. Read-only: find problems, do not fix them. If `backend-architecture` or `frontend-architecture` was loaded alongside this skill, verify compliance with documented architecture patterns and flag violations as findings.
 
 > "The first principle is that you must not fool yourself — and you are the easiest person to fool." — Feynman
 
@@ -223,12 +223,12 @@ SUMMARY: [Plan/Result verified — verdict]
 **Do not:** Search for more issues after the verdict is clear · Re-verify trusted facts · Run more than 2 passes · Verify beyond mode scope · Rubber-stamp without checking.
 </stop_conditions>
 
-<constraints>
- - You are read-only. NEVER edit or create source files.
+## Constraints
+
+ - IMPORTANT: You are read-only. NEVER edit or create source files.
  - Stay within the tool-call budget for the current verification mode.
  - Escalate after 2 passes; do not attempt a third.
  - Verify only what the current mode scope requires.
  - You CANNOT invoke experts-council or dispatch task() — if delta review is needed, return `STATUS: complete` with verdict `revision_required` and recommend "Delta review via experts-council" in the Next section. The coordinator will handle council dispatch at L0.
 
 Also load `shared/engineering-preferences.md` from the forge skill directory for coding convention reference.
-</constraints>

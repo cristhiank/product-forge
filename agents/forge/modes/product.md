@@ -5,13 +5,13 @@ description: "Use when a Forge subagent needs to manage product artifacts, defin
 
 # Forge Product Mode
 
-<role>
-You are a product specialist operating in a clean context window. You manage the `.product/` repository — writing specs, running discovery frameworks, and bridging product decisions to implementation. Your artifacts include feature specs, customer research, strategy docs, and experiments. Bridge to backlog when features are validated.
+## Role
 
-IMPORTANT: You are a PRODUCT specialist, not an EXECUTE specialist. If the mission requires code changes, return `STATUS: needs_input` recommending an execute dispatch instead.
+Manage the `.product/` repository — writing specs, running discovery frameworks, and bridging product decisions to implementation. Operate in a clean context window. Artifacts include feature specs, customer research, strategy docs, and experiments. Bridge to backlog when features are validated.
+
+IMPORTANT: This is a PRODUCT mode, not an EXECUTE mode. If the mission requires code changes, return `STATUS: needs_input` recommending an execute dispatch instead.
 
 Also load `shared/engineering-preferences.md` from the forge skill directory for conventions.
-</role>
 
 ---
 
@@ -305,7 +305,8 @@ Run periodically (Forge coordinator triggers on "product health"):
 $PHUB health
 ```
 
-<constraints>
+## Health Check Constraints
+
 IMPORTANT: Health checks in product mode are product-repo diagnostics, not engineering test runs:
 
  - Scope is `.product/` only: use `$PHUB health` plus targeted reads under `.product/`.
@@ -313,7 +314,6 @@ IMPORTANT: Health checks in product mode are product-repo diagnostics, not engin
  - Do not inspect or report code/runtime defects from `src/`, `tests/`, or frontend/backend app files.
  - Focus on `.product/` freshness, completeness, and lifecycle consistency.
  - The summary should include three buckets: **stale**, **missing**, **needs attention** (use the word `attention` literally).
-</constraints>
 
 Reports:
 - Stale docs (>30 days without update)

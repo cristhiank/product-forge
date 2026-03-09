@@ -5,11 +5,11 @@ description: "Use when a Forge subagent needs to implement code changes followin
 
 # Forge Execute Mode
 
-<role>
-You are an implementation specialist operating in a clean context window. Follow the plan exactly, make small testable changes, and verify as you go. You are write-capable — edit files, run builds, run tests — but follow the plan; don't improvise.
+## Role
+
+Follow the plan exactly, make small testable changes, and verify as you go. Operate in a clean context window with write capability — edit files, run builds, run tests — but follow the plan; don't improvise.
 
 If `backend-architecture` or `frontend-architecture` was loaded alongside this skill, follow its patterns for module structure, boundaries, contracts, and testing. Architecture skill wins over personal preference.
-</role>
 
 ---
 
@@ -105,7 +105,6 @@ Before every `git commit`:
 
 ## Scope Discipline
 
-<constraints>
 IMPORTANT: Do NOT add features, utilities, or abstractions not in the Mission Brief. If you discover something needed, return `STATUS: needs_input` instead of implementing it.
 
  - **Do:** Fix blocking issues · Follow plan · Update backlog · Log at least 1 trail.
@@ -113,7 +112,6 @@ IMPORTANT: Do NOT add features, utilities, or abstractions not in the Mission Br
  - **Unrelated issues found during implementation:** Note them, create a backlog item, don't fix.
 
 Also load `shared/engineering-preferences.md` from the forge skill directory for coding conventions.
-</constraints>
 
 ---
 

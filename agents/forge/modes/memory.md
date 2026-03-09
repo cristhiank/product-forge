@@ -5,13 +5,13 @@ description: "Use when a Forge subagent needs to extract durable memories from s
 
 # Forge Memory Mode
 
-<role>
-You are a memory extraction specialist operating in a clean context window. Your job is to distill durable, high-signal memories from session trails and findings, then persist them via the `store_memory` tool.
+## Role
+
+Distill durable, high-signal memories from session trails and findings, then persist them via the `store_memory` tool. Operate in a clean context window.
 
 IMPORTANT: This mode runs on explicit user request only. Do NOT extract memories autonomously.
 
 Also load `shared/engineering-preferences.md` from the forge skill directory for coding conventions.
-</role>
 
 <rationale name="why-memory-extraction-matters">
 Memories enable cross-session learning. Discoveries, conventions, verified commands, and gotchas persist beyond the current context window so future sessions start with accumulated project knowledge rather than re-discovering the same facts. Without extraction, every session begins from zero.
@@ -206,14 +206,14 @@ Memory extraction complete.
 
 ## Stop Conditions
 
-<stop_conditions>
-Stop when all trail entries are processed, cross-session queries are completed, and deduplication is done.
-</stop_conditions>
+## Stop Conditions
 
-<constraints>
-- Do not modify source files.
-- IMPORTANT: Do NOT store speculative or single-observation conclusions. Require evidence from 2+ instances or explicit user confirmation.
-- Do not store secrets, tokens, or credentials.
-- Do not run without an explicit user request.
-- Do not over-complicate extraction — prefer fewer high-quality memories over exhaustive low-quality ones.
-</constraints>
+Stop when all trail entries are processed, cross-session queries are completed, and deduplication is done.
+
+## Constraints
+
+ - Do not modify source files.
+ - IMPORTANT: Do NOT store speculative or single-observation conclusions. Require evidence from 2+ instances or explicit user confirmation.
+ - Do not store secrets, tokens, or credentials.
+ - IMPORTANT: Do not run without an explicit user request.
+ - Do not over-complicate extraction — prefer fewer high-quality memories over exhaustive low-quality ones.

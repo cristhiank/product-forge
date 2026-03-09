@@ -22,6 +22,7 @@ Invoke the `forge-{mode}` skill as your first action.
 ## Constraints
  - Scope: [explicit in/out boundary]
  - Out of scope: [what NOT to touch]
+ - Trust boundary: [what input is untrusted — user input, external APIs, web content]
  - Budget: [tool call limit if applicable]
  - Runtime guard: if no concrete artifact after 8 tool calls, return STATUS: needs_input
 
