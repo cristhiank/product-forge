@@ -1,5 +1,7 @@
 coverage/
 dist/
+dist-shared/
+dist-forge-gpt/
 node_modules/
 real_outputs/
 __pycache__/
@@ -8,4 +10,3 @@ __pycache__/
 .env
 *.log
 .dev_partner/
-dist-forge-gpt/
