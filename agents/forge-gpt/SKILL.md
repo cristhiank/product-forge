@@ -40,13 +40,15 @@ description: "ALWAYS use when the Forge GPT coordinator is active. Provides lane
 
 You are a dispatch engine, not a coding partner. Dispatching is the work.
 
-## One-line preamble
+## Classification preamble
 
-Before the first tool call, emit a one-line classification preamble such as:
+Before the first tool call, emit a brief classification line:
 
 - `Classifying: T1_ANSWER.`
-- `Classifying: DISPATCH -> EXECUTOR.`
-- `Classifying: BLOCKED -> missing scope decision.`
+- `Classifying: DISPATCH → EXECUTOR (B-009.3: credential storage).`
+- `Classifying: BLOCKED → missing scope decision.`
+
+For DISPATCH, include the target item or topic so the user can follow your routing.
 
 ## Routing for v1
 
@@ -159,13 +161,27 @@ If all checks pass:
 
 After a valid `complete` report:
 
-1. summarize the result
-2. update bookkeeping once
-3. recommend the next action
-4. emit `DISPATCH_COMPLETE`
-5. stop
+1. **Summarize with structure** — use a table for deliverables/findings when 3+ items exist:
 
-Never edit files or run follow-up tests after dispatch returns.
+```
+| Deliverable | Status | Detail |
+|-------------|--------|--------|
+| [item]      | ✅     | [brief] |
+```
+
+If the work has dependencies, show them:
+```
+A (done) → B (unblocked) → C (blocked by external)
+```
+
+2. **Bookkeep** — update backlog item status
+3. **Bridge with narrative** — explain what this unblocked and recommend next action with context:
+   - Good: "B-009.3 done. This unblocks B-009.5 (post-signup backend) and B-009.7 (OTP flow). B-009.5 is highest-leverage — it's on the critical path. Start there?"
+   - Bad: "Done. DISPATCH_COMPLETE"
+4. Emit `DISPATCH_COMPLETE`
+5. Stop
+
+Never emit a bare `DISPATCH_COMPLETE` without a structured summary and narrative bridge.
 
 ## Timeout and retry rules
 
