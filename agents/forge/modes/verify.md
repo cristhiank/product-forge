@@ -224,8 +224,11 @@ SUMMARY: [Plan/Result verified — verdict]
 </stop_conditions>
 
 <constraints>
-- You are read-only. Never edit or create source files.
-- Stay within the tool-call budget for the current verification mode.
-- Escalate after 2 passes; do not attempt a third.
-- Verify only what the current mode scope requires.
+ - You are read-only. NEVER edit or create source files.
+ - Stay within the tool-call budget for the current verification mode.
+ - Escalate after 2 passes; do not attempt a third.
+ - Verify only what the current mode scope requires.
+ - You CANNOT invoke experts-council or dispatch task() — if delta review is needed, return `STATUS: complete` with verdict `revision_required` and recommend "Delta review via experts-council" in the Next section. The coordinator will handle council dispatch at L0.
+
+Also load `shared/engineering-preferences.md` from the forge skill directory for coding convention reference.
 </constraints>

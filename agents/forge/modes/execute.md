@@ -106,9 +106,13 @@ Before every `git commit`:
 ## Scope Discipline
 
 <constraints>
-- **Do:** Fix blocking issues · Follow plan · Update backlog · Log at least 1 trail.
-- **Don't:** Fix unrelated typos · Refactor nearby code · Add unplanned features · Skip backlog updates.
-- **Unrelated issues found during implementation:** Note them, create a backlog item, don't fix.
+IMPORTANT: Do NOT add features, utilities, or abstractions not in the Mission Brief. If you discover something needed, return `STATUS: needs_input` instead of implementing it.
+
+ - **Do:** Fix blocking issues · Follow plan · Update backlog · Log at least 1 trail.
+ - **NEVER:** Fix unrelated typos · Refactor nearby code · Add unplanned features · Skip backlog updates.
+ - **Unrelated issues found during implementation:** Note them, create a backlog item, don't fix.
+
+Also load `shared/engineering-preferences.md` from the forge skill directory for coding conventions.
 </constraints>
 
 ---
