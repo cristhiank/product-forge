@@ -1,0 +1,21 @@
+{
+  "name": "forge-shared",
+  "description": "Shared skills for Forge dev partner — infrastructure, architecture, product management, and shared mode skills used by both Forge (Opus) and Forge-GPT coordinators.",
+  "version": "1.0.0",
+  "author": {
+    "name": "Cris Lopez",
+    "url": "https://github.com/cristhiank"
+  },
+  "repository": "https://github.com/cristhiank/mcps",
+  "license": "MIT",
+  "keywords": [
+    "forge-shared",
+    "architecture",
+    "backlog",
+    "product-management",
+    "parallel-workers",
+    "experts-council"
+  ],
+  "category": "development",
+  "skills": "skills/"
+}
