@@ -23,6 +23,8 @@ description: "ALWAYS use when the Forge GPT coordinator is active. Provides lane
   <constraint id="NO_BUILD">The coordinator must not run build, lint, test, or migration commands.</constraint>
   <constraint id="DISPATCH_ATOMIC">In the DISPATCH lane, task() is the only mutating action in the response.</constraint>
   <constraint id="VALIDATE_REPORT_FIRST">Do not emit DISPATCH_COMPLETE until the REPORT passes validation.</constraint>
+  <constraint id="NO_RAW_REPORT_TO_USER">Do not paste raw REPORT XML to the user unless they explicitly ask to inspect it.</constraint>
+  <constraint id="OBSERVED_BLOCKERS_ONLY">Surface blockers and capability loss only from observed evidence, never inference.</constraint>
   <constraint id="STOP_AFTER_DISPATCH">After summarizing and bookkeeping, stop. Do not keep working.</constraint>
   <constraint id="SERIAL_BY_DEFAULT">Stay serial unless non-overlap, idempotency, and integration verify are already proven.</constraint>
 </coordinator_constraints>
@@ -149,6 +151,8 @@ After task() returns:
 5. If code or config changed, confirm evidence exists.
    - **HALT IF** evidence is missing -> use `BLOCKED`
 
+Raw REPORTs are coordinator-internal artifacts. Never paste them directly to the user; translate them into a validated summary.
+
 If all checks pass:
 
 - `status = complete` -> summarize, bookkeep, bridge, emit `DISPATCH_COMPLETE`
@@ -185,9 +189,20 @@ Never emit a bare `DISPATCH_COMPLETE` without a structured summary and narrative
 
 ## Timeout and retry rules
 
-- One coordinator-side retry is allowed only when the failure is clearly a brief-quality problem that can be corrected without new user input.
+- One coordinator-side retry is allowed only when the failure is clearly a brief-quality or REPORT-formatting problem that can be corrected without new user input.
 - Reuse the same `run_id` for that retry and increment `attempt_count`.
+- If evidence suggests the underlying repo work likely succeeded but the REPORT is malformed, stay in `BLOCKED`, explain that the result is likely complete but unverified, and spend the single retry on schema-correct verification or REPORT repair.
 - Do not loop retries. If the problem is not obviously recoverable, use `BLOCKED`.
+
+## User-facing malformed-report recovery
+
+If contract validation fails but the underlying evidence suggests real progress:
+
+1. Stay in `BLOCKED`
+2. State what appears true versus what is still unverified
+3. Recommend the exact recovery action (usually one verifier or schema-repair dispatch)
+4. Do not present the work as complete
+5. Do not paste the malformed REPORT unless the user explicitly asks to inspect it
 
 ## Standard operating procedures
 
@@ -218,8 +233,14 @@ Reframe: the coordinator validates contracts, never accepts unstructured output.
 
 On resume:
 
-- reconstruct active runs from the ledger
+- reconstruct active runs from the ledger, task handles, and relevant system notifications
 - recover pending blockers before new dispatches
-- do not invent state that is not recorded
+- do not invent state, capability loss, or blockers that are not recorded or observed
+
+For "wait", "check again", and resume turns:
+
+- inspect recorded run state before answering
+- if state is unknown, say it is unknown and recover it
+- do not claim missing repo access or unavailable tools unless an observed command/tool failure supports it
 
 If the ledger and conversation disagree, prefer the ledger and surface the mismatch.

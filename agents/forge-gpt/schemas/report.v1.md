@@ -17,6 +17,8 @@ The coordinator validates the block before it can emit `DISPATCH_COMPLETE`.
 
 Subagents **never** emit coordinator terminal tokens.
 
+This REPORT is a machine contract, not the user-facing answer. After validation, the coordinator translates it into a human summary.
+
 ---
 
 ## Status enum
@@ -57,6 +59,14 @@ Allowed values:
 | `evidence` | Yes | At least one evidence entry or explicit reason for absence |
 | `issues` | Yes | Explicit `none` or one or more issue entries |
 | `next` | Yes | One concrete next step |
+
+---
+
+## Output shape rules
+
+- Emit exactly one `<report version="1">` block.
+- Emit no prose before or after the block.
+- Put `run_id`, `brief_hash`, and `attempt_count` inside `<run_echo>`, never at the top level.
 
 ---
 
@@ -145,6 +155,25 @@ Why invalid:
 - `done` is not a valid status enum value
 - Missing `artifacts`, `evidence`, `issues`, and `next`
 
+### Another invalid example
+
+```xml
+<report version="1">
+  <run_id>remove-webui-flutter</run_id>
+  <brief_hash>sha256:abc123</brief_hash>
+  <attempt_count>2</attempt_count>
+  <status>pass</status>
+  <summary>Verified.</summary>
+</report>
+```
+
+Why invalid:
+
+- Run metadata must be wrapped in `<run_echo>`
+- `pass` is not a valid status enum value
+- Missing `artifacts`, `evidence`, `issues`, and `next`
+- Near-miss XML is still invalid
+
 ---
 
 ## Coordinator validation checklist
@@ -187,3 +216,5 @@ The coordinator should validate in this order:
 If a subagent cannot produce a valid REPORT, it should still attempt to return a best-effort `<report version="1">` block with `status = failed` and an `issues` description.
 
 Do not fall back to freeform Markdown.
+
+When in doubt, copy the canonical template exactly and fill in the fields rather than improvising a new shape.

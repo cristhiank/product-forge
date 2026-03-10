@@ -69,10 +69,47 @@ Return exactly one `<report version="1">` block matching `report.v1`.
 The REPORT must:
 
 - echo `run_id`, `brief_hash`, and `attempt_count`
+- wrap those fields inside `<run_echo>`
 - list concrete artifacts or `none`
 - include evidence for code or config changes
+- explain the absence of build/test evidence when no code or config changed
 - list issues explicitly, even if the value is `none`
 - give one concrete next step
+- contain exactly one `<report version="1">` block and no extra prose before or after
+
+### REPORT preflight checklist
+
+Before you emit the final REPORT, verify all of the following:
+
+1. There is exactly one `<report version="1">` block.
+2. `run_id`, `brief_hash`, and `attempt_count` are nested under `<run_echo>`.
+3. `status` is one of `complete | needs_input | blocked | failed | timed_out`.
+4. `artifacts`, `evidence`, `issues`, and `next` are all present and non-empty.
+5. `issues` is explicit `none` or a concrete list.
+6. `next` is one concrete next step.
+
+### Minimal REPORT skeleton
+
+```xml
+<report version="1">
+  <run_echo>
+    <run_id>[run_id]</run_id>
+    <brief_hash>[brief_hash]</brief_hash>
+    <attempt_count>[attempt_count]</attempt_count>
+  </run_echo>
+  <status>[complete|needs_input|blocked|failed|timed_out]</status>
+  <summary>[1-3 concise sentences]</summary>
+  <artifacts>
+    <artifact type="[file|dir|test|plan|report]">[artifact]</artifact>
+  </artifacts>
+  <evidence>
+    <command name="[cmd]" exit_code="[code]">[result]</command>
+    <reference file="[path:line]">[what changed or was checked]</reference>
+  </evidence>
+  <issues>[none or concrete issue list]</issues>
+  <next>[one concrete next step]</next>
+</report>
+```
 
 ## Violation -> correction examples
 
@@ -113,6 +150,24 @@ Return status failed with the exact blocker and evidence.
 
 WHY:
 The mode must stop after 2 distinct self-fix attempts.
+```
+
+### Example 4
+
+```text
+VIOLATION:
+<report version="1">
+  <run_id>abc</run_id>
+  <brief_hash>sha256:123</brief_hash>
+  <attempt_count>2</attempt_count>
+  <status>pass</status>
+</report>
+
+CORRECTION:
+Move the run metadata under <run_echo>, use a valid status enum, add artifacts/evidence/issues/next, and emit no prose outside the report.
+
+WHY:
+Near-miss formatting is still a contract failure.
 ```
 
 ## Stop conditions

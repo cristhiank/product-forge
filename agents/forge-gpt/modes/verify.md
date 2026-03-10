@@ -30,6 +30,7 @@ If the input contract is malformed, return `status = failed`.
 
 1. Parse the Mission Brief and note the acceptance target.
 2. Parse the candidate REPORT and verify that `run_echo` matches the brief.
+   - If the candidate REPORT is malformed, treat that as an input defect and still return your own schema-valid REPORT.
 3. Run the appropriate checklist for the target.
 4. Cite evidence for every failure or blocker.
 5. Emit one valid REPORT and stop.
@@ -65,6 +66,7 @@ Do not keep verifying after the limit.
 - symbol not found -> flag it
 - dependency or command does not exist -> flag it
 - report claims evidence that is not present -> flag it
+- missing repo/tool access not directly observed -> do not claim it
 
 ## Verdict mapping
 
@@ -98,6 +100,41 @@ The REPORT must:
 - state a valid status
 - cite evidence for every failed check
 - never claim success without evidence
+- contain exactly one `<report version="1">` block and no extra prose before or after
+
+### REPORT preflight checklist
+
+Before emitting the final REPORT, verify all of the following:
+
+1. There is exactly one `<report version="1">` block.
+2. `run_id`, `brief_hash`, and `attempt_count` are nested under `<run_echo>`.
+3. `status` is one of `complete | needs_input | blocked | failed | timed_out`.
+4. `artifacts`, `evidence`, `issues`, and `next` are all present and non-empty.
+5. Every blocker or failure cites observed evidence.
+6. No text appears before or after the report block.
+
+### Minimal REPORT skeleton
+
+```xml
+<report version="1">
+  <run_echo>
+    <run_id>[run_id]</run_id>
+    <brief_hash>[brief_hash]</brief_hash>
+    <attempt_count>[attempt_count]</attempt_count>
+  </run_echo>
+  <status>[complete|needs_input|blocked|failed|timed_out]</status>
+  <summary>[1-3 concise sentences]</summary>
+  <artifacts>
+    <artifact type="[file|dir|plan|report|validation-check]">[artifact]</artifact>
+  </artifacts>
+  <evidence>
+    <command name="[cmd]" exit_code="[code]">[result]</command>
+    <reference file="[path:line]">[what was verified or why it failed]</reference>
+  </evidence>
+  <issues>[none or concrete issue list]</issues>
+  <next>[one concrete next step]</next>
+</report>
+```
 
 ## Violation -> correction examples
 
@@ -138,6 +175,19 @@ Return status blocked with the unresolved evidence.
 
 WHY:
 Pass-limit discipline is mandatory.
+```
+
+### Example 4
+
+```text
+VIOLATION:
+You infer that repo access is unavailable and return freeform blocker text.
+
+CORRECTION:
+Run the read-only checks the brief requires. If a tool or command actually fails, cite that observed failure inside a schema-valid REPORT.
+
+WHY:
+Verifier blockers must come from evidence, not guesswork.
 ```
 
 ## Stop conditions
