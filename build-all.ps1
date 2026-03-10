@@ -170,14 +170,6 @@ if (Test-Path $sharedDir -PathType Container) {
     }
 }
 
-Write-Host "🧾 Forge schemas..."
-$schemasDir = "$ScriptDir\agents\forge\schemas"
-if (Test-Path $schemasDir -PathType Container) {
-    Get-ChildItem "$schemasDir\*.md" | ForEach-Object {
-        Copy-PluginFile $_.FullName "$DistShared\skills\forge-shared-prefs\references\schemas\$($_.Name)" "skills/forge-shared-prefs/references/schemas/$($_.Name)" | Out-Null
-    }
-}
-
 Write-Host "📚 Forge references..."
 $refsDir = "$ScriptDir\agents\forge\references"
 if (Test-Path $refsDir -PathType Container) {
@@ -295,17 +287,8 @@ Write-Host "📜 GPT coordinator skill..."
 Copy-PluginFile "$ScriptDir\agents\forge-gpt\SKILL.md" "$DistGpt\skills\forge-gpt\SKILL.md" "skills/forge-gpt/SKILL.md" | Out-Null
 
 Write-Host "⚙️  GPT modes..."
-Copy-PluginFile "$ScriptDir\agents\forge-gpt\modes\execute.md" "$DistGpt\skills\forge-execute-gpt\SKILL.md" "skills/forge-execute-gpt/SKILL.md" | Out-Null
-Copy-PluginFile "$ScriptDir\agents\forge-gpt\modes\verify.md" "$DistGpt\skills\forge-verify-gpt\SKILL.md" "skills/forge-verify-gpt/SKILL.md" | Out-Null
-
-Write-Host "🧾 GPT schemas..."
-foreach ($target in @('forge-gpt','forge-execute-gpt','forge-verify-gpt')) {
-    foreach ($schema in @('mission-brief.v1.md','report.v1.md')) {
-        Copy-PluginFile `
-            "$ScriptDir\agents\forge-gpt\schemas\$schema" `
-            "$DistGpt\skills\$target\references\schemas\$schema" `
-            "skills/$target/references/schemas/$schema" | Out-Null
-    }
+foreach ($mode in @('execute','verify','explore','ideate','design','plan','memory','product')) {
+    Copy-PluginFile "$ScriptDir\agents\forge-gpt\modes\$mode.md" "$DistGpt\skills\forge-$mode-gpt\SKILL.md" "skills/forge-$mode-gpt/SKILL.md" | Out-Null
 }
 
 # ═══════════════════════════════════════════════

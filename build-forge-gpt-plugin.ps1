@@ -3,16 +3,10 @@
 # Assembles a standalone Forge-GPT plugin bundle from source:
 #   - agents/forge-gpt/forge-gpt.agent.md -> dist-forge-gpt/agents/Forge-GPT.agent.md (with frontmatter)
 #   - agents/forge-gpt/SKILL.md -> dist-forge-gpt/skills/forge-gpt/SKILL.md
-#   - agents/forge-gpt/modes/{execute,verify}.md -> dist-forge-gpt/skills/forge-{mode}-gpt/SKILL.md
-#   - agents/forge/modes/{explore,ideate,plan,memory}.md -> dist-forge-gpt/skills/forge-{mode}/SKILL.md
-#   - agents/forge-gpt/schemas/*.md -> dist-forge-gpt/skills/forge-*/references/schemas/
+#   - agents/forge-gpt/modes/*.md -> dist-forge-gpt/skills/forge-{mode}-gpt/SKILL.md (all 8 GPT modes)
 #   - skills/{experts-council,backlog,agents-hub,copilot-cli-skill} -> dist-forge-gpt/skills/*
 #   - skills/{backend-architecture,frontend-architecture} -> dist-forge-gpt/skills/*
 #   - plugin.json (rewritten as forge-gpt) -> dist-forge-gpt/plugin.json
-#
-# Notes:
-#   - This bundle intentionally reuses shared forge-* skill names for explore/ideate/plan/memory.
-#   - Treat it as the forge-gpt-focused plugin build unless/until shared-mode names are fully namespaced.
 #
 # Usage:
 #   .\build-forge-gpt-plugin.ps1              # build to dist-forge-gpt/
@@ -192,46 +186,17 @@ Copy-PluginFile `
     "$Dist\skills\forge-gpt\SKILL.md" `
     "skills/forge-gpt/SKILL.md" | Out-Null
 
-# --- Step 4: GPT mode skills ---
+# --- Step 4: GPT mode skills (all 8 from forge-gpt) ---
 Write-Host ""
 Write-Host "⚙️  GPT mode skills..."
-$gptModes = @(
-    @{ Source = 'execute'; SkillName = 'forge-execute-gpt' },
-    @{ Source = 'verify'; SkillName = 'forge-verify-gpt' }
-)
-foreach ($mode in $gptModes) {
+foreach ($mode in @('execute','verify','explore','ideate','design','plan','memory','product')) {
     Copy-PluginFile `
-        "$ScriptDir\agents\forge-gpt\modes\$($mode.Source).md" `
-        "$Dist\skills\$($mode.SkillName)\SKILL.md" `
-        "skills/$($mode.SkillName)/SKILL.md" | Out-Null
+        "$ScriptDir\agents\forge-gpt\modes\$mode.md" `
+        "$Dist\skills\forge-$mode-gpt\SKILL.md" `
+        "skills/forge-$mode-gpt/SKILL.md" | Out-Null
 }
 
-# --- Step 5: Shared forge mode skills ---
-Write-Host ""
-Write-Host "🔁 Shared forge modes..."
-$sharedModes = @('explore', 'ideate', 'design', 'plan', 'memory')
-foreach ($mode in $sharedModes) {
-    Copy-PluginFile `
-        "$ScriptDir\agents\forge\modes\$mode.md" `
-        "$Dist\skills\forge-$mode\SKILL.md" `
-        "skills/forge-$mode/SKILL.md" | Out-Null
-}
-
-# --- Step 6: GPT schema references ---
-Write-Host ""
-Write-Host "🧾 Schema references..."
-$schemaTargets = @('forge-gpt', 'forge-execute-gpt', 'forge-verify-gpt')
-$schemaFiles = @('mission-brief.v1.md', 'report.v1.md')
-foreach ($target in $schemaTargets) {
-    foreach ($schemaFile in $schemaFiles) {
-        Copy-PluginFile `
-            "$ScriptDir\agents\forge-gpt\schemas\$schemaFile" `
-            "$Dist\skills\$target\references\schemas\$schemaFile" `
-            "skills/$target/references/schemas/$schemaFile" | Out-Null
-    }
-}
-
-# --- Step 7: Infrastructure skills ---
+# --- Step 5: Infrastructure skills ---
 Write-Host ""
 Write-Host "🔧 Infrastructure skills..."
 $infraSkills = @('experts-council', 'backlog', 'agents-hub', 'copilot-cli-skill')
@@ -254,7 +219,7 @@ foreach ($skill in $infraSkills) {
     }
 }
 
-# --- Step 8: Architecture skills ---
+# --- Step 6: Architecture skills ---
 Write-Host ""
 Write-Host "🏗️  Architecture skills..."
 $archSkills = @('backend-architecture', 'frontend-architecture')
