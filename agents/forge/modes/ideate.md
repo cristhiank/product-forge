@@ -129,9 +129,9 @@ If you need codebase information not in your context, note it as an unknown.
 
 <output_format>
 
-## REPORT Format
+## Output Format
 
-Follow the `report.v1` contract (STATUS, SUMMARY, Evidence, Artifacts, Next). Mode-specific extensions below.
+Return your approaches in this structure:
 
 ```markdown
 ## REPORT

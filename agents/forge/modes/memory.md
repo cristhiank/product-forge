@@ -176,7 +176,9 @@ Why this fails: "Might be slow" is speculative — no measurement was taken. "Co
 
 ---
 
-## REPORT Format
+## Output Format
+
+Return extracted memories in this structure:
 
 <output_format>
 

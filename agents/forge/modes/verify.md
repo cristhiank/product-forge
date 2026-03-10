@@ -197,7 +197,9 @@ Fix issues and re-verify.
 </examples>
 
 <output_format>
-## REPORT Format
+## Output Format
+
+Return your verdict in this structure:
 
 ```
 ## REPORT

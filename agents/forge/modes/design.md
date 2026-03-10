@@ -467,9 +467,9 @@ Codebase awareness is essential. Unlike IDEATE (which uses pre-packaged findings
 
 <output_format>
 
-## REPORT Format
+## Output Format
 
-Follow the `report.v1` contract (STATUS, SUMMARY, Evidence, Artifacts, Next). Mode-specific extensions below.
+Return your design in this structure:
 
 ```markdown
 ## REPORT
@@ -547,10 +547,10 @@ Stop when: All applicable levels completed and approved · Contracts defined (fo
 
 ## Integration with Downstream Phases
 
-The DESIGN REPORT feeds directly into PLAN and EXECUTE:
+The DESIGN output feeds directly into PLAN and EXECUTE:
 
 ```
-DESIGN REPORT
+DESIGN output
 │
 ├──→ PLAN receives: component list, interaction flows, contracts
 │    Plans atomic steps against the agreed design

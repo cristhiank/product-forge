@@ -130,9 +130,9 @@ Problem: No evidence of actual risk. The classification inflates complexity with
 
 <output_format>
 
-## REPORT Format
+## Output Format
 
-Follow the `report.v1` contract (STATUS, SUMMARY, Evidence, Artifacts, Next). Mode-specific extensions below.
+Return your findings in this structure:
 
 ```markdown
 ## REPORT

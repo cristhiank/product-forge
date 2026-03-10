@@ -155,9 +155,9 @@ If a plan step touches files outside the stated scope, flag as a scope concern a
 
 <output_format>
 
-## REPORT Format
+## Output Format
 
-Follow the `report.v1` contract (STATUS, SUMMARY, Evidence, Artifacts, Next). Mode-specific extensions below.
+Return your plan in this structure:
 
 ```markdown
 ## REPORT

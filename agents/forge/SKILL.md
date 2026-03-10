@@ -199,7 +199,7 @@ Coordinator:
     agent_type: "general-purpose",
     model: "claude-sonnet-4.6",
     description: "Implement auth endpoint",
-    prompt: "Invoke the `forge-execute` skill as your first action.\nAlso invoke the `backend-architecture` skill.\n\n## Mission\nImplement auth endpoint per plan step 3...\n\n## Context\n[findings from explore phase]\n\n## Constraints\n- Scope: src/auth/ only\n\n## Expected Output\nReturn a REPORT following report.v1 contract."
+    prompt: "Invoke the `forge-execute` skill as your first action.\nAlso invoke the `backend-architecture` skill.\n\n## Mission\nImplement auth endpoint per plan step 3...\n\n## Context\n[findings from explore phase]\n\n## Constraints\n- Scope: src/auth/ only\n\n## Verify Requirements\nRun dotnet test, confirm all pass."
   })
 ```
 </example>
@@ -229,24 +229,31 @@ Before each tool call, run this mental check:
 
 ### Post-Dispatch Protocol
 
-After a dispatch returns, your job for that dispatch is done:
+After a dispatch returns, evaluate the output semantically and then stop:
 
-1. **Summarize** — STATUS + SUMMARY from REPORT
-2. **Bookkeep** — Update backlog item status
-3. **Bridge** — "Next: [action]. Dispatch?"
-4. **Stop** — do not continue working
+1. **Evaluate** — Did the subagent address the objective? Is evidence present? Is the work complete?
+   - SCOUT: findings with file references and confidence?
+   - EXECUTOR: file changes with build/test results?
+   - VERIFIER: verdict with file/line citations?
+   - PLANNER: steps with testable DONE WHEN criteria?
+   - CREATIVE: approaches with tradeoffs, or design artifact?
+2. **Summarize** — Translate subagent output into user-facing summary
+3. **Bookkeep** — Update backlog item status
+4. **Bridge** — "Next: [action]. Dispatch?"
+5. **Stop** — do not continue working
 
 **INCORRECT — NEVER DO THIS:**
 ```
-task({...}) → REPORT returns → Coordinator "finishes up" by editing files or running tests
+task({...}) → output returns → Coordinator "finishes up" by editing files or running tests
 ```
 
 **CORRECT:**
 ```
-task({...}) → REPORT returns → Summarize → Bookkeep → Bridge → Stop
+task({...}) → output returns → Evaluate → Summarize → Bookkeep → Bridge → Stop
 ```
 
-If the REPORT says `STATUS: blocked` or `needs_input`, present the issue to the user and wait.
+If the output indicates blocked or needs_input, present the issue to the user and wait.
+If evidence is missing, acknowledge what appears done and dispatch a targeted follow-up or ask the user.
 
 ### bash Usage Policy
 
@@ -297,20 +304,39 @@ IMPORTANT: For epics, run the parallelization checkpoint in `references/worker-s
 
 ### Mission Brief (Forge → Subagent)
 
-IMPORTANT: Every `task` call MUST package context as a Mission Brief following `schemas/mission-brief.v1.md`. See that file for the full template, construction checklist, stack detection rules, and model selection tables.
+IMPORTANT: Every `task` call MUST package context as a structured Mission Brief. Building a Mission Brief IS the coordinator's real work.
+
+```markdown
+## Mission
+[clear objective — what to accomplish]
+
+## Context
+[relevant findings, code snippets, constraints — summarized, not raw history]
+
+## Constraints
+- Scope: [what is in scope]
+- Out of scope: [what must not be touched]
+- Risk: [R0-R4 classification]
+
+## Verify Requirements
+[what evidence is required before the work can be considered complete]
+```
+
+Line 1 of every dispatch must load the target mode skill:
+`Invoke the 'forge-execute' skill as your first action.`
 
 ```
 task({
   agent_type: "general-purpose",
-  model: "<see mission-brief.v1.md model table>",
+  model: "<see model selection table>",
   description: "<3-5 word summary>",
-  prompt: "<mission brief>"
+  prompt: "<skill load line>\n\n<mission brief>"
 })
 ```
 
 ### Mission Brief Construction
 
-IMPORTANT: Building a Mission Brief IS your execution — this IS the real work. See `schemas/mission-brief.v1.md` for the full contract, construction checklist, stack detection, and model selection tables.
+IMPORTANT: Building a Mission Brief IS your execution — this IS the real work.
 
 <examples>
 <example type="wrong">
@@ -330,7 +356,7 @@ task({
   agent_type: "general-purpose",
   model: "claude-sonnet-4.6",
   description: "Implement async refactor",
-  prompt: "Invoke the `forge-execute` skill as your first action.\nAlso invoke the `backend-architecture` skill.\n\n## Mission\nImplement B-055.6: Replace Task.Run with proper async...\n\n## Context\n[findings from explore phase]\n\n## Constraints\n- Scope: AuthService.cs only\n\n## Expected Output\nReturn a REPORT following report.v1 contract."
+  prompt: "Invoke the `forge-execute` skill as your first action.\nAlso invoke the `backend-architecture` skill.\n\n## Mission\nImplement B-055.6: Replace Task.Run with proper async...\n\n## Context\n[findings from explore phase]\n\n## Constraints\n- Scope: AuthService.cs only\n\n## Verify Requirements\nRun dotnet test, confirm all pass."
 })
 ```
 </example>
@@ -343,7 +369,7 @@ The built-in `explore` agent (agent_type: "explore") is fast but limited — gre
 | Need | Agent Type | Skill | REPORT? |
 |------|-----------|-------|---------|
 | "Where is X?" / "Find symbol Y" / file lookup | `explore` | None | No — free text answer |
-| Investigate, understand, classify, trace deps, external search | `general-purpose` | `forge-explore` | Yes — structured REPORT |
+| Investigate, understand, classify, trace deps, external search | `general-purpose` | `forge-explore` | Yes — structured findings |
 
 If the Mission Brief says `Invoke the \`forge-explore\` skill`, use agent_type `general-purpose`. The built-in explore agent cannot load skills.
 ---
@@ -425,25 +451,16 @@ Before the first dispatch in a session, ensure these tables exist:
 ```sql
 CREATE TABLE IF NOT EXISTS forge_runs (
   run_id TEXT PRIMARY KEY,
-  brief_hash TEXT NOT NULL,
   mode TEXT NOT NULL,
   status TEXT NOT NULL,
-  attempt_count INTEGER NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS forge_effects (
-  effect_key TEXT PRIMARY KEY,
-  run_id TEXT NOT NULL,
-  effect_type TEXT NOT NULL,
-  target TEXT NOT NULL,
-  status TEXT NOT NULL
+  attempt_count INTEGER NOT NULL DEFAULT 1
 );
 ```
 
  - One logical run → one `run_id`
  - Retries reuse `run_id` and increment `attempt_count`
- - `effect_key` prevents duplicate side effects
  - If the user changes scope materially, start a new `run_id`
+ - Max 1 automatic retry per run
 ---
 
 ## Scope Drift Checkpoint

@@ -36,7 +36,7 @@ User: "implement the 3 tracks, parallelize" → Coordinator runs dispatch routin
 </example>
 </examples>
 
-After dispatch returns → summarize the REPORT → bridge to next action.
+After dispatch returns → evaluate output semantically → summarize → bridge to next action.
 
 ---
 
@@ -97,7 +97,7 @@ IMPORTANT: These rules have NO exceptions:
 
  - IMPORTANT: **NEVER edit files directly** — all file mutations through subagents, regardless of size or complexity
  - IMPORTANT: **NEVER run build/test commands** — dispatch via routing decision
- - IMPORTANT: **NEVER accept freeform responses** from subagents — require structured REPORT per `schemas/report.v1.md`
+ - IMPORTANT: **NEVER accept claims without evidence** — evaluate subagent output semantically for objective coverage and concrete proof
  - **No secrets in code** — do not store tokens, credentials, or private keys anywhere
  - **No guessing on risk** — for security, data loss, or architecture decisions, present options and ask the user
  - **Dispatch atomicity** — dispatch is the only mutating tool in a response

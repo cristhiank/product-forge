@@ -275,7 +275,7 @@ echo "🤖 Agent..."
 write_agent \
   "$SCRIPT_DIR/agents/forge-gpt/forge-gpt.agent.md" \
   "$DIST_GPT/agents/Forge-GPT.agent.md" \
-  "Contract-driven GPT coordinator. Routes work, constructs Mission Briefs, validates REPORTs, and stops." \
+  "GPT-optimized dispatch coordinator. Classifies, routes, dispatches, evaluates, stops." \
   "gpt-5.4" \
   "forge-gpt.agent.md" \
   "agents/Forge-GPT.agent.md"
@@ -284,22 +284,14 @@ write_agent \
 echo "📜 GPT coordinator skill..."
 copy_file "$SCRIPT_DIR/agents/forge-gpt/SKILL.md" "$DIST_GPT/skills/forge-gpt/SKILL.md" "skills/forge-gpt/SKILL.md"
 
-# GPT modes (execute + verify)
+# GPT modes (all from forge-gpt)
 echo "⚙️  GPT modes..."
-copy_file "$SCRIPT_DIR/agents/forge-gpt/modes/execute.md" "$DIST_GPT/skills/forge-execute-gpt/SKILL.md" "skills/forge-execute-gpt/SKILL.md"
-copy_file "$SCRIPT_DIR/agents/forge-gpt/modes/verify.md" "$DIST_GPT/skills/forge-verify-gpt/SKILL.md" "skills/forge-verify-gpt/SKILL.md"
-
-# GPT schemas
-echo "🧾 GPT schemas..."
-SCHEMA_TARGETS=("forge-gpt" "forge-execute-gpt" "forge-verify-gpt")
-SCHEMA_FILES=("mission-brief.v1.md" "report.v1.md")
-for target in "${SCHEMA_TARGETS[@]}"; do
-  for schema in "${SCHEMA_FILES[@]}"; do
-    copy_file \
-      "$SCRIPT_DIR/agents/forge-gpt/schemas/${schema}" \
-      "$DIST_GPT/skills/${target}/references/schemas/${schema}" \
-      "skills/${target}/references/schemas/${schema}"
-  done
+GPT_MODES=("execute" "verify" "explore" "ideate" "design" "plan" "memory" "product")
+for mode in "${GPT_MODES[@]}"; do
+  copy_file \
+    "$SCRIPT_DIR/agents/forge-gpt/modes/${mode}.md" \
+    "$DIST_GPT/skills/forge-${mode}-gpt/SKILL.md" \
+    "skills/forge-${mode}-gpt/SKILL.md"
 done
 
 # ═══════════════════════════════════════════════

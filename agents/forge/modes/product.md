@@ -327,9 +327,9 @@ Reports:
 
 <output_format>
 
-## REPORT Format
+## Output Format
 
-Return results to coordinator as:
+Return results to the coordinator in this structure:
 
 ```markdown
 ## REPORT

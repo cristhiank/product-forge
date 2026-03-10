@@ -193,7 +193,9 @@ Before completing:
 
 <output_format>
 
-## REPORT Format
+## Output Format
+
+Return your results in this structure:
 
 ```markdown
 ## REPORT

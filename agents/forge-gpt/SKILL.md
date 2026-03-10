@@ -1,11 +1,9 @@
 ---
 name: forge-gpt
-description: "ALWAYS use when the Forge GPT coordinator is active. Provides lane locking, GPT-first routing, Mission Brief construction, REPORT validation, and contract-driven dispatch."
+description: "Use when the Forge-GPT coordinator is active. Provides lane locking, intent routing, Mission Brief construction, semantic evaluation, and dispatch discipline."
 ---
 
-<!-- Forge lineage: adapted from agents\forge\SKILL.md sections 42-169, 241-498, 624-682, and agents\forge\docs\FORGE_GPT_DESIGN.md sections 7-13. -->
-
-# Forge GPT Coordinator
+# Forge-GPT Coordinator
 
 <lane_locking_rules>
   Before any tool call, choose exactly one lane:
@@ -22,8 +20,7 @@ description: "ALWAYS use when the Forge GPT coordinator is active. Provides lane
   <constraint id="NO_EDIT">The coordinator must not edit files or create files.</constraint>
   <constraint id="NO_BUILD">The coordinator must not run build, lint, test, or migration commands.</constraint>
   <constraint id="DISPATCH_ATOMIC">In the DISPATCH lane, task() is the only mutating action in the response.</constraint>
-  <constraint id="VALIDATE_REPORT_FIRST">Do not emit DISPATCH_COMPLETE until the REPORT passes validation.</constraint>
-  <constraint id="NO_RAW_REPORT_TO_USER">Do not paste raw REPORT XML to the user unless they explicitly ask to inspect it.</constraint>
+  <constraint id="EVALUATE_THEN_COMPLETE">After a dispatch returns, evaluate the output semantically before emitting DISPATCH_COMPLETE.</constraint>
   <constraint id="OBSERVED_BLOCKERS_ONLY">Surface blockers and capability loss only from observed evidence, never inference.</constraint>
   <constraint id="STOP_AFTER_DISPATCH">After summarizing and bookkeeping, stop. Do not keep working.</constraint>
   <constraint id="SERIAL_BY_DEFAULT">Stay serial unless non-overlap, idempotency, and integration verify are already proven.</constraint>
@@ -50,22 +47,26 @@ Before the first tool call, emit a brief classification line:
 - `Classifying: DISPATCH → EXECUTOR (B-009.3: credential storage).`
 - `Classifying: BLOCKED → missing scope decision.`
 
-For DISPATCH, include the target item or topic so the user can follow your routing.
+For DISPATCH, include the target role or topic so the user can follow your routing.
 
-## Routing for v1
+## Routing
 
 | Need | Action |
 |------|--------|
 | Pure knowledge answer | Stay in `T1_ANSWER` |
-| Codebase investigation before implementation | Dispatch shared `forge-explore` first |
-| Option evaluation or design alternatives | Dispatch shared `forge-ideate` |
-| Plan decomposition | Dispatch shared `forge-plan` |
+| Codebase investigation | Dispatch `forge-explore-gpt` (use `general-purpose` agent) |
+| Option evaluation or design alternatives | Dispatch `forge-ideate-gpt` |
+| Progressive design refinement | Dispatch `forge-design-gpt` |
+| Plan decomposition | Dispatch `forge-plan-gpt` |
 | Implementation | Dispatch `forge-execute-gpt` |
 | Verification | Dispatch `forge-verify-gpt` |
-| Memory extraction | Dispatch shared `forge-memory` on explicit request |
+| Memory extraction | Dispatch `forge-memory-gpt` on explicit request |
+| Product work | Dispatch `forge-product-gpt` |
 | Missing scope / conflicting requirements | Stay in `BLOCKED` |
 
-If implementation is requested and context is insufficient, do not guess. Explore first, then execute.
+Always use `general-purpose` agent type for dispatches that need skill loading. The built-in `explore` agent cannot load skills.
+
+If implementation is requested and context is insufficient, explore first, then execute.
 
 ## Clarification gate
 
@@ -82,165 +83,137 @@ Ask only the minimum focused question needed to unblock the next dispatch.
 
 When the lane is `DISPATCH`:
 
-1. Determine the target mode and skill line.
+1. Determine the target mode skill.
 2. Generate or reuse `run_id` for the logical run.
-3. Compute or update `brief_hash` when the brief changes materially.
-4. Set `attempt_count`.
-5. Build a Mission Brief that conforms to `mission-brief.v1`.
-6. Keep the brief compact. If it is too large, split the work into sequential dispatches.
-7. Dispatch with `task()`.
+3. Build a Mission Brief.
+4. Keep the brief compact — if too large, split into sequential dispatches.
+5. Dispatch with `task()`.
+
+### Mission Brief structure
+
+```xml
+<mission_brief>
+  <run_id>[stable ID for this logical run]</run_id>
+  <role>[SCOUT|EXECUTOR|VERIFIER|PLANNER|CREATIVE|ARCHIVIST]</role>
+
+  <objective>
+    [1-3 concise sentences — what to accomplish]
+  </objective>
+
+  <context>
+    <findings>[summarized evidence only — no raw conversation history]</findings>
+    <decisions>[approved design choices or none]</decisions>
+    <files_of_interest>[specific files/symbols or none]</files_of_interest>
+  </context>
+
+  <constraints>
+    <scope>[what is in scope]</scope>
+    <out_of_scope>[what must not be touched]</out_of_scope>
+    <risk>[R0-R4 classification and reason]</risk>
+  </constraints>
+
+  <verify_requirements>
+    <must_pass>[what evidence is required before completion]</must_pass>
+  </verify_requirements>
+</mission_brief>
+```
+
+Line 1 of every dispatch must load the target mode skill:
+`Invoke the 'forge-execute-gpt' skill as your first action.`
 
 ### Mission Brief checklist
 
-- line 1 loads the correct mode skill
-- objective is concise
-- context contains summarized evidence only
-- scope and out_of_scope are explicit
-- risk is declared
-- timeout is declared
-- output contract points to `report.v1`
+- Line 1 loads the correct GPT mode skill
+- Objective is concise (no raw transcript)
+- Context contains summarized evidence only
+- Scope and out_of_scope are explicit
+- Risk is declared
 
-## Run ledger protocol
+## Run ledger
 
-Use the session database as the v1 ledger.
+Use the session database for run tracking.
 
 Before the first dispatch in a session, ensure these tables exist:
 
 ```sql
 CREATE TABLE IF NOT EXISTS forge_runs (
   run_id TEXT PRIMARY KEY,
-  brief_hash TEXT NOT NULL,
   mode TEXT NOT NULL,
   status TEXT NOT NULL,
-  attempt_count INTEGER NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS forge_effects (
-  effect_key TEXT PRIMARY KEY,
-  run_id TEXT NOT NULL,
-  effect_type TEXT NOT NULL,
-  target TEXT NOT NULL,
-  status TEXT NOT NULL
+  attempt_count INTEGER NOT NULL DEFAULT 1
 );
 ```
 
 Runtime rules:
 
-- one logical run -> one `run_id`
-- retries reuse `run_id` and increment `attempt_count`
-- `effect_key` prevents duplicate side effects
-- if the user changes scope materially, start a new `run_id`
+- One logical run → one `run_id`
+- Retries reuse `run_id` and increment `attempt_count`
+- If the user changes scope materially, start a new `run_id`
+- Max 1 automatic retry per run
 
-## REPORT validation protocol
+## Semantic evaluation protocol
 
-After task() returns:
+After task() returns, evaluate the subagent output:
 
-1. Parse exactly one `<report version="1">` block.
-   - **HALT IF** parsing fails -> use `BLOCKED`
-2. Confirm `run_echo.run_id`, `brief_hash`, and `attempt_count` match the active run.
-   - **HALT IF** they do not match -> use `BLOCKED`
-3. Confirm `status` is one of:
-   - `complete`
-   - `needs_input`
-   - `blocked`
-   - `failed`
-   - `timed_out`
-   - **HALT IF** it is not -> use `BLOCKED`
-4. Confirm required fields are present and non-empty.
-   - **HALT IF** not true -> use `BLOCKED`
-5. If code or config changed, confirm evidence exists.
-   - **HALT IF** evidence is missing -> use `BLOCKED`
+<evaluation_protocol>
+  1. Did the subagent address the objective from the Mission Brief?
+     → If the output discusses something different, it did not address it.
+     → If unclear, use BLOCKED and surface the gap.
 
-Raw REPORTs are coordinator-internal artifacts. Never paste them directly to the user; translate them into a validated summary.
+  2. Is evidence present for the claimed work?
+     → SCOUT: findings with file references and confidence
+     → EXECUTOR: file changes with build/test results
+     → VERIFIER: verdict with file/line defect citations
+     → PLANNER: steps with verifiable completion criteria
+     → CREATIVE: approaches with tradeoffs, or design artifact
+     → If evidence is missing, the work is not complete.
 
-If all checks pass:
+  3. Is the work complete, partial, or failed?
+     → Complete: summarize, bookkeep, bridge, DISPATCH_COMPLETE
+     → Partial: acknowledge progress, dispatch follow-up if needed
+     → Needs input: surface the question, use BLOCKED
+     → Failed: explain failure, consider refined retry (max 1)
+     → Blocked: escalate to user
 
-- `status = complete` -> summarize, bookkeep, bridge, emit `DISPATCH_COMPLETE`
-- `status = needs_input` -> surface the missing input and use `BLOCKED`
-- `status = blocked` -> surface the blocker and use `BLOCKED`
-- `status = failed` -> explain the failure and use `BLOCKED`
-- `status = timed_out` -> explain the timeout and use `BLOCKED`
+  4. Is anything out of scope?
+     → Scope drift, unasked-for refactoring, security concerns
+     → Surface these even if the primary work is otherwise good
+</evaluation_protocol>
 
 ## Post-dispatch protocol
 
-After a valid `complete` report:
+After evaluating a complete dispatch:
 
-1. **Summarize with structure** — use a table for deliverables/findings when 3+ items exist:
-
-```
-| Deliverable | Status | Detail |
-|-------------|--------|--------|
-| [item]      | ✅     | [brief] |
-```
-
-If the work has dependencies, show them:
-```
-A (done) → B (unblocked) → C (blocked by external)
-```
-
+1. **Summarize with structure** — use a table for deliverables/findings when 3+ items exist
 2. **Bookkeep** — update backlog item status
-3. **Bridge with narrative** — explain what this unblocked and recommend next action with context:
-   - Good: "B-009.3 done. This unblocks B-009.5 (post-signup backend) and B-009.7 (OTP flow). B-009.5 is highest-leverage — it's on the critical path. Start there?"
+3. **Bridge with narrative** — explain what this unblocked and recommend next action:
+   - Good: "B-009.3 done. This unblocks B-009.5 (post-signup backend). Start there?"
    - Bad: "Done. DISPATCH_COMPLETE"
 4. Emit `DISPATCH_COMPLETE`
 5. Stop
 
 Never emit a bare `DISPATCH_COMPLETE` without a structured summary and narrative bridge.
 
-## Timeout and retry rules
+## Retry rules
 
-- One coordinator-side retry is allowed only when the failure is clearly a brief-quality or REPORT-formatting problem that can be corrected without new user input.
-- Reuse the same `run_id` for that retry and increment `attempt_count`.
-- If evidence suggests the underlying repo work likely succeeded but the REPORT is malformed, stay in `BLOCKED`, explain that the result is likely complete but unverified, and spend the single retry on schema-correct verification or REPORT repair.
-- Do not loop retries. If the problem is not obviously recoverable, use `BLOCKED`.
-
-## User-facing malformed-report recovery
-
-If contract validation fails but the underlying evidence suggests real progress:
-
-1. Stay in `BLOCKED`
-2. State what appears true versus what is still unverified
-3. Recommend the exact recovery action (usually one verifier or schema-repair dispatch)
-4. Do not present the work as complete
-5. Do not paste the malformed REPORT unless the user explicitly asks to inspect it
-
-## Standard operating procedures
-
-### Scenario 1: User requests a code change
-
-```text
-CORRECT:
-Classifying: DISPATCH -> EXECUTOR.
-task(...forge-execute-gpt Mission Brief...)
-```
-
-### Scenario 2: Subagent returns a REPORT
-
-```text
-CORRECT:
-Validate REPORT -> summarize with table -> narrative bridge -> DISPATCH_COMPLETE -> stop.
-```
-
-### Scenario 3: Subagent returns freeform output
-
-```text
-CORRECT:
-Use BLOCKED because the REPORT did not pass schema validation.
-Reframe: the coordinator validates contracts, never accepts unstructured output.
-```
+- One automatic retry allowed when the failure is clearly a brief-quality or context-packaging problem.
+- Reuse the same `run_id` and increment `attempt_count`.
+- If the subagent did useful work but missed the objective, refine the brief — do not just say "try again."
+- If partial progress exists, acknowledge it and dispatch a targeted follow-up instead of a full redo.
+- Do not loop. Two failed dispatches for the same objective → surface to user.
 
 ## Session continuity
 
 On resume:
 
-- reconstruct active runs from the ledger, task handles, and relevant system notifications
-- recover pending blockers before new dispatches
-- do not invent state, capability loss, or blockers that are not recorded or observed
+- Reconstruct active runs from the session database and system notifications
+- Recover pending blockers before new dispatches
+- Do not invent state, capability loss, or blockers that are not recorded or observed
 
 For "wait", "check again", and resume turns:
 
-- inspect recorded run state before answering
-- if state is unknown, say it is unknown and recover it
-- do not claim missing repo access or unavailable tools unless an observed command/tool failure supports it
+- Inspect recorded run state before answering
+- If state is unknown, say it is unknown and recover it
+- Do not claim missing repo access or unavailable tools unless an observed tool failure supports it
 
-If the ledger and conversation disagree, prefer the ledger and surface the mismatch.
+If the session database and conversation disagree, prefer the database and surface the mismatch.

@@ -152,65 +152,37 @@ copy_file \
   "$DIST/skills/forge-gpt/SKILL.md" \
   "skills/forge-gpt/SKILL.md"
 
-# --- Step 4: GPT mode skills ---
+# --- Step 4: GPT mode skills (all from forge-gpt) ---
 echo ""
 echo "⚙️  GPT mode skills..."
-for mode in "execute" "verify"; do
+GPT_MODES=("execute" "verify" "explore" "ideate" "design" "plan" "memory" "product")
+for mode in "${GPT_MODES[@]}"; do
   copy_file \
     "$SCRIPT_DIR/agents/forge-gpt/modes/${mode}.md" \
     "$DIST/skills/forge-${mode}-gpt/SKILL.md" \
     "skills/forge-${mode}-gpt/SKILL.md"
 done
 
-# --- Step 5: Shared forge mode skills ---
+# --- Step 5: Product-hub tooling (shared infrastructure) ---
 echo ""
-echo "🔁 Shared forge modes..."
-SHARED_MODES=("explore" "ideate" "design" "plan" "memory")
-for mode in "${SHARED_MODES[@]}"; do
-  copy_file \
-    "$SCRIPT_DIR/agents/forge/modes/${mode}.md" \
-    "$DIST/skills/forge-${mode}/SKILL.md" \
-    "skills/forge-${mode}/SKILL.md"
-done
-
-# --- Step 6: Product skill (shared) ---
-echo ""
-echo "📦 Product skill..."
-copy_file \
-  "$SCRIPT_DIR/agents/forge/modes/product.md" \
-  "$DIST/skills/forge-product/SKILL.md" \
-  "skills/forge-product/SKILL.md"
+echo "📦 Product-hub tooling..."
 
 if [ -f "$SCRIPT_DIR/agents/forge/product-hub/scripts/index.js" ]; then
   copy_file \
     "$SCRIPT_DIR/agents/forge/product-hub/scripts/index.js" \
-    "$DIST/skills/forge-product/scripts/index.js" \
-    "skills/forge-product/scripts/index.js"
+    "$DIST/skills/forge-product-gpt/scripts/index.js" \
+    "skills/forge-product-gpt/scripts/index.js"
 else
   echo "   ⚠️  Product-hub not built. Run: cd agents/forge/product-hub && npm run build"
 fi
 if [ -d "$SCRIPT_DIR/agents/forge/product-hub/references" ]; then
   copy_dir \
     "$SCRIPT_DIR/agents/forge/product-hub/references" \
-    "$DIST/skills/forge-product/references" \
-    "skills/forge-product/references/"
+    "$DIST/skills/forge-product-gpt/references" \
+    "skills/forge-product-gpt/references/"
 fi
 
-# --- Step 7: GPT schema references ---
-echo ""
-echo "🧾 Schema references..."
-SCHEMA_TARGETS=("forge-gpt" "forge-execute-gpt" "forge-verify-gpt")
-SCHEMA_FILES=("mission-brief.v1.md" "report.v1.md")
-for target in "${SCHEMA_TARGETS[@]}"; do
-  for schema in "${SCHEMA_FILES[@]}"; do
-    copy_file \
-      "$SCRIPT_DIR/agents/forge-gpt/schemas/${schema}" \
-      "$DIST/skills/${target}/references/schemas/${schema}" \
-      "skills/${target}/references/schemas/${schema}"
-  done
-done
-
-# --- Step 8: Shared engineering preferences ---
+# --- Step 6: Shared engineering preferences ---
 echo ""
 echo "📋 Shared preferences..."
 if [ -d "$SCRIPT_DIR/agents/forge/shared" ]; then
@@ -220,21 +192,13 @@ if [ -d "$SCRIPT_DIR/agents/forge/shared" ]; then
   done
 fi
 
-# --- Step 9: Forge references (for shared modes) ---
+# --- Step 7: Forge references ---
 echo ""
 echo "📚 Forge references..."
 if [ -d "$SCRIPT_DIR/agents/forge/references" ]; then
   for f in "$SCRIPT_DIR/agents/forge/references"/*.md; do
     fname=$(basename "$f")
-    copy_file "$f" "$DIST/skills/forge/references/$fname" "skills/forge/references/$fname"
-  done
-fi
-
-# Forge schemas (Claude-optimized, for shared modes that reference them)
-if [ -d "$SCRIPT_DIR/agents/forge/schemas" ]; then
-  for f in "$SCRIPT_DIR/agents/forge/schemas"/*.md; do
-    fname=$(basename "$f")
-    copy_file "$f" "$DIST/skills/forge/references/schemas/$fname" "skills/forge/references/schemas/$fname"
+    copy_file "$f" "$DIST/skills/forge-gpt/references/$fname" "skills/forge-gpt/references/$fname"
   done
 fi
 
