@@ -528,6 +528,22 @@ Ready for PLAN phase. Contracts are frozen — implementation must conform.
 
 ---
 
+## Visual Output (T2+)
+
+When complexity is T2+, include visual aids matching the design level:
+
+- **Level 2 (Components)** — Component Box (①) showing module boundaries and dependencies
+- **Level 2 (Components)** — Layer Stack (②) when architecture has clear layers
+- **Level 3 (Interactions)** — Sequence Flow (④) showing data/control flow between components
+- **Level 3 (Interactions)** — State Machine (⑤) for entity lifecycle flows
+- **Level 4 (Contracts)** — Interface signatures as code blocks (already present)
+
+Each design level output should lead with a visual diagram before the detailed text.
+
+Reference: `docs/specs/visual-vocabulary.md`
+
+---
+
 <stop_conditions>
 Stop when: All applicable levels completed and approved · Contracts defined (for T3+) · Failure modes addressed (for T3+) · User explicitly approves final design · REPORT generated.
 </stop_conditions>

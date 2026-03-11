@@ -255,6 +255,17 @@ task({...}) → output returns → Evaluate → Summarize → Bookkeep → Bridg
 If the output indicates blocked or needs_input, present the issue to the user and wait.
 If evidence is missing, acknowledge what appears done and dispatch a targeted follow-up or ask the user.
 
+### Visual Output (Coordinator)
+
+When summarizing dispatch results for T2+ tasks:
+
+- **Dispatch results** — Dashboard (⑩) for verification/build outcomes
+- **Worker status** — Parallel Tracks (⑥) when multiple workers are active
+- **Phase progress** — tables with ✅/🟡/❌ status for multi-phase work
+- **Dependency flow** — `→` arrows for what unblocks what
+
+Reference: `docs/specs/visual-vocabulary.md`
+
 ### bash Usage Policy
 
 Permitted: git commands, backlog/hub CLI, read-only inspection (`cat`, `ls`, `wc`, `head`).

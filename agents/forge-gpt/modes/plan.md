@@ -113,3 +113,17 @@ Risks: Medium — Step 3 touches request pipeline; mitigate with integration tes
 
 Next: Verify the plan, then execute.
 ```
+
+---
+
+## Visual Output (T2+)
+
+When complexity is T2+, include visual aids:
+
+- **Phase overview** — Parallel Tracks (⑥) showing which phases can run concurrently vs sequentially
+- **Step dependencies** — Dependency Tree (③) showing step ordering and blocking relationships
+- **Critical path** — Sequence Flow (④) highlighting the longest dependency chain
+
+Place the phase overview at the top of the plan output, before individual steps.
+
+Reference: `docs/specs/visual-vocabulary.md`

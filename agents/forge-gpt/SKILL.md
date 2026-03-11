@@ -194,6 +194,17 @@ After evaluating a complete dispatch:
 
 Never emit a bare `DISPATCH_COMPLETE` without a structured summary and narrative bridge.
 
+### Visual Output (Coordinator)
+
+When summarizing dispatch results for T2+ tasks:
+
+- **Dispatch results** — Dashboard (⑩) for verification/build outcomes
+- **Worker status** — Parallel Tracks (⑥) when multiple workers are active
+- **Phase progress** — tables with ✅/🟡/❌ status for multi-phase work
+- **Dependency flow** — `→` arrows for what unblocks what
+
+Reference: `docs/specs/visual-vocabulary.md`
+
 ## Retry rules
 
 - One automatic retry allowed when the failure is clearly a brief-quality or context-packaging problem.

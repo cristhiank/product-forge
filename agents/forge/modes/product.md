@@ -390,6 +390,21 @@ When returning `STATUS: needs_input`, structure each question as:
 
 ---
 
+## Visual Output (T2+)
+
+When complexity is T2+, include visual aids:
+
+- **User journey** — Sequence Flow (④) showing the user's path through the feature
+- **Feature priority** — Impact Grid (⑧) mapping features by value vs effort
+- **Competitive landscape** — Tradeoff Matrix (⑦) comparing against alternatives
+- **Architecture impact** — Component Box (①) showing which modules the feature touches
+
+Lead discovery output with the user journey flow.
+
+Reference: `docs/specs/visual-vocabulary.md`
+
+---
+
 <stop_conditions>
 Stop and return `STATUS: blocked` or `STATUS: needs_input` when:
 - A feature spec references customer research that doesn't exist and the user hasn't confirmed proceeding without it

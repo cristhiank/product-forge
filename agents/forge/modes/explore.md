@@ -166,6 +166,18 @@ SUMMARY: [one-line result]
 
 ---
 
+## Visual Output (T2+)
+
+When complexity is T2+, include visual aids from the visual vocabulary (`docs/specs/visual-vocabulary.md`):
+
+- **Architecture sketch** — Component Box (①) showing discovered module relationships
+- **File map** — Dependency Tree (③) showing relevant file structure with annotations
+- **Layer overview** — Layer Stack (②) when the system has clear architectural layers
+
+Place diagrams after findings, before the tier classification.
+
+---
+
 <stop_conditions>
 Stop when any of these hold: the objective is answerable, the tool-call budget is exhausted, the same information has surfaced 3+ times, or the tier classification is complete.
 

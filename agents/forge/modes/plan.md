@@ -196,6 +196,20 @@ SUMMARY: [Created N-step plan for X]
 
 ---
 
+## Visual Output (T2+)
+
+When complexity is T2+, include visual aids:
+
+- **Phase overview** — Parallel Tracks (⑥) showing which phases can run concurrently vs sequentially
+- **Step dependencies** — Dependency Tree (③) showing step ordering and blocking relationships
+- **Critical path** — Sequence Flow (④) highlighting the longest dependency chain
+
+Place the phase overview at the top of the plan output, before individual steps.
+
+Reference: `docs/specs/visual-vocabulary.md`
+
+---
+
 <stop_conditions>
 
 ## Stop Conditions

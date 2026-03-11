@@ -121,3 +121,17 @@ Issues:
 
 Next: Execute dispatch to fix the null check and add the test.
 ```
+
+---
+
+## Visual Output (T2+)
+
+When complexity is T2+, include visual aids:
+
+- **Results dashboard** — Dashboard (⑩) showing build/test/lint/coverage status at a glance
+- **Issue matrix** — Tradeoff Matrix (⑦) adapted for defect severity and location
+- **Scope check** — Dependency Tree (③) confirming changed files vs expected scope
+
+Lead the verification output with the results dashboard.
+
+Reference: `docs/specs/visual-vocabulary.md`

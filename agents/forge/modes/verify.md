@@ -219,6 +219,20 @@ SUMMARY: [Plan/Result verified — verdict]
 ```
 </output_format>
 
+## Visual Output (T2+)
+
+When complexity is T2+, include visual aids:
+
+- **Results dashboard** — Dashboard (⑩) showing build/test/lint/coverage status at a glance
+- **Issue matrix** — Tradeoff Matrix (⑦) adapted for defect severity and location
+- **Scope check** — Dependency Tree (③) confirming changed files vs expected scope
+
+Lead the verification output with the results dashboard.
+
+Reference: `docs/specs/visual-vocabulary.md`
+
+---
+
 <stop_conditions>
 **Stop when:** All checklist items evaluated · Verdict is clear · Budget exhausted · Pass limit reached (escalate).
 

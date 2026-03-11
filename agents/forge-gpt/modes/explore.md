@@ -89,3 +89,15 @@ Unknowns:
 
 Next: Ideate on rate limiting approaches (in-memory vs Redis vs API gateway).
 ```
+
+---
+
+## Visual Output (T2+)
+
+When complexity is T2+, include visual aids from the visual vocabulary (`docs/specs/visual-vocabulary.md`):
+
+- **Architecture sketch** — Component Box (①) showing discovered module relationships
+- **File map** — Dependency Tree (③) showing relevant file structure with annotations
+- **Layer overview** — Layer Stack (②) when the system has clear architectural layers
+
+Place diagrams after findings, before the tier classification.

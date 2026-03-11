@@ -69,3 +69,19 @@ When you stop, report the design:
 - **Design artifact:** the actual design content (capabilities, components, interactions, and/or contracts)
 - **Design questions:** remaining questions for the user
 - **Next:** recommended next step (usually: plan phase)
+
+---
+
+## Visual Output (T2+)
+
+When complexity is T2+, include visual aids matching the design level:
+
+- **Level 2 (Components)** — Component Box (①) showing module boundaries and dependencies
+- **Level 2 (Components)** — Layer Stack (②) when architecture has clear layers
+- **Level 3 (Interactions)** — Sequence Flow (④) showing data/control flow between components
+- **Level 3 (Interactions)** — State Machine (⑤) for entity lifecycle flows
+- **Level 4 (Contracts)** — Interface signatures as code blocks (already present)
+
+Each design level output should lead with a visual diagram before the detailed text.
+
+Reference: `docs/specs/visual-vocabulary.md`

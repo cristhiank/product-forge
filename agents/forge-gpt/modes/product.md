@@ -74,3 +74,18 @@ When you stop, report what was produced:
 - **Artifact:** the actual product document (analysis, spec, validation plan, or bridge brief)
 - **Decisions needed:** any open questions for the user
 - **Next:** recommended next step (usually: user review → plan phase or more discovery)
+
+---
+
+## Visual Output (T2+)
+
+When complexity is T2+, include visual aids:
+
+- **User journey** — Sequence Flow (④) showing the user's path through the feature
+- **Feature priority** — Impact Grid (⑧) mapping features by value vs effort
+- **Competitive landscape** — Tradeoff Matrix (⑦) comparing against alternatives
+- **Architecture impact** — Component Box (①) showing which modules the feature touches
+
+Lead discovery output with the user journey flow.
+
+Reference: `docs/specs/visual-vocabulary.md`

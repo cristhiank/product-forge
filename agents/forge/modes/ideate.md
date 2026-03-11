@@ -166,6 +166,20 @@ Do [X]. Here's why: [rationale with evidence references]
 
 ---
 
+## Visual Output (T2+)
+
+When complexity is T2+, include visual aids:
+
+- **Approach comparison** — Tradeoff Matrix (⑦) scoring approaches across dimensions with 🟢🟡🔴
+- **Change impact** — Before/After (⑨) showing current vs proposed state when recommending architectural changes
+- **Priority mapping** — Impact Grid (⑧) when approaches have clear effort/value tradeoffs
+
+The tradeoff matrix is required for any comparison of 2+ approaches.
+
+Reference: `docs/specs/visual-vocabulary.md`
+
+---
+
 <stop_conditions>
 
 **Stop when:** Required approaches generated · Contrarian included · Differentiation verified (2+ dims) · Design questions included per approach · Recommendation made with rationale.
