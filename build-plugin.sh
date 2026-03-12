@@ -10,6 +10,7 @@ set -euo pipefail
 #   - agents/forge/product-hub/ → dist/skills/forge-product/ (bundle + refs)
 #   - skills/* → dist/skills/* (infrastructure skills)
 #   - plugin.json → dist/plugin.json
+#   - .mcp.json → dist/.mcp.json
 #
 # Usage:
 #   ./build-plugin.sh              # build to dist/
@@ -81,6 +82,7 @@ fi
 # --- Step 1: Plugin manifest ---
 echo "📦 Plugin manifest..."
 copy_file "$SCRIPT_DIR/plugin.json" "$DIST/plugin.json" "plugin.json"
+copy_file "$SCRIPT_DIR/.mcp.json" "$DIST/.mcp.json" ".mcp.json"
 
 # --- Step 2: Agent ---
 echo ""

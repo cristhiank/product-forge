@@ -1,0 +1,22 @@
+{
+  "mcpServers": {
+    "context7": {
+      "type": "http",
+      "url": "https://mcp.context7.com/mcp",
+      "tools": [
+        "resolve-library-id",
+        "query-docs"
+      ]
+    },
+    "playwright": {
+      "type": "local",
+      "command": "npx",
+      "tools": [
+        "*"
+      ],
+      "args": [
+        "@playwright/mcp@latest"
+      ]
+    }
+  }
+}

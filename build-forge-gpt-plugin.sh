@@ -13,6 +13,7 @@ set -euo pipefail
 #   - agents/forge/product-hub/ → dist-forge-gpt/skills/forge-product/ (bundle + refs)
 #   - skills/* → dist-forge-gpt/skills/* (infrastructure + architecture + PM skills)
 #   - plugin.json (rewritten as forge-gpt) → dist-forge-gpt/plugin.json
+#   - .mcp.json → dist-forge-gpt/.mcp.json
 #
 # Usage:
 #   ./build-forge-gpt-plugin.sh              # build to dist-forge-gpt/
@@ -104,6 +105,7 @@ with open('$DIST/plugin.json', 'w') as f: json.dump(m, f, indent=2); f.write('\n
 else
   echo "   ❌ Missing: plugin.json"
 fi
+copy_file "$SCRIPT_DIR/.mcp.json" "$DIST/.mcp.json" ".mcp.json"
 
 # --- Step 2: Agent ---
 echo ""

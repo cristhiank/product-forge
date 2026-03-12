@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Build the 3-plugin Forge system:
-#   1. forge-shared — shared skills (infra, architecture, PM, shared modes)
+#   1. forge-shared — shared skills (infra, architecture, PM, shared modes, sole MCP owner)
 #   2. forge        — Opus coordinator (agent + 3 unique skills)
 #   3. forge-gpt    — GPT coordinator (agent + 3 unique skills)
 #
@@ -106,6 +106,7 @@ if ! $DRY_RUN; then rm -rf "$DIST_SHARED"; mkdir -p "$DIST_SHARED"; fi
 # Manifest
 echo "📦 Manifest..."
 copy_file "$SCRIPT_DIR/plugin-shared.json" "$DIST_SHARED/plugin.json" "plugin.json"
+copy_file "$SCRIPT_DIR/.mcp.json" "$DIST_SHARED/.mcp.json" ".mcp.json"
 
 # Shared forge modes
 echo "⚙️  Shared forge modes..."
@@ -218,7 +219,24 @@ if ! $DRY_RUN; then rm -rf "$DIST_FORGE"; mkdir -p "$DIST_FORGE"; fi
 
 # Manifest
 echo "📦 Manifest..."
-copy_file "$SCRIPT_DIR/plugin.json" "$DIST_FORGE/plugin.json" "plugin.json"
+TOTAL=$((TOTAL + 1))
+if [ -f "$SCRIPT_DIR/plugin.json" ]; then
+  if $DRY_RUN; then
+    echo "   Would write: plugin.json (forge, no MCP bundle)"
+  else
+    mkdir -p "$DIST_FORGE"
+    python3 -c "
+import json
+with open('$SCRIPT_DIR/plugin.json') as f: m = json.load(f)
+m.pop('mcpServers', None)
+with open('$DIST_FORGE/plugin.json', 'w') as f: json.dump(m, f, indent=2); f.write('\n')
+"
+    echo "   ✅ plugin.json (forge, no MCP bundle)"
+  fi
+  SUCCESS=$((SUCCESS + 1))
+else
+  echo "   ❌ Missing: plugin.json"
+fi
 
 # Agent
 echo "🤖 Agent..."
@@ -263,6 +281,7 @@ with open('$SCRIPT_DIR/plugin.json') as f: m = json.load(f)
 m['name'] = 'forge-gpt'
 m['description'] = 'Forge-GPT coordinator — GPT-optimized dispatch with contract-driven execution and verification.'
 m['keywords'] = list(set(['forge-gpt','gpt-family','contract-driven'] + m.get('keywords',[])))
+m.pop('mcpServers', None)
 with open('$DIST_GPT/plugin.json', 'w') as f: json.dump(m, f, indent=2); f.write('\n')
 "
     echo "   ✅ plugin.json (forge-gpt)"

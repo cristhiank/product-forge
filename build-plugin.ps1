@@ -7,6 +7,7 @@
 #   - agents/forge/product-hub/ -> dist/skills/forge-product/ (bundle + refs)
 #   - skills/* -> dist/skills/* (infrastructure skills)
 #   - plugin.json -> dist/plugin.json
+#   - .mcp.json -> dist/.mcp.json
 #
 # Usage:
 #   .\build-plugin.ps1              # build to dist/
@@ -78,6 +79,7 @@ if (-not $DryRun) {
 # --- Step 1: Plugin manifest ---
 Write-Host "📦 Plugin manifest..."
 Copy-PluginFile "$ScriptDir\plugin.json" "$Dist\plugin.json" "plugin.json" | Out-Null
+Copy-PluginFile "$ScriptDir\.mcp.json" "$Dist\.mcp.json" ".mcp.json" | Out-Null
 
 # --- Step 2: Agent ---
 Write-Host ""

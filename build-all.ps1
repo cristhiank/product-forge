@@ -1,5 +1,5 @@
 # Build the 3-plugin Forge system (PowerShell):
-#   1. forge-shared — shared skills (infra, architecture, PM, shared modes)
+#   1. forge-shared — shared skills (infra, architecture, PM, shared modes, sole MCP owner)
 #   2. forge        — Opus coordinator (agent + 3 unique skills)
 #   3. forge-gpt    — GPT coordinator (agent + 3 unique skills)
 #
@@ -106,7 +106,14 @@ $body
 }
 
 function Write-ReframedManifest {
-    param([string]$Src, [string]$Dst, [string]$Name, [string]$Desc, [string[]]$ExtraKeywords)
+    param(
+        [string]$Src,
+        [string]$Dst,
+        [string]$Name,
+        [string]$Desc,
+        [string[]]$ExtraKeywords,
+        [switch]$StripMcpServers
+    )
     $script:Total++
     if (-not (Test-Path $Src -PathType Leaf)) {
         Write-Host "   ❌ Missing: $Src"
@@ -118,6 +125,7 @@ function Write-ReframedManifest {
     $manifest.name = $Name
     $manifest.description = $Desc
     $manifest.keywords = @((@($ExtraKeywords) + @($base.keywords)) | Select-Object -Unique)
+    if ($StripMcpServers) { $manifest.Remove('mcpServers') }
 
     $rendered = ($manifest | ConvertTo-Json -Depth 10) + "`n"
     if ($DryRun) {
@@ -146,6 +154,7 @@ if (-not $DryRun) {
 
 Write-Host "📦 Manifest..."
 Copy-PluginFile "$ScriptDir\plugin-shared.json" "$DistShared\plugin.json" "plugin.json" | Out-Null
+Copy-PluginFile "$ScriptDir\.mcp.json" "$DistShared\.mcp.json" ".mcp.json" | Out-Null
 
 Write-Host "⚙️  Shared forge modes..."
 foreach ($mode in @('explore','ideate','design','plan','memory','product')) {
@@ -235,7 +244,13 @@ if (-not $DryRun) {
 }
 
 Write-Host "📦 Manifest..."
-Copy-PluginFile "$ScriptDir\plugin.json" "$DistForge\plugin.json" "plugin.json" | Out-Null
+Write-ReframedManifest `
+    "$ScriptDir\plugin.json" `
+    "$DistForge\plugin.json" `
+    "forge" `
+    "Forge dev partner — dispatch coordinator with specialized skills for product management, architecture guidance, backlog tracking, expert council reviews, and parallel worker execution." `
+    @() `
+    -StripMcpServers | Out-Null
 
 Write-Host "🤖 Agent..."
 Write-AgentBundle `
@@ -272,7 +287,8 @@ Write-ReframedManifest `
     "$DistGpt\plugin.json" `
     "forge-gpt" `
     "Forge-GPT coordinator — GPT-optimized dispatch with contract-driven execution and verification." `
-    @('forge-gpt','gpt-family','contract-driven') | Out-Null
+    @('forge-gpt','gpt-family','contract-driven') `
+    -StripMcpServers | Out-Null
 
 Write-Host "🤖 Agent..."
 Write-AgentBundle `

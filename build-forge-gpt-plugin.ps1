@@ -7,6 +7,7 @@
 #   - skills/{experts-council,backlog,agents-hub,copilot-cli-skill} -> dist-forge-gpt/skills/*
 #   - skills/{backend-architecture,frontend-architecture} -> dist-forge-gpt/skills/*
 #   - plugin.json (rewritten as forge-gpt) -> dist-forge-gpt/plugin.json
+#   - .mcp.json -> dist-forge-gpt/.mcp.json
 #
 # Usage:
 #   .\build-forge-gpt-plugin.ps1              # build to dist-forge-gpt/
@@ -166,6 +167,7 @@ if (-not $DryRun) {
 # --- Step 1: Plugin manifest ---
 Write-Host "📦 Plugin manifest..."
 Write-ReframedManifest "$ScriptDir\plugin.json" "$Dist\plugin.json" | Out-Null
+Copy-PluginFile "$ScriptDir\.mcp.json" "$Dist\.mcp.json" ".mcp.json" | Out-Null
 
 # --- Step 2: Agent ---
 Write-Host ""
