@@ -204,6 +204,14 @@ if [ -d "$SCRIPT_DIR/agents/forge/references" ]; then
   done
 fi
 
+# --- Step 8: Visual vocabulary spec ---
+echo ""
+echo "📐 Visual vocabulary..."
+copy_file \
+  "$SCRIPT_DIR/agents/forge/docs/specs/visual-vocabulary.md" \
+  "$DIST/skills/forge-gpt/references/specs/visual-vocabulary.md" \
+  "skills/forge-gpt/references/specs/visual-vocabulary.md"
+
 # --- Step 10: Infrastructure skills ---
 echo ""
 echo "🔧 Infrastructure skills..."

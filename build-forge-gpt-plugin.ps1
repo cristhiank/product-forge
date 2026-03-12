@@ -240,6 +240,34 @@ foreach ($skill in $archSkills) {
     }
 }
 
+# --- Step 7: Shared preferences ---
+Write-Host ""
+Write-Host "📋 Shared preferences..."
+$sharedDir = "$ScriptDir\agents\forge\shared"
+if (Test-Path $sharedDir -PathType Container) {
+    Get-ChildItem -Path $sharedDir -Filter '*.md' | ForEach-Object {
+        Copy-PluginFile $_.FullName "$Dist\skills\forge-gpt\references\shared\$($_.Name)" "skills/forge-gpt/references/shared/$($_.Name)" | Out-Null
+    }
+}
+
+# --- Step 8: Visual vocabulary spec ---
+Write-Host ""
+Write-Host "📐 Visual vocabulary..."
+Copy-PluginFile `
+    "$ScriptDir\agents\forge\docs\specs\visual-vocabulary.md" `
+    "$Dist\skills\forge-gpt\references\specs\visual-vocabulary.md" `
+    "skills/forge-gpt/references/specs/visual-vocabulary.md" | Out-Null
+
+# --- Step 9: Forge references ---
+Write-Host ""
+Write-Host "📚 Forge references..."
+$forgeRefsDir = "$ScriptDir\agents\forge\references"
+if (Test-Path $forgeRefsDir -PathType Container) {
+    Get-ChildItem -Path $forgeRefsDir -Filter '*.md' | ForEach-Object {
+        Copy-PluginFile $_.FullName "$Dist\skills\forge-gpt\references\$($_.Name)" "skills/forge-gpt/references/$($_.Name)" | Out-Null
+    }
+}
+
 # --- Cleanup artifacts ---
 if (-not $DryRun) {
     Get-ChildItem -Path $Dist -Recurse -Filter '.DS_Store' -ErrorAction SilentlyContinue |
