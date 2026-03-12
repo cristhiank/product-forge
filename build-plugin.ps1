@@ -166,6 +166,34 @@ if (Test-Path $phRefs -PathType Container) {
         "skills/forge-product/references/" | Out-Null
 }
 
+# --- Step 5b: Shared preferences ---
+Write-Host ""
+Write-Host "📋 Shared preferences..."
+$sharedDir = "$ScriptDir\agents\forge\shared"
+if (Test-Path $sharedDir -PathType Container) {
+    Get-ChildItem -Path $sharedDir -Filter '*.md' | ForEach-Object {
+        Copy-PluginFile $_.FullName "$Dist\skills\forge\references\shared\$($_.Name)" "skills/forge/references/shared/$($_.Name)" | Out-Null
+    }
+}
+
+# --- Step 5c: Visual vocabulary spec ---
+Write-Host ""
+Write-Host "📐 Visual vocabulary..."
+Copy-PluginFile `
+    "$ScriptDir\agents\forge\docs\specs\visual-vocabulary.md" `
+    "$Dist\skills\forge\references\specs\visual-vocabulary.md" `
+    "skills/forge/references/specs/visual-vocabulary.md" | Out-Null
+
+# --- Step 5d: Forge references ---
+Write-Host ""
+Write-Host "📚 Forge references..."
+$forgeRefsDir = "$ScriptDir\agents\forge\references"
+if (Test-Path $forgeRefsDir -PathType Container) {
+    Get-ChildItem -Path $forgeRefsDir -Filter '*.md' | ForEach-Object {
+        Copy-PluginFile $_.FullName "$Dist\skills\forge\references\$($_.Name)" "skills/forge/references/$($_.Name)" | Out-Null
+    }
+}
+
 # --- Step 6: Infrastructure skills ---
 Write-Host ""
 Write-Host "🔧 Infrastructure skills..."
