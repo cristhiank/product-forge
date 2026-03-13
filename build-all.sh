@@ -154,9 +154,9 @@ if [ -d "$SCRIPT_DIR/agents/forge/references" ]; then
   done
 fi
 
-# Forge specs (visual-vocabulary, external-voice)
+# Forge specs (visual-vocabulary, external-voice, design-artifacts)
 echo "📐 Forge specs..."
-for spec in visual-vocabulary.md external-voice.md; do
+for spec in visual-vocabulary.md external-voice.md design-artifacts.md; do
   if [ -f "$SCRIPT_DIR/agents/forge/docs/specs/$spec" ]; then
     copy_file \
       "$SCRIPT_DIR/agents/forge/docs/specs/$spec" \
@@ -164,6 +164,15 @@ for spec in visual-vocabulary.md external-voice.md; do
       "skills/forge-shared-prefs/references/specs/$spec"
   fi
 done
+
+# Design review template
+echo "📄 Design review template..."
+if [ -f "$SCRIPT_DIR/agents/forge/templates/design-review.html" ]; then
+  copy_file \
+    "$SCRIPT_DIR/agents/forge/templates/design-review.html" \
+    "$DIST_SHARED/skills/forge-shared-prefs/references/templates/design-review.html" \
+    "skills/forge-shared-prefs/references/templates/design-review.html"
+fi
 
 # Infrastructure skills
 echo "🔧 Infrastructure skills..."

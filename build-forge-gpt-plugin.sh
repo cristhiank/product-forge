@@ -219,6 +219,20 @@ copy_file \
   "$DIST/skills/forge-gpt/references/specs/external-voice.md" \
   "skills/forge-gpt/references/specs/external-voice.md"
 
+# --- Step 8c: Design artifacts spec ---
+echo "🎨 Design artifacts..."
+copy_file \
+  "$SCRIPT_DIR/agents/forge/docs/specs/design-artifacts.md" \
+  "$DIST/skills/forge-gpt/references/specs/design-artifacts.md" \
+  "skills/forge-gpt/references/specs/design-artifacts.md"
+
+# --- Step 8d: Design review template ---
+echo "📄 Design review template..."
+copy_file \
+  "$SCRIPT_DIR/agents/forge/templates/design-review.html" \
+  "$DIST/skills/forge-gpt/references/templates/design-review.html" \
+  "skills/forge-gpt/references/templates/design-review.html"
+
 # --- Step 10: Infrastructure skills ---
 echo ""
 echo "🔧 Infrastructure skills..."

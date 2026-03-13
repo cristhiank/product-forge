@@ -4,13 +4,8 @@
 #   - agents/forge-gpt/forge-gpt.agent.md -> dist-forge-gpt/agents/Forge-GPT.agent.md (with frontmatter)
 #   - agents/forge-gpt/SKILL.md -> dist-forge-gpt/skills/forge-gpt/SKILL.md
 #   - agents/forge-gpt/modes/*.md -> dist-forge-gpt/skills/forge-{mode}-gpt/SKILL.md (all 8 GPT modes)
-#   - agents/forge/product-hub/ -> dist-forge-gpt/skills/forge-product-gpt/ (bundle + refs)
-#   - agents/forge/shared/* -> dist-forge-gpt/skills/forge-gpt/references/shared/
-#   - agents/forge/docs/specs/{visual-vocabulary,external-voice}.md -> dist-forge-gpt/skills/forge-gpt/references/specs/
-#   - agents/forge/references/*.md -> dist-forge-gpt/skills/forge-gpt/references/
 #   - skills/{experts-council,backlog,agents-hub,copilot-cli-skill} -> dist-forge-gpt/skills/*
 #   - skills/{backend-architecture,frontend-architecture} -> dist-forge-gpt/skills/*
-#   - skills/{jobs-to-be-done,made-to-stick,copywriting,lean-startup,storybrand-messaging,cro-methodology,page-cro} -> dist-forge-gpt/skills/*
 #   - plugin.json (rewritten as forge-gpt) -> dist-forge-gpt/plugin.json
 #   - .mcp.json -> dist-forge-gpt/.mcp.json
 #
@@ -203,27 +198,70 @@ foreach ($mode in @('execute','verify','explore','ideate','design','plan','memor
         "skills/forge-$mode-gpt/SKILL.md" | Out-Null
 }
 
-# --- Step 5: Product-hub tooling ---
+# --- Step 5: Product-hub tooling (shared infrastructure) ---
 Write-Host ""
 Write-Host "📦 Product-hub tooling..."
-$phIndex = "$ScriptDir\agents\forge\product-hub\scripts\index.js"
-if (Test-Path $phIndex -PathType Leaf) {
-    Copy-PluginFile `
-        $phIndex `
-        "$Dist\skills\forge-product-gpt\scripts\index.js" `
-        "skills/forge-product-gpt/scripts/index.js" | Out-Null
+$phScript = "$ScriptDir\agents\forge\product-hub\scripts\index.js"
+if (Test-Path $phScript -PathType Leaf) {
+    Copy-PluginFile $phScript "$Dist\skills\forge-product-gpt\scripts\index.js" "skills/forge-product-gpt/scripts/index.js" | Out-Null
 } else {
-    Write-Host "   ⚠️  Product-hub not built. Run: cd agents\forge\product-hub; npm run build"
+    Write-Host "   ⚠️  Product-hub not built. Run: cd agents/forge/product-hub && npm run build"
 }
 $phRefs = "$ScriptDir\agents\forge\product-hub\references"
 if (Test-Path $phRefs -PathType Container) {
-    Copy-PluginDir `
-        $phRefs `
-        "$Dist\skills\forge-product-gpt\references" `
-        "skills/forge-product-gpt/references/" | Out-Null
+    Copy-PluginDir $phRefs "$Dist\skills\forge-product-gpt\references" "skills/forge-product-gpt/references/" | Out-Null
 }
 
-# --- Step 6: Infrastructure skills ---
+# --- Step 6: Shared preferences ---
+Write-Host ""
+Write-Host "📋 Shared preferences..."
+$sharedDir = "$ScriptDir\agents\forge\shared"
+if (Test-Path $sharedDir -PathType Container) {
+    Get-ChildItem -Path $sharedDir -Filter '*.md' | ForEach-Object {
+        Copy-PluginFile $_.FullName "$Dist\skills\forge-gpt\references\shared\$($_.Name)" "skills/forge-gpt/references/shared/$($_.Name)" | Out-Null
+    }
+}
+
+# --- Step 7: Forge references ---
+Write-Host ""
+Write-Host "📚 Forge references..."
+$forgeRefsDir = "$ScriptDir\agents\forge\references"
+if (Test-Path $forgeRefsDir -PathType Container) {
+    Get-ChildItem -Path $forgeRefsDir -Filter '*.md' | ForEach-Object {
+        Copy-PluginFile $_.FullName "$Dist\skills\forge-gpt\references\$($_.Name)" "skills/forge-gpt/references/$($_.Name)" | Out-Null
+    }
+}
+
+# --- Step 8: Visual vocabulary spec ---
+Write-Host ""
+Write-Host "📐 Visual vocabulary..."
+Copy-PluginFile `
+    "$ScriptDir\agents\forge\docs\specs\visual-vocabulary.md" `
+    "$Dist\skills\forge-gpt\references\specs\visual-vocabulary.md" `
+    "skills/forge-gpt/references/specs/visual-vocabulary.md" | Out-Null
+
+# --- Step 8b: External voice spec ---
+Write-Host "🗣️  External voice..."
+Copy-PluginFile `
+    "$ScriptDir\agents\forge\docs\specs\external-voice.md" `
+    "$Dist\skills\forge-gpt\references\specs\external-voice.md" `
+    "skills/forge-gpt/references/specs/external-voice.md" | Out-Null
+
+# --- Step 8c: Design artifacts spec ---
+Write-Host "🎨 Design artifacts..."
+Copy-PluginFile `
+    "$ScriptDir\agents\forge\docs\specs\design-artifacts.md" `
+    "$Dist\skills\forge-gpt\references\specs\design-artifacts.md" `
+    "skills/forge-gpt/references/specs/design-artifacts.md" | Out-Null
+
+# --- Step 8d: Design review template ---
+Write-Host "📄 Design review template..."
+Copy-PluginFile `
+    "$ScriptDir\agents\forge\templates\design-review.html" `
+    "$Dist\skills\forge-gpt\references\templates\design-review.html" `
+    "skills/forge-gpt/references/templates/design-review.html" | Out-Null
+
+# --- Step 10: Infrastructure skills ---
 Write-Host ""
 Write-Host "🔧 Infrastructure skills..."
 $infraSkills = @('experts-council', 'backlog', 'agents-hub', 'copilot-cli-skill')
@@ -246,7 +284,7 @@ foreach ($skill in $infraSkills) {
     }
 }
 
-# --- Step 7: Architecture skills ---
+# --- Step 11: Architecture skills ---
 Write-Host ""
 Write-Host "🏗️  Architecture skills..."
 $archSkills = @('backend-architecture', 'frontend-architecture')
@@ -262,41 +300,6 @@ foreach ($skill in $archSkills) {
     $refsDir = "$srcDir\references"
     if (Test-Path $refsDir -PathType Container) {
         Copy-PluginDir $refsDir "$dstDir\references" "skills/$skill/references/" | Out-Null
-    }
-}
-
-# --- Step 8: Shared preferences ---
-Write-Host ""
-Write-Host "📋 Shared preferences..."
-$sharedDir = "$ScriptDir\agents\forge\shared"
-if (Test-Path $sharedDir -PathType Container) {
-    Get-ChildItem -Path $sharedDir -Filter '*.md' | ForEach-Object {
-        Copy-PluginFile $_.FullName "$Dist\skills\forge-gpt\references\shared\$($_.Name)" "skills/forge-gpt/references/shared/$($_.Name)" | Out-Null
-    }
-}
-
-# --- Step 9: Visual vocabulary spec ---
-Write-Host ""
-Write-Host "📐 Visual vocabulary..."
-Copy-PluginFile `
-    "$ScriptDir\agents\forge\docs\specs\visual-vocabulary.md" `
-    "$Dist\skills\forge-gpt\references\specs\visual-vocabulary.md" `
-    "skills/forge-gpt/references/specs/visual-vocabulary.md" | Out-Null
-
-# --- Step 10: External voice spec ---
-Write-Host "🗣️  External voice..."
-Copy-PluginFile `
-    "$ScriptDir\agents\forge\docs\specs\external-voice.md" `
-    "$Dist\skills\forge-gpt\references\specs\external-voice.md" `
-    "skills/forge-gpt/references/specs/external-voice.md" | Out-Null
-
-# --- Step 11: Forge references ---
-Write-Host ""
-Write-Host "📚 Forge references..."
-$forgeRefsDir = "$ScriptDir\agents\forge\references"
-if (Test-Path $forgeRefsDir -PathType Container) {
-    Get-ChildItem -Path $forgeRefsDir -Filter '*.md' | ForEach-Object {
-        Copy-PluginFile $_.FullName "$Dist\skills\forge-gpt\references\$($_.Name)" "skills/forge-gpt/references/$($_.Name)" | Out-Null
     }
 }
 

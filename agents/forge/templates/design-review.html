@@ -1,0 +1,655 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Design Review: {{TITLE}}</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/markmap-view@0.18/dist/browser/index.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/markmap-lib@0.18/dist/browser/index.js"></script>
+<style>
+  :root {
+    --bg: #1a1a2e; --bg-card: #16213e; --bg-hover: #0f3460;
+    --text: #e0e0e0; --text-muted: #8899aa; --text-accent: #00d4ff;
+    --border: #2a2a4a; --border-active: #00d4ff;
+    --approve: #00c853; --flag: #ffd600; --comment: #448aff;
+    --reject: #ff5252; --radius: 8px; --tab-height: 42px;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    background: var(--bg); color: var(--text); line-height: 1.6;
+  }
+
+  /* Header */
+  .header {
+    background: var(--bg-card); border-bottom: 1px solid var(--border);
+    padding: 16px 24px; display: flex; align-items: center; justify-content: space-between;
+  }
+  .header h1 { font-size: 1.3rem; font-weight: 600; }
+  .header h1 .emoji { margin-right: 8px; }
+  .header .badge {
+    font-size: 0.75rem; padding: 2px 10px; border-radius: 12px;
+    background: var(--flag); color: #000; font-weight: 600; margin-left: 12px;
+  }
+  .header .controls { display: flex; gap: 8px; }
+  .header .controls button {
+    background: var(--bg); border: 1px solid var(--border); color: var(--text);
+    padding: 6px 14px; border-radius: var(--radius); cursor: pointer; font-size: 0.8rem;
+  }
+  .header .controls button:hover { border-color: var(--text-accent); color: var(--text-accent); }
+  .header .controls button.active { background: var(--text-accent); color: var(--bg); border-color: var(--text-accent); }
+
+  /* Layout */
+  .layout { display: grid; grid-template-columns: 180px 1fr; height: calc(100vh - 60px); }
+
+  /* Sidebar tabs */
+  .sidebar {
+    background: var(--bg-card); border-right: 1px solid var(--border);
+    padding-top: 8px; overflow-y: auto;
+  }
+  .sidebar .tab-btn {
+    width: 100%; text-align: left; padding: 10px 16px; border: none;
+    background: transparent; color: var(--text-muted); cursor: pointer;
+    font-size: 0.85rem; border-left: 3px solid transparent; transition: all 0.15s;
+  }
+  .sidebar .tab-btn:hover { background: var(--bg-hover); color: var(--text); }
+  .sidebar .tab-btn.active {
+    color: var(--text-accent); border-left-color: var(--text-accent); background: var(--bg-hover);
+  }
+  .sidebar .tab-btn .tab-icon { margin-right: 8px; }
+
+  /* Content area */
+  .content { overflow-y: auto; padding: 24px 32px; }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+
+  /* Section styles */
+  .section { margin-bottom: 32px; }
+  .section h2 {
+    font-size: 1.1rem; color: var(--text-accent); margin-bottom: 12px;
+    padding-bottom: 6px; border-bottom: 1px solid var(--border);
+  }
+  .section h3 { font-size: 0.95rem; color: var(--text); margin: 16px 0 8px; }
+
+  /* Diagram container */
+  .diagram-container {
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 20px; margin: 12px 0; overflow-x: auto;
+  }
+  .diagram-container .mermaid { display: flex; justify-content: center; }
+  .diagram-title {
+    font-size: 0.8rem; color: var(--text-muted); margin-bottom: 8px; text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  /* Markmap container */
+  .markmap-container {
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius);
+    height: 400px; margin: 12px 0; position: relative;
+  }
+  .markmap-container svg { width: 100%; height: 100%; }
+
+  /* Tables */
+  table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 0.85rem; }
+  th { background: var(--bg-card); color: var(--text-accent); text-align: left; padding: 10px 12px; border-bottom: 2px solid var(--border); }
+  td { padding: 8px 12px; border-bottom: 1px solid var(--border); }
+  tr:hover td { background: var(--bg-hover); }
+
+  /* Decision cards */
+  .decision-card {
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 16px; margin: 12px 0;
+  }
+  .decision-card .decision-header {
+    display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;
+  }
+  .decision-card .decision-id { color: var(--text-muted); font-size: 0.75rem; font-family: monospace; }
+  .decision-card .decision-status {
+    font-size: 0.75rem; padding: 2px 8px; border-radius: 10px;
+  }
+  .decision-card .decision-status.proposed { background: var(--flag); color: #000; }
+  .decision-card .decision-status.accepted { background: var(--approve); color: #000; }
+  .decision-card .decision-status.rejected { background: var(--reject); color: #fff; }
+  .decision-card h4 { font-size: 0.95rem; margin-bottom: 8px; }
+  .decision-card .rationale { color: var(--text-muted); font-size: 0.85rem; }
+  .decision-card .alternatives { color: var(--text-muted); font-size: 0.8rem; font-style: italic; margin-top: 6px; }
+
+  /* Question cards */
+  .question-card {
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 16px; margin: 12px 0; border-left: 3px solid var(--comment);
+  }
+  .question-card.high { border-left-color: var(--reject); }
+  .question-card.medium { border-left-color: var(--flag); }
+  .question-card .question-meta {
+    display: flex; gap: 12px; margin-bottom: 6px; font-size: 0.75rem; color: var(--text-muted);
+  }
+
+  /* Feedback panel */
+  .feedback-panel {
+    background: var(--bg-card); border-top: 2px solid var(--border); padding: 16px 24px;
+    position: sticky; bottom: 0;
+  }
+  .feedback-panel h3 { font-size: 0.9rem; margin-bottom: 10px; color: var(--text-accent); }
+  .feedback-section {
+    display: flex; align-items: center; gap: 12px; margin: 6px 0; font-size: 0.85rem;
+  }
+  .feedback-section label { display: flex; align-items: center; gap: 4px; cursor: pointer; }
+  .feedback-section input[type="radio"] { accent-color: var(--text-accent); }
+  .feedback-section .comment-input {
+    flex: 1; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius);
+    color: var(--text); padding: 6px 10px; font-size: 0.8rem; display: none;
+  }
+  .feedback-section .comment-input.visible { display: block; }
+  .copy-btn {
+    background: var(--text-accent); color: var(--bg); border: none; padding: 8px 20px;
+    border-radius: var(--radius); cursor: pointer; font-weight: 600; font-size: 0.85rem;
+    margin-top: 12px;
+  }
+  .copy-btn:hover { opacity: 0.9; }
+  .copy-btn.copied { background: var(--approve); }
+
+  /* Anchor reference footer */
+  .anchor-ref {
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 12px 16px; margin-top: 24px; font-size: 0.75rem; color: var(--text-muted);
+  }
+  .anchor-ref code { color: var(--text-accent); font-size: 0.75rem; }
+</style>
+</head>
+<body>
+
+<!-- ============================================================
+     DESIGN DATA — Agent replaces this block with actual JSON
+     ============================================================ -->
+<script id="design-data" type="application/json">
+{
+  "title": "Example Feature",
+  "level": "L2",
+  "handDrawn": true,
+  "tabs": {
+    "overview": {
+      "enabled": true,
+      "markdown": "# Feature Scope\n- Core requirement 1\n  - Sub-detail\n- Core requirement 2\n- Out of scope\n  - Deferred item"
+    },
+    "architecture": {
+      "enabled": true,
+      "diagrams": [
+        {
+          "id": "arch-overview",
+          "type": "flowchart",
+          "title": "Component Architecture",
+          "direction": "TD",
+          "nodes": [
+            {"id": "web", "label": "Web App", "group": "frontend", "shape": "box"},
+            {"id": "api", "label": "API Service", "group": "backend", "shape": "box"},
+            {"id": "db", "label": "PostgreSQL", "group": "data", "shape": "cylinder"}
+          ],
+          "edges": [
+            {"from": "web", "to": "api", "label": "REST API", "style": "solid"},
+            {"from": "api", "to": "db", "label": "queries", "style": "solid"}
+          ],
+          "groups": [
+            {"id": "frontend", "label": "Frontend"},
+            {"id": "backend", "label": "Backend"},
+            {"id": "data", "label": "Data Layer"}
+          ]
+        }
+      ],
+      "tables": [
+        {
+          "title": "Component Details",
+          "headers": ["Component", "Responsibility", "New/Existing?", "Location"],
+          "rows": [
+            ["Web App", "User interface", "Existing", "src/frontend/"],
+            ["API Service", "Business logic + REST", "New", "src/api/"],
+            ["PostgreSQL", "Persistence", "Existing", "infrastructure/"]
+          ]
+        }
+      ]
+    },
+    "flows": {
+      "enabled": false,
+      "diagrams": []
+    },
+    "stateData": {
+      "enabled": false,
+      "diagrams": []
+    },
+    "decisions": {
+      "enabled": true,
+      "items": [
+        {
+          "id": "dec-001",
+          "title": "Use REST over GraphQL for v1",
+          "status": "proposed",
+          "rationale": "Team familiarity, simpler tooling, adequate for current query patterns",
+          "alternatives": "GraphQL — deferred to v2 if query complexity increases"
+        }
+      ]
+    },
+    "questions": {
+      "enabled": true,
+      "items": [
+        {
+          "id": "q-001",
+          "text": "Should we use connection pooling or direct connections?",
+          "severity": "high",
+          "context": "Affects scalability under concurrent load"
+        }
+      ]
+    }
+  }
+}
+</script>
+
+<div class="header">
+  <h1>
+    <span class="emoji">🏗️</span> Design Review: <span id="title-text"></span>
+    <span class="badge" id="level-badge"></span>
+  </h1>
+  <div class="controls">
+    <button id="theme-toggle" onclick="toggleTheme()">✏️ Draft View</button>
+    <button onclick="copyFeedback()" id="copy-btn" class="copy-btn" style="padding:6px 14px; margin-top:0;">📋 Copy Feedback</button>
+  </div>
+</div>
+
+<div class="layout">
+  <nav class="sidebar" id="sidebar"></nav>
+  <main class="content" id="content"></main>
+</div>
+
+<script>
+// ========== CORE ENGINE ==========
+
+const data = JSON.parse(document.getElementById('design-data').textContent);
+let handDrawn = data.handDrawn !== false;
+
+// Mermaid init
+mermaid.initialize({
+  startOnLoad: false,
+  theme: 'dark',
+  look: handDrawn ? 'handDrawn' : 'classic',
+  flowchart: { curve: 'basis', padding: 20 },
+  sequence: { actorMargin: 50, messageMargin: 40 },
+});
+
+// ========== JSON → MERMAID CONVERSION ==========
+
+function jsonToMermaid(diagram) {
+  switch (diagram.type) {
+    case 'flowchart': return flowchartFromJson(diagram);
+    case 'sequence':  return sequenceFromJson(diagram);
+    case 'state':     return stateFromJson(diagram);
+    case 'er':        return erFromJson(diagram);
+    default:          return `graph TD\n  A[Unsupported type: ${diagram.type}]`;
+  }
+}
+
+function esc(s) { return s.replace(/"/g, '#quot;'); }
+
+function flowchartFromJson(d) {
+  const dir = d.direction || 'TD';
+  let lines = [`flowchart ${dir}`];
+  const grouped = {};
+  (d.nodes || []).forEach(n => {
+    const g = n.group || '__root';
+    if (!grouped[g]) grouped[g] = [];
+    grouped[g].push(n);
+  });
+  const groups = d.groups || [];
+  const usedGroups = new Set(Object.keys(grouped));
+
+  groups.forEach(g => {
+    if (!usedGroups.has(g.id) || g.id === '__root') return;
+    lines.push(`  subgraph ${g.id}["${esc(g.label)}"]`);
+    grouped[g.id].forEach(n => {
+      const shape = n.shape === 'cylinder' ? `[("${esc(n.label)}")]` : `["${esc(n.label)}"]`;
+      lines.push(`    ${n.id}${shape}`);
+    });
+    lines.push('  end');
+  });
+  if (grouped.__root) {
+    grouped.__root.forEach(n => {
+      lines.push(`  ${n.id}["${esc(n.label)}"]`);
+    });
+  }
+  (d.edges || []).forEach(e => {
+    const arrow = e.style === 'dashed' ? '-.->' : '-->';
+    const lbl = e.label ? `|"${esc(e.label)}"|` : '';
+    lines.push(`  ${e.from} ${arrow}${lbl} ${e.to}`);
+  });
+  return lines.join('\n');
+}
+
+function sequenceFromJson(d) {
+  let lines = ['sequenceDiagram'];
+  (d.participants || []).forEach(p => {
+    lines.push(`  participant ${p.id} as ${p.label}`);
+  });
+  (d.messages || []).forEach(m => {
+    const arrow = m.style === 'async' ? '->>' : '->>';
+    lines.push(`  ${m.from}${arrow}${m.to}: ${m.label}`);
+    if (m.response) {
+      lines.push(`  ${m.to}-->>${ m.from}: ${m.response}`);
+    }
+  });
+  return lines.join('\n');
+}
+
+function stateFromJson(d) {
+  let lines = ['stateDiagram-v2'];
+  (d.states || []).forEach(s => {
+    if (s.label) lines.push(`  ${s.id} : ${s.label}`);
+  });
+  (d.transitions || []).forEach(t => {
+    const from = t.from === '[*]' ? '[*]' : t.from;
+    const to = t.to === '[*]' ? '[*]' : t.to;
+    lines.push(`  ${from} --> ${to}${t.label ? ' : ' + t.label : ''}`);
+  });
+  return lines.join('\n');
+}
+
+function erFromJson(d) {
+  let lines = ['erDiagram'];
+  (d.entities || []).forEach(e => {
+    lines.push(`  ${e.id} {`);
+    (e.attributes || []).forEach(a => {
+      lines.push(`    ${a.type} ${a.name}${a.key ? ' PK' : ''}`);
+    });
+    lines.push('  }');
+  });
+  (d.relationships || []).forEach(r => {
+    lines.push(`  ${r.from} ${r.cardinality || '||--o{'} ${r.to} : "${esc(r.label)}"`);
+  });
+  return lines.join('\n');
+}
+
+// ========== RENDER ENGINE ==========
+
+const tabConfig = [
+  { key: 'overview',     icon: '🔭', label: 'Overview' },
+  { key: 'architecture', icon: '🏗️', label: 'Architecture' },
+  { key: 'flows',        icon: '🔀', label: 'Flows' },
+  { key: 'stateData',    icon: '🔄', label: 'State & Data' },
+  { key: 'decisions',    icon: '⚖️', label: 'Decisions' },
+  { key: 'questions',    icon: '❓', label: 'Questions' },
+];
+
+function init() {
+  document.getElementById('title-text').textContent = data.title;
+  document.getElementById('level-badge').textContent = data.level;
+  const sidebar = document.getElementById('sidebar');
+  const content = document.getElementById('content');
+
+  tabConfig.forEach(tab => {
+    const tabData = data.tabs[tab.key];
+    if (!tabData || !tabData.enabled) return;
+
+    const btn = document.createElement('button');
+    btn.className = 'tab-btn';
+    btn.innerHTML = `<span class="tab-icon">${tab.icon}</span>${tab.label}`;
+    btn.onclick = () => switchTab(tab.key);
+    btn.dataset.tab = tab.key;
+    sidebar.appendChild(btn);
+
+    const panel = document.createElement('div');
+    panel.className = 'tab-panel';
+    panel.id = `tab-${tab.key}`;
+    panel.innerHTML = renderTab(tab.key, tabData);
+    content.appendChild(panel);
+  });
+
+  // Activate first tab
+  const first = sidebar.querySelector('.tab-btn');
+  if (first) first.click();
+
+  // Render diagrams
+  renderAllDiagrams();
+  renderMarkmaps();
+}
+
+function switchTab(key) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  const btn = document.querySelector(`[data-tab="${key}"]`);
+  const panel = document.getElementById(`tab-${key}`);
+  if (btn) btn.classList.add('active');
+  if (panel) panel.classList.add('active');
+}
+
+function renderTab(key, tabData) {
+  switch (key) {
+    case 'overview':     return renderOverview(tabData);
+    case 'architecture': return renderDiagramTab(tabData, 'architecture');
+    case 'flows':        return renderDiagramTab(tabData, 'flows');
+    case 'stateData':    return renderDiagramTab(tabData, 'stateData');
+    case 'decisions':    return renderDecisions(tabData);
+    case 'questions':    return renderQuestions(tabData);
+    default:             return '<p>Unknown tab</p>';
+  }
+}
+
+function renderOverview(tabData) {
+  return `
+    <div class="section" id="ctx-overview">
+      <h2>Design Overview</h2>
+      <div class="markmap-container" id="markmap-root">
+        <svg id="markmap-svg"></svg>
+      </div>
+    </div>
+    ${renderFeedbackSection('overview')}
+  `;
+}
+
+function renderDiagramTab(tabData, tabKey) {
+  let html = '';
+  (tabData.diagrams || []).forEach(d => {
+    html += `
+      <div class="section" id="${d.id}">
+        <h2>${d.title}</h2>
+        <div class="diagram-container">
+          <pre class="mermaid" data-diagram-id="${d.id}"></pre>
+        </div>
+      </div>`;
+  });
+  (tabData.tables || []).forEach(t => {
+    html += `<div class="section"><h2>${t.title}</h2>${renderTable(t)}</div>`;
+  });
+  html += renderFeedbackSection(tabKey);
+  return html;
+}
+
+function renderTable(t) {
+  let h = '<table><thead><tr>';
+  t.headers.forEach(col => h += `<th>${col}</th>`);
+  h += '</tr></thead><tbody>';
+  t.rows.forEach(row => {
+    h += '<tr>';
+    row.forEach(cell => h += `<td>${cell}</td>`);
+    h += '</tr>';
+  });
+  h += '</tbody></table>';
+  return h;
+}
+
+function renderDecisions(tabData) {
+  let html = '<div class="section" id="tab-decisions-content"><h2>Design Decisions</h2>';
+  (tabData.items || []).forEach(d => {
+    html += `
+      <div class="decision-card" id="${d.id}">
+        <div class="decision-header">
+          <span class="decision-id">${d.id}</span>
+          <span class="decision-status ${d.status}">${d.status}</span>
+        </div>
+        <h4>${d.title}</h4>
+        <p class="rationale">${d.rationale}</p>
+        ${d.alternatives ? `<p class="alternatives">Alternatives: ${d.alternatives}</p>` : ''}
+      </div>`;
+  });
+  html += '</div>' + renderFeedbackSection('decisions');
+  return html;
+}
+
+function renderQuestions(tabData) {
+  let html = '<div class="section" id="tab-questions-content"><h2>Open Questions</h2>';
+  (tabData.items || []).forEach(q => {
+    html += `
+      <div class="question-card ${q.severity}" id="${q.id}">
+        <div class="question-meta">
+          <span>${q.id}</span>
+          <span>Severity: ${q.severity}</span>
+        </div>
+        <p><strong>${q.text}</strong></p>
+        ${q.context ? `<p style="color:var(--text-muted);font-size:0.85rem;margin-top:4px;">${q.context}</p>` : ''}
+      </div>`;
+  });
+  html += '</div>' + renderFeedbackSection('questions');
+  return html;
+}
+
+function renderFeedbackSection(tabKey) {
+  return `
+    <div class="feedback-panel" data-tab="${tabKey}">
+      <div class="feedback-section">
+        <strong style="min-width:80px">${tabKey}:</strong>
+        <label><input type="radio" name="fb-${tabKey}" value="approve"> ✅ Approve</label>
+        <label><input type="radio" name="fb-${tabKey}" value="flag"> ⚠️ Flag</label>
+        <label><input type="radio" name="fb-${tabKey}" value="comment"> 💬 Comment</label>
+        <input type="text" class="comment-input" data-tab="${tabKey}" placeholder="Your feedback for this section...">
+      </div>
+    </div>`;
+}
+
+// ========== DIAGRAM RENDERING ==========
+
+async function renderAllDiagrams() {
+  const initStr = handDrawn
+    ? "%%{init: {'look': 'handDrawn', 'theme': 'dark'}}%%\n"
+    : "%%{init: {'theme': 'dark'}}%%\n";
+
+  const allDiagrams = [];
+  ['architecture', 'flows', 'stateData'].forEach(tabKey => {
+    const tabData = data.tabs[tabKey];
+    if (tabData && tabData.enabled && tabData.diagrams) {
+      allDiagrams.push(...tabData.diagrams);
+    }
+  });
+
+  for (const d of allDiagrams) {
+    const el = document.querySelector(`[data-diagram-id="${d.id}"]`);
+    if (!el) continue;
+    try {
+      const code = initStr + jsonToMermaid(d);
+      const { svg } = await mermaid.render(`mermaid-${d.id}`, code);
+      el.innerHTML = svg;
+    } catch (err) {
+      el.innerHTML = `<pre style="color:var(--reject);font-size:0.8rem;">Diagram render error: ${err.message}\n\nFallback — raw definition:\n${jsonToMermaid(d)}</pre>`;
+    }
+  }
+}
+
+function renderMarkmaps() {
+  const overviewData = data.tabs.overview;
+  if (!overviewData || !overviewData.enabled || !overviewData.markdown) return;
+  const svg = document.getElementById('markmap-svg');
+  if (!svg) return;
+  try {
+    const { Transformer } = window.markmap;
+    const { Markmap } = window.markmapView;
+    const transformer = new Transformer();
+    const { root } = transformer.transform(overviewData.markdown);
+    Markmap.create(svg, { colorFreezeLevel: 2, initialExpandLevel: 3 }, root);
+  } catch (err) {
+    svg.parentElement.innerHTML = `<pre style="padding:20px;color:var(--text-muted);">Markmap unavailable. Overview content:\n\n${overviewData.markdown}</pre>`;
+  }
+}
+
+// ========== THEME TOGGLE ==========
+
+function toggleTheme() {
+  handDrawn = !handDrawn;
+  const btn = document.getElementById('theme-toggle');
+  btn.textContent = handDrawn ? '✏️ Draft View' : '📐 Clean View';
+  btn.classList.toggle('active', !handDrawn);
+  mermaid.initialize({
+    startOnLoad: false,
+    theme: 'dark',
+    look: handDrawn ? 'handDrawn' : 'classic',
+    flowchart: { curve: 'basis', padding: 20 },
+  });
+  renderAllDiagrams();
+}
+
+// ========== FEEDBACK ==========
+
+document.addEventListener('change', (e) => {
+  if (e.target.type === 'radio') {
+    const tabKey = e.target.name.replace('fb-', '');
+    const input = document.querySelector(`.comment-input[data-tab="${tabKey}"]`);
+    if (input) {
+      input.classList.toggle('visible', e.target.value === 'flag' || e.target.value === 'comment');
+      if (e.target.value !== 'flag' && e.target.value !== 'comment') input.value = '';
+    }
+  }
+});
+
+function copyFeedback() {
+  const lines = [`## Design Review Feedback\n**Design:** ${data.title} (${data.level})\n`];
+  let hasContent = false;
+
+  document.querySelectorAll('.feedback-panel').forEach(panel => {
+    const tabKey = panel.dataset.tab;
+    const selected = panel.querySelector('input[type="radio"]:checked');
+    if (!selected) return;
+    hasContent = true;
+    const status = { approve: '✅ Approved', flag: '⚠️ Flagged', comment: '💬 Comment' }[selected.value];
+    lines.push(`### ${tabKey} (#tab-${tabKey}): ${status}`);
+    const comment = panel.querySelector('.comment-input');
+    if (comment && comment.value.trim()) {
+      lines.push(`${comment.value.trim()}`);
+    }
+    lines.push('');
+  });
+
+  if (!hasContent) {
+    lines.push('_No feedback provided yet — review sections and select Approve/Flag/Comment._');
+  }
+
+  const text = lines.join('\n');
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = document.getElementById('copy-btn');
+    btn.textContent = '✅ Copied!';
+    btn.classList.add('copied');
+    setTimeout(() => { btn.textContent = '📋 Copy Feedback'; btn.classList.remove('copied'); }, 2000);
+  });
+}
+
+// ========== ANCHOR REFERENCE ==========
+
+function buildAnchorRef() {
+  const anchors = [];
+  document.querySelectorAll('[id]').forEach(el => {
+    const id = el.id;
+    if (id.match(/^(ctx-|svc-|flow-|state-|dec-|q-|tab-|arch-)/)) {
+      anchors.push(id);
+    }
+  });
+  if (anchors.length === 0) return;
+  const content = document.getElementById('content');
+  const ref = document.createElement('div');
+  ref.className = 'anchor-ref';
+  ref.innerHTML = `<strong>Anchor Reference</strong> — use these IDs for precise CLI feedback:<br>` +
+    anchors.map(a => `<code>#${a}</code>`).join(' · ');
+  content.appendChild(ref);
+}
+
+// ========== INIT ==========
+document.addEventListener('DOMContentLoaded', () => {
+  init();
+  setTimeout(buildAnchorRef, 500);
+});
+</script>
+</body>
+</html>

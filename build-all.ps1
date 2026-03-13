@@ -179,14 +179,6 @@ if (Test-Path $sharedDir -PathType Container) {
     }
 }
 
-Write-Host "🧾 Forge schemas..."
-$forgeSchemasDir = "$ScriptDir\agents\forge\schemas"
-if (Test-Path $forgeSchemasDir -PathType Container) {
-    Get-ChildItem "$forgeSchemasDir\*.md" | ForEach-Object {
-        Copy-PluginFile $_.FullName "$DistShared\skills\forge-shared-prefs\references\schemas\$($_.Name)" "skills/forge-shared-prefs/references/schemas/$($_.Name)" | Out-Null
-    }
-}
-
 Write-Host "📚 Forge references..."
 $refsDir = "$ScriptDir\agents\forge\references"
 if (Test-Path $refsDir -PathType Container) {
@@ -195,15 +187,26 @@ if (Test-Path $refsDir -PathType Container) {
     }
 }
 
-Write-Host "📐 Forge specs..."
-foreach ($spec in @('visual-vocabulary.md', 'external-voice.md')) {
-    $specPath = "$ScriptDir\agents\forge\docs\specs\$spec"
-    if (Test-Path $specPath -PathType Leaf) {
-        Copy-PluginFile `
-            $specPath `
-            "$DistShared\skills\forge-shared-prefs\references\specs\$spec" `
-            "skills/forge-shared-prefs/references/specs/$spec" | Out-Null
+Write-Host "🧾 Forge schemas..."
+$schemasDir = "$ScriptDir\agents\forge\schemas"
+if (Test-Path $schemasDir -PathType Container) {
+    Get-ChildItem "$schemasDir\*.md" | ForEach-Object {
+        Copy-PluginFile $_.FullName "$DistShared\skills\forge-shared-prefs\references\schemas\$($_.Name)" "skills/forge-shared-prefs/references/schemas/$($_.Name)" | Out-Null
     }
+}
+
+Write-Host "📐 Forge specs..."
+foreach ($spec in @('visual-vocabulary.md','external-voice.md','design-artifacts.md')) {
+    $specPath = "$ScriptDir\agents\forge\docs\specs\$spec"
+    if (Test-Path $specPath) {
+        Copy-PluginFile $specPath "$DistShared\skills\forge-shared-prefs\references\specs\$spec" "skills/forge-shared-prefs/references/specs/$spec" | Out-Null
+    }
+}
+
+Write-Host "📄 Design review template..."
+$tmplPath = "$ScriptDir\agents\forge\templates\design-review.html"
+if (Test-Path $tmplPath) {
+    Copy-PluginFile $tmplPath "$DistShared\skills\forge-shared-prefs\references\templates\design-review.html" "skills/forge-shared-prefs/references/templates/design-review.html" | Out-Null
 }
 
 Write-Host "🔧 Infrastructure skills..."

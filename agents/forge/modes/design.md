@@ -465,8 +465,9 @@ Bad design questions (answers are obvious or always the same):
 
  - MAY use `web_search`, `web_fetch` — for research on patterns, libraries, API docs
  - MAY use `view`, `grep`, `glob` — to read existing code and inform design (existing types, conventions)
- - MUST NOT use `edit`, `create` — design mode produces no code artifacts
- - MUST NOT use `bash` — no execution in design mode
+ - MAY use `create` — ONLY for generating HTML design review artifacts (see Design Review Artifacts below)
+ - MAY use `bash` — ONLY for opening generated artifacts in the browser (`open` on macOS, `xdg-open` on Linux)
+ - MUST NOT use `edit` on source code — design mode produces no code artifacts
 
 <rationale>
 Codebase awareness is essential. Unlike IDEATE (which uses pre-packaged findings), DESIGN mode SHOULD read existing code to ensure components, interactions, and contracts align with what already exists. This is how you catch "we already have X" before proposing a duplicate.
@@ -520,6 +521,127 @@ When complexity is T2+, include visual aids matching the design level:
 Each design level output should lead with a visual diagram before the detailed text.
 
 Reference: `docs/specs/visual-vocabulary.md`
+
+---
+
+## Design Review Artifacts (T2+ with 3+ components)
+
+<rationale>
+Terminal-only tables fail to communicate spatial relationships — component topology, data flows, state machines — that are the core of design review. When a design involves 3+ interacting components, generate a self-contained HTML review artifact that opens in the browser. The browser is the review surface; the terminal remains the conversation surface.
+</rationale>
+
+Reference: `docs/specs/design-artifacts.md` — the full semantic spec for this system.
+
+### When to Generate
+
+Generate an HTML design review artifact when ALL of these are true:
+- Task complexity is T2+ (3+ complexity score)
+- Design involves 3+ components or has sequence flows / state machines
+- You have completed at least Level 2 (Components)
+
+Do NOT generate artifacts for:
+- T1 tasks or single-component contract alignment
+- Level 4 only (contracts) — terminal output is sufficient
+- When the user explicitly says to keep output in terminal
+
+### How to Generate
+
+<rule name="json-intermediate">
+IMPORTANT: Generate design data as structured JSON first, then embed it in the HTML template. Do NOT write Mermaid syntax directly — use the JSON→Mermaid intermediate to avoid syntax errors. The HTML template's embedded JavaScript converts JSON to valid Mermaid.
+</rule>
+
+**Step 1: Prepare design data as JSON**
+
+```json
+{
+  "title": "Feature Name",
+  "level": "L2",
+  "tabs": {
+    "overview": {
+      "markdown": "- Scope item 1\n  - Sub-item\n- Scope item 2"
+    },
+    "architecture": {
+      "diagrams": [{
+        "id": "arch-overview",
+        "type": "flowchart",
+        "title": "Component Architecture",
+        "nodes": [
+          {"id": "web", "label": "Web App", "group": "frontend"},
+          {"id": "api", "label": "API Service", "group": "backend"}
+        ],
+        "edges": [
+          {"from": "web", "to": "api", "label": "REST", "style": "solid"}
+        ]
+      }],
+      "tables": [{
+        "title": "Component Details",
+        "headers": ["Component", "Responsibility", "New/Existing?", "Location"],
+        "rows": [["Web App", "User interface", "Existing", "src/frontend/"]]
+      }]
+    },
+    "decisions": [{
+      "id": "dec-001",
+      "title": "Use async queue for notifications",
+      "status": "proposed",
+      "rationale": "Decouples sender from delivery",
+      "alternatives": "Direct HTTP call — rejected due to coupling"
+    }],
+    "questions": [{
+      "id": "q-001",
+      "text": "Should retry logic use exponential backoff or fixed interval?",
+      "severity": "high",
+      "context": "Affects SLA compliance"
+    }]
+  }
+}
+```
+
+**Step 2: Write the HTML file**
+
+Write the artifact to the session workspace:
+```
+~/.copilot/session-state/{session-id}/design-review.html
+```
+
+The HTML file embeds the JSON data in a `<script>` block and uses the rendering template (CDN Mermaid + Markmap, tabbed navigation, feedback panel, anchor IDs).
+
+**Step 3: Open in browser**
+
+```bash
+open ~/.copilot/session-state/{session-id}/design-review.html
+```
+
+**Step 4: Notify in terminal**
+
+Output a concise message:
+```
+Design review artifact opened in browser.
+Tabs: Overview | Architecture | Flows | Decisions | Questions
+Use anchor IDs for precise feedback (e.g., "re: #svc-auth — should this be async?")
+```
+
+### Artifact Updates
+
+When the user provides feedback and you revise the design, regenerate the HTML file at the same path. Tell the user to refresh the browser tab.
+
+### Hand-Drawn Theme
+
+All Mermaid diagrams use the hand-drawn look by default — this signals "draft, please critique" rather than "finished, don't touch." The artifact includes a toggle button to switch to the clean theme.
+
+### Anchor Convention
+
+Every section, diagram, decision, and question gets an anchor ID:
+- `#ctx-` context items, `#svc-` services, `#flow-` flows, `#state-` states, `#dec-` decisions, `#q-` questions
+
+These enable precise CLI feedback that the agent can parse and act on.
+
+<anti_patterns>
+- ❌ Generating an artifact for T1 tasks — the context switch isn't worth it
+- ❌ Writing Mermaid syntax directly instead of using the JSON intermediate — syntax errors are common
+- ❌ Generating multiple HTML files for one design — one artifact with tabs
+- ❌ Skipping the feedback panel — the artifact exists to collect structured feedback
+- ❌ Delivering a broken diagram — use the degradation chain (simplified diagram → raw text → styled HTML → terminal fallback)
+</anti_patterns>
 
 ---
 

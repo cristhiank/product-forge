@@ -5,11 +5,7 @@
 #   - agents/forge/SKILL.md -> dist/skills/forge/SKILL.md
 #   - agents/forge/modes/*.md -> dist/skills/forge-{mode}/SKILL.md
 #   - agents/forge/product-hub/ -> dist/skills/forge-product/ (bundle + refs)
-#   - agents/forge/shared/* -> dist/skills/forge/references/shared/
-#   - agents/forge/schemas/*.md -> dist/skills/forge/references/schemas/
-#   - agents/forge/docs/specs/{visual-vocabulary,external-voice}.md -> dist/skills/forge/references/specs/
-#   - agents/forge/references/*.md -> dist/skills/forge/references/
-#   - skills/* -> dist/skills/* (infrastructure + architecture + PM skills)
+#   - skills/* -> dist/skills/* (infrastructure skills)
 #   - plugin.json -> dist/plugin.json
 #   - .mcp.json -> dist/.mcp.json
 #
@@ -182,32 +178,17 @@ if (Test-Path $sharedDir -PathType Container) {
     }
 }
 
-# --- Step 5c: Visual vocabulary spec ---
+# --- Step 5c: Forge schemas ---
 Write-Host ""
 Write-Host "🧾 Forge schemas..."
-$forgeSchemasDir = "$ScriptDir\agents\forge\schemas"
-if (Test-Path $forgeSchemasDir -PathType Container) {
-    Get-ChildItem -Path $forgeSchemasDir -Filter '*.md' | ForEach-Object {
+$schemasDir = "$ScriptDir\agents\forge\schemas"
+if (Test-Path $schemasDir -PathType Container) {
+    Get-ChildItem -Path $schemasDir -Filter '*.md' | ForEach-Object {
         Copy-PluginFile $_.FullName "$Dist\skills\forge\references\schemas\$($_.Name)" "skills/forge/references/schemas/$($_.Name)" | Out-Null
     }
 }
 
-# --- Step 5d: Visual vocabulary spec ---
-Write-Host ""
-Write-Host "📐 Visual vocabulary..."
-Copy-PluginFile `
-    "$ScriptDir\agents\forge\docs\specs\visual-vocabulary.md" `
-    "$Dist\skills\forge\references\specs\visual-vocabulary.md" `
-    "skills/forge/references/specs/visual-vocabulary.md" | Out-Null
-
-# --- Step 5e: External voice spec ---
-Write-Host "🗣️  External voice..."
-Copy-PluginFile `
-    "$ScriptDir\agents\forge\docs\specs\external-voice.md" `
-    "$Dist\skills\forge\references\specs\external-voice.md" `
-    "skills/forge/references/specs/external-voice.md" | Out-Null
-
-# --- Step 5f: Forge references ---
+# --- Step 5d: Forge references ---
 Write-Host ""
 Write-Host "📚 Forge references..."
 $forgeRefsDir = "$ScriptDir\agents\forge\references"
@@ -216,6 +197,35 @@ if (Test-Path $forgeRefsDir -PathType Container) {
         Copy-PluginFile $_.FullName "$Dist\skills\forge\references\$($_.Name)" "skills/forge/references/$($_.Name)" | Out-Null
     }
 }
+
+# --- Step 5e: Visual vocabulary spec ---
+Write-Host ""
+Write-Host "📐 Visual vocabulary..."
+Copy-PluginFile `
+    "$ScriptDir\agents\forge\docs\specs\visual-vocabulary.md" `
+    "$Dist\skills\forge\references\specs\visual-vocabulary.md" `
+    "skills/forge/references/specs/visual-vocabulary.md" | Out-Null
+
+# --- Step 5f: External voice spec ---
+Write-Host "🗣️  External voice..."
+Copy-PluginFile `
+    "$ScriptDir\agents\forge\docs\specs\external-voice.md" `
+    "$Dist\skills\forge\references\specs\external-voice.md" `
+    "skills/forge/references/specs/external-voice.md" | Out-Null
+
+# --- Step 5g: Design artifacts spec ---
+Write-Host "🎨 Design artifacts..."
+Copy-PluginFile `
+    "$ScriptDir\agents\forge\docs\specs\design-artifacts.md" `
+    "$Dist\skills\forge\references\specs\design-artifacts.md" `
+    "skills/forge/references/specs/design-artifacts.md" | Out-Null
+
+# --- Step 5h: Design review template ---
+Write-Host "📄 Design review template..."
+Copy-PluginFile `
+    "$ScriptDir\agents\forge\templates\design-review.html" `
+    "$Dist\skills\forge\references\templates\design-review.html" `
+    "skills/forge/references/templates/design-review.html" | Out-Null
 
 # --- Step 6: Infrastructure skills ---
 Write-Host ""
