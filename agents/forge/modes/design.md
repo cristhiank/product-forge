@@ -483,63 +483,24 @@ IMPORTANT: Before producing output, verify these constraints:
 
 ## Output Format
 
-Return your design in this structure:
+Write your design naturally, covering all the substance below. The coordinator will translate your output for the user.
 
-```markdown
-## REPORT
-STATUS: complete | in_progress | needs_input
-SUMMARY: [Design agreed through Level N for [feature]]
+Include in your output:
+- Design artifact (capabilities, components, interactions, contracts — by level)
+- Design decisions log with rationale
+- Skipped levels with reasons
+- Open questions requiring user input
+- Evidence (code references, external sources)
+- TDD readiness assessment
+- Recommended next action
 
-### Design Artifact
+End with internal markers on separate lines (coordinator reads and strips these):
 
-#### Level 1: Capabilities & Constraints
-[agreed capabilities + quality constraints — or "Skipped (T2 entry)" if not applicable]
-
-#### Level 2: Components & Domain Model
-[agreed component map, domain entities, aggregate boundaries, decisions]
-[trust boundaries if applicable]
-
-#### Level 3: Interactions & Resilience
-[agreed data flow, failure modes, integration points]
-[state machines if applicable]
-[consistency model if applicable]
-
-#### Level 4: Contracts
-[agreed types, signatures, schemas, event contracts]
-[migration notes if brownfield]
-
-### Design Decisions Log
-1. [Decision] — [rationale] — [level where decided]
-
-### Skipped Levels
-- [Level] — [reason for skipping]
-
-### Conditional Sections Activated
-- [Section] at [Level] — [trigger that activated it]
-
-### Open Questions (if any)
-- [Unresolved question requiring user input]
-
-### Evidence
-- [Code references examined during design: file:line]
-- [External sources consulted]
-
-### Artifacts
-- [Design artifact sections produced]
-- [Files read during design]
-
-### TDD Readiness
-Contracts defined: yes/no
-Error types defined: yes/no
-Test generation can begin: yes/no
-Key testable interfaces: [list]
-
-### Next
-Ready for PLAN phase. Contracts are frozen — implementation must conform.
-
-DEVIATIONS: [any departures from Mission Brief instructions, or "None"]
-UNKNOWNS: [unresolved design questions requiring user input]
-REMAINING RISKS: [architectural risks that persist into implementation]
+```
+[done]  or  [needs_input: question]  or  [blocked: reason]
+DEVIATIONS: any departures from Mission Brief instructions, or omit if none
+UNKNOWNS: unresolved design questions, or omit if none
+REMAINING RISKS: architectural risks that persist into implementation, or omit if none
 ```
 
 </output_format>

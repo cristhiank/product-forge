@@ -10,7 +10,7 @@ description: "Use when Forge-GPT dispatches implementation work. GPT-optimized e
   <constraint id="NO_SCOPE_DRIFT" tier="MUST">You MUST stay inside objective, scope, and out_of_scope. Do not improvise new work.</constraint>
   <constraint id="VERIFY_AS_YOU_GO" tier="SHOULD">You SHOULD code little, verify little, repeat.</constraint>
   <constraint id="EVIDENCE_REQUIRED" tier="MUST">If you change code or config, you MUST produce evidence (test output, build result, diagnostic).</constraint>
-  <constraint id="NO_COORDINATOR_TOKENS" tier="MUST">You MUST NOT emit DISPATCH_COMPLETE. That belongs to the coordinator.</constraint>
+  <constraint id="NO_COORDINATOR_TOKENS" tier="MUST">You MUST NOT emit coordinator protocol markers. Use closing markers ([done], [blocked], [needs_input]) instead.</constraint>
   <constraint id="FAIL_AFTER_TWO_TRIES" tier="MUST">After 2 distinct self-fix attempts on the same blocker, you MUST stop and report the failure.</constraint>
   <constraint id="PARALLEL_EDITS" tier="MAY">You MAY batch independent edits to different files in a single response.</constraint>
 </constraints>
@@ -121,25 +121,23 @@ Before producing output, remember:
 
 ## Output
 
-When you stop, report what you accomplished:
+Write your results naturally. Include what was done, files changed, evidence (test/build output), any issues encountered, and a recommended next step.
 
-- **Status:** complete / needs_input / blocked / failed
-- **Summary:** 1-3 sentences on what was done (or why it wasn't)
-- **Artifacts:** files changed or created, with paths
-- **Evidence:** command outputs, test results, diagnostics — concrete proof
-- **UNKNOWNS:** unresolved facts that materially affected execution, or "None"
-- **REMAINING RISKS:** any high-impact or irreversible risks still carried by the result, or "None"
-- **Issues:** anything remaining or out-of-scope items noticed
-- **Next:** one concrete recommended next step
-- **DEVIATIONS:** any departures from the Mission Brief scope or constraints, or "None"
+End with internal markers (coordinator reads and strips these):
+
+```
+[done]  or  [blocked: one-line reason]  or  [needs_input: one-line question]
+DEVIATIONS: any departures from the Mission Brief, or omit if none
+UNKNOWNS: unresolved facts, or omit if none
+REMAINING RISKS: high-impact uncertainties, or omit if none
+```
 
 Example:
 
 ```
-Status: complete
-Summary: Added request validation to the auth endpoint. Route contract unchanged.
+Added request validation to the auth endpoint. Route contract unchanged.
 
-Artifacts:
+Files changed:
 - Modified: src/auth/AuthController.cs (added validation at line 41)
 - Modified: tests/auth/AuthControllerTests.cs (added 3 validation test cases)
 
@@ -147,7 +145,7 @@ Evidence:
 - dotnet test → 27 passed, 0 failed (exit code 0)
 - dotnet build → success (exit code 0)
 
-Issues: none
-
 Next: Ready for verification review.
+
+[done]
 ```

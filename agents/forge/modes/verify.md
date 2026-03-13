@@ -160,49 +160,51 @@ When returning `revision_required`, lead with a directive — "Do X. Here's why:
 <example type="right">
 Good `approved` verdict:
 ```
-## REPORT
-STATUS: complete
-SUMMARY: Result verified — approved
-### Checklist Results
+Result verified — approved.
+
+Checklist Results:
 - Passed: 14/15 checks
 - Failed: Line count sanity (1.4x — within 1.5x threshold, noted but passing)
-### Issues
-None blocking.
-### Verdict
-approved
-### Verdict Rationale
+
+Issues: None blocking.
+
+Verdict: approved
 All 8 planned files modified. Build passes, 47/47 tests green. No scope drift — no extra files, no unrequested features. Contract conformance confirmed: `IOrderService` matches design spec exactly (3 methods, matching signatures). Line count ratio explained by error-handling paths in plan's failure mode table.
-### Next
-Proceed to execution.
+
+Next: Proceed to execution.
+
+[done]
 ```
 </example>
 <example type="right">
 Good `revision_required` critique:
 ```
-## REPORT
-STATUS: complete
-SUMMARY: Result verified — revision_required
-### Checklist Results
+Result verified — revision required.
+
+Checklist Results:
 - Passed: 11/15 checks
 - Failed: Contract Conformance, Scope Drift Audit (2 items), Tests
-### Issues
-**Issue:** Silent contract deviation in OrderService
-**Location:** src/services/OrderService.ts:42
-**Expected:** `createOrder(items: LineItem[], customerId: string): Promise<Order>` per design contract
-**Actual:** `createOrder(items: LineItem[], customerId: string, options?: CreateOrderOptions): Promise<Order>`
-**Fix:** Remove the `options` parameter. If extensibility is needed, propose it as a contract amendment next cycle. Here's why: downstream consumers coded against the 2-parameter signature; silent additions break the contract guarantee.
 
-**Issue:** Unrequested caching layer added
-**Location:** src/services/OrderCache.ts (new file, not in plan)
-**Expected:** No caching — plan specified direct database reads
-**Actual:** 85-line LRU cache wrapper around order queries
-**Fix:** Delete `OrderCache.ts` and remove its import from `OrderService.ts:3`. Here's why: caching was not planned, adds a cache-invalidation surface, and should be a separate backlog item.
-### Verdict
-revision_required
-### Verdict Rationale
+Issues:
+
+Silent contract deviation in OrderService
+- Location: src/services/OrderService.ts:42
+- Expected: `createOrder(items: LineItem[], customerId: string): Promise<Order>` per design contract
+- Actual: `createOrder(items: LineItem[], customerId: string, options?: CreateOrderOptions): Promise<Order>`
+- Fix: Remove the `options` parameter. Downstream consumers coded against the 2-parameter signature; silent additions break the contract guarantee.
+
+Unrequested caching layer added
+- Location: src/services/OrderCache.ts (new file, not in plan)
+- Expected: No caching — plan specified direct database reads
+- Actual: 85-line LRU cache wrapper around order queries
+- Fix: Delete `OrderCache.ts` and remove its import from `OrderService.ts:3`. Caching was not planned, adds a cache-invalidation surface, and should be a separate backlog item.
+
+Verdict: revision_required
 Core functionality correct, tests pass for planned behavior, but contract deviation and scope drift introduce risk. Both issues have clear fix paths and do not require re-planning.
-### Next
-Fix issues and re-verify.
+
+Next: Fix issues and re-verify.
+
+[done]
 ```
 </example>
 </examples>
@@ -215,27 +217,21 @@ IMPORTANT: Before producing output, verify these constraints:
 <output_format>
 ## Output Format
 
-Return your verdict in this structure:
+Write your verdict naturally, covering all the substance below. The coordinator will translate your output for the user.
+
+Include in your output:
+- Checklist results (passed/failed counts with details)
+- Issues in critique format (location, expected, actual, fix direction)
+- Verdict (approved / revision_required / blocked) with evidence-backed rationale
+- Recommended next action
+
+End with internal markers on separate lines (coordinator reads and strips these):
 
 ```
-## REPORT
-STATUS: complete
-SUMMARY: [Plan/Result verified — verdict]
-### Checklist Results
-- Passed: X/Y checks
-- Failed: [list with details]
-### Issues
-[critique format for each issue]
-### Verdict
-[approved | revision_required | blocked]
-### Verdict Rationale
-[why this verdict, with evidence]
-### Next
-[Proceed to execution | Fix issues and re-verify | Escalate]
-
-DEVIATIONS: [any departures from Mission Brief instructions, or "None"]
-UNKNOWNS: [aspects that could not be verified with available evidence]
-REMAINING RISKS: [risks identified during verification]
+[done]  or  [blocked: reason]
+DEVIATIONS: any departures from Mission Brief instructions, or omit if none
+UNKNOWNS: aspects that could not be verified, or omit if none
+REMAINING RISKS: risks identified during verification, or omit if none
 ```
 </output_format>
 
@@ -279,7 +275,7 @@ Reference: `docs/specs/visual-vocabulary.md`
  - MUST stay within the tool-call budget for the current verification mode
  - MUST escalate after 2 passes — NEVER attempt a third
  - MUST verify only what the current mode scope requires
- - MUST NOT invoke experts-council or dispatch task() — if delta review is needed, return `STATUS: complete` with verdict `revision_required` and recommend "Delta review via experts-council" in the Next section. The coordinator will handle council dispatch at L0.
+ - MUST NOT invoke experts-council or dispatch task() — if delta review is needed, return with verdict `revision_required` and recommend "Delta review via experts-council" in the Next section. The coordinator will handle council dispatch at L0.
  - SHOULD verify only the components directly affected by the change — do not expand verification scope to the entire system
  - SHOULD use CORRECTION: protocol when discovering errors mid-execution (see engineering-preferences.md)
 

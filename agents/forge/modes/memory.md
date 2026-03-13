@@ -198,28 +198,15 @@ IMPORTANT: Before producing output, verify these constraints:
 
 <output_format>
 
-```markdown
-## REPORT
-STATUS: complete
-SUMMARY: [Extracted N memories from M trail entries]
+Write your results naturally. List extracted memories, skipped items, and any cross-session patterns found.
 
-### Memories Extracted
-| # | Subject | Fact | Score | Category |
-|---|---------|------|-------|----------|
-| 1 | [topic] | [fact] | 0.85 | semantic |
+End with internal markers on separate lines (coordinator reads and strips these):
 
-### Skipped
-- [trail entry] — reason (duplicate, low score, no evidence)
-
-### Cross-Session Patterns
-- [pattern found across sessions]
-
-### Next
-Memory extraction complete.
-
-DEVIATIONS: [any departures from Mission Brief instructions, or "None"]
-UNKNOWNS: [trail entries that lacked sufficient evidence for extraction]
-REMAINING RISKS: [patterns that may need re-evaluation in future sessions]
+```
+[done]
+DEVIATIONS: any departures from Mission Brief instructions, or omit if none
+UNKNOWNS: trail entries that lacked sufficient evidence, or omit if none
+REMAINING RISKS: patterns that may need re-evaluation, or omit if none
 ```
 
 </output_format>

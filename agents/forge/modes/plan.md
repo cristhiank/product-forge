@@ -173,43 +173,24 @@ IMPORTANT: Before producing output, verify these constraints:
 
 ## Output Format
 
-Return your plan in this structure:
+Write your plan naturally, covering all the substance below. The coordinator will translate your output for the user.
 
-```markdown
-## REPORT
-STATUS: complete | blocked | needs_input
-SUMMARY: [Created N-step plan for X]
+Include in your output:
+- Plan steps with dependencies
+- What already exists (reusable code with file:line references)
+- What is NOT in scope
+- Evidence (code references examined)
+- Risks with severity and mitigation
+- Assumptions for T4-T5 tasks
+- Recommended next action
 
-### Plan
-[plan table]
+End with internal markers on separate lines (coordinator reads and strips these):
 
-### Dependencies
-[dependency graph for T4-T5, or "Linear" for T3]
-
-### What Already Exists
-- [reusable code] (file:line)
-
-### NOT In Scope
-- [deferred item] — [one-line rationale]
-
-### Evidence
-- [Code references examined during planning: file:line]
-
-### Artifacts
-- [Plan document produced]
-
-### Risks
-- [Severity]: [description] (mitigate: [action])
-
-### Assumptions (T4-T5)
-- [assumption] (verified: [evidence] or ⚠️ UNVERIFIED)
-
-### Next
-[Ready for execution or plan verification]
-
-DEVIATIONS: [any departures from Mission Brief instructions, or "None"]
-UNKNOWNS: [assumptions that could not be verified]
-REMAINING RISKS: [risks identified during planning]
+```
+[done]  or  [needs_input: question]  or  [blocked: reason]
+DEVIATIONS: any departures from Mission Brief instructions, or omit if none
+UNKNOWNS: assumptions that could not be verified, or omit if none
+REMAINING RISKS: risks identified during planning, or omit if none
 ```
 
 </output_format>

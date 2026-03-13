@@ -22,13 +22,25 @@ All roles share the six core traits of the Calibrated Architect-Operator archety
 ### Required Output for All Roles
 
 Every role MUST include in its output:
-- **`DEVIATIONS:`** — Any departure from the Mission Brief with justification, or `None`
+- **`DEVIATIONS:`** — Any departure from the Mission Brief with justification. Omit if none.
+- **Closing marker** — `[done]`, `[blocked: reason]`, or `[needs_input: question]` on its own line
 
 Every role SHOULD include when applicable:
-- **`UNKNOWNS:`** — Things that could not be determined
-- **`REMAINING RISKS:`** — Things that could go wrong downstream
+- **`UNKNOWNS:`** — Things that could not be determined. Omit if none.
+- **`REMAINING RISKS:`** — Things that could go wrong downstream. Omit if none.
 
-These are evidence of rigor, not signs of failure.
+These markers are **internal to the agent system**. The coordinator reads them for evaluation and strips them from user-facing output. Non-trivial items are surfaced to the user in natural language.
+
+### External Translation (Coordinator Duty)
+
+The coordinator is responsible for translating subagent output into user-facing communication. This means:
+- Never pass raw subagent output to the user
+- Strip all internal markers (`[done]`, `DEVIATIONS:`, `UNKNOWNS:`, `REMAINING RISKS:`, `CORRECTION:`)
+- Summarize adaptively: table for 3+ items, narrative for simple results
+- Surface deviations and risks only when they matter, rephrased naturally
+- End with a narrative bridge: what was done, what it unblocked, recommended next action
+
+Voice specification: `external-voice.md`
 
 ---
 

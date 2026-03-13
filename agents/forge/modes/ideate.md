@@ -144,39 +144,23 @@ IMPORTANT: Before producing output, verify these constraints:
 
 ## Output Format
 
-Return your approaches in this structure:
+Write your approaches naturally, covering all the substance below. The coordinator will translate your output for the user.
 
-```markdown
-## REPORT
-STATUS: complete
-SUMMARY: [Proposed N approaches, recommending [X]]
+Include in your output:
+- 2-3 named approaches with description, pros, cons, effort, risk, and design questions
+- Differentiation check showing approaches differ in 2+ dimensions
+- Evidence from mission context
+- Aggregated key design questions
+- Recommendation with rationale
+- Recommended next action
 
-### Approaches
-[approach details per structure above, including design questions]
+End with internal markers on separate lines (coordinator reads and strips these):
 
-### Differentiation Check
-| Dimension | A | B | C |
-✓ Approaches differ in N dimensions — PASS
-
-### Evidence
-- [Key findings from mission context referenced in approaches]
-
-### Artifacts
-- [Approach summaries produced]
-
-### Key Design Questions (Aggregated)
-- [Most important design question from across all approaches]
-- [Second most important]
-
-### Recommendation
-Do [X]. Here's why: [rationale with evidence references]
-
-### Next
-[Await user selection → then DESIGN phase for T2+, or PLAN for T1]
-
-DEVIATIONS: [any departures from Mission Brief instructions, or "None"]
-UNKNOWNS: [information gaps that could affect approach selection]
-REMAINING RISKS: [risks that persist regardless of which approach is chosen]
+```
+[done]  or  [needs_input: question]
+DEVIATIONS: any departures from Mission Brief instructions, or omit if none
+UNKNOWNS: information gaps that could affect approach selection, or omit if none
+REMAINING RISKS: risks that persist regardless of which approach is chosen, or omit if none
 ```
 
 </output_format>

@@ -44,6 +44,8 @@ Every classified request resolves to one of three lanes:
 
 The coordinator must resolve to a lane before taking any action. "I'll start exploring and see what happens" is not a valid lane — classify first, then route.
 
+Lane classification is **internal**. The coordinator never emits lane labels, classification preambles, or routing metadata in user-facing output. The user sees the coordinator's actions (answering, dispatching, asking), not the lane state that produced them.
+
 ---
 
 ## Intent Classification
@@ -188,9 +190,10 @@ What NOT to include:
 After a dispatch returns:
 
 1. **Evaluate** — Does the output address the objective with evidence? (semantic judgment)
-2. **Summarize** — Translate subagent output into a user-facing summary
-3. **Bookkeep** — Update backlog item status if applicable
-4. **Bridge** — Explain what was done, what it unblocked, and recommend the next action
-5. **Stop** — Do not continue working after summarizing
+2. **Strip internal markers** — Read closing markers (`[done]`, `[blocked]`, `[needs_input]`) and footers (`DEVIATIONS:`, `UNKNOWNS:`, `REMAINING RISKS:`) for evaluation; remove them from any output shown to the user
+3. **Summarize** — Translate subagent output into a user-facing summary (table for 3+ items, narrative for simple results)
+4. **Bookkeep** — Update backlog item status if applicable
+5. **Bridge** — Explain what was done, what it unblocked, and recommend the next action
+6. **Stop** — The response ends after the bridge. No protocol tokens or closing markers.
 
 The coordinator does not "finish up" work after a subagent returns. If more work is needed, it dispatches again.

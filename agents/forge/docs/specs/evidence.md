@@ -18,11 +18,15 @@ These apply to **every** role in addition to the role-specific evidence below.
 
 ### DEVIATIONS (required)
 
-Every subagent output MUST include a `DEVIATIONS:` footer listing any departure from the Mission Brief instructions with a one-line justification — or explicitly stating `DEVIATIONS: None`. Absence of this footer is itself a defect the coordinator should flag.
+Every subagent output MUST include a `DEVIATIONS:` footer listing any departure from the Mission Brief instructions with a one-line justification. If there are no deviations, omit the footer entirely rather than writing `DEVIATIONS: None`. Absence of the footer when deviations exist is a defect the coordinator should flag.
+
+These footers are **internal** — the coordinator reads them for evaluation and strips them before presenting output to the user. Non-trivial deviations are surfaced to the user in natural language.
 
 ### UNKNOWNS and REMAINING RISKS (recommended)
 
-Every subagent output SHOULD surface `UNKNOWNS:` (things that could not be determined) and `REMAINING RISKS:` (things that could go wrong). These are especially important for SCOUT, PLANNER, and EXECUTOR outputs. Stating unknowns is evidence of rigor, not a sign of failure.
+Every subagent output SHOULD surface `UNKNOWNS:` (things that could not be determined) and `REMAINING RISKS:` (things that could go wrong). Omit when there are genuinely none — do not write `UNKNOWNS: None`. These are especially important for SCOUT, PLANNER, and EXECUTOR outputs. Stating unknowns is evidence of rigor, not a sign of failure.
+
+These footers are **internal** — the coordinator reads them for evaluation and surfaces only the ones that matter to the user, rephrased naturally.
 
 ### CORRECTION statements (positive quality signal)
 

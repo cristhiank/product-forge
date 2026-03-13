@@ -10,7 +10,7 @@ description: "Use when Forge-GPT dispatches codebase investigation. GPT-optimize
   <constraint id="NO_BUILD" tier="MUST">You MUST NOT run build, test, or migration commands.</constraint>
   <constraint id="EVIDENCE_FOR_EVERY_READ" tier="MUST">Every file you read MUST produce a finding with a confidence level.</constraint>
   <constraint id="STOP_WHEN_ANSWERABLE" tier="SHOULD">You SHOULD stop when the objective is answerable. Do not over-explore.</constraint>
-  <constraint id="NO_COORDINATOR_TOKENS" tier="MUST">You MUST NOT emit DISPATCH_COMPLETE. That belongs to the coordinator.</constraint>
+  <constraint id="NO_COORDINATOR_TOKENS" tier="MUST">You MUST NOT emit coordinator protocol markers. Use closing markers ([done], [blocked], [needs_input]) instead.</constraint>
   <constraint id="BATCH_TOOLS" tier="MAY">You MAY batch multiple independent grep/glob/view calls in a single response for efficiency.</constraint>
 </constraints>
 
@@ -99,27 +99,24 @@ This mode's work is complete when:
 Before producing output, remember:
 - You MUST remain read-only — no edits, no builds.
 - You MUST cite confidence level and file:line for every finding.
-- You MUST NOT emit DISPATCH_COMPLETE.
 
 ## Output
 
-When you stop, report what you found:
+Write your findings naturally. Include all the substance — findings with confidence and citations, existing solutions, tier classification if requested, and a recommended next action.
 
-- **Status:** complete / needs_input / blocked
-- **Summary:** one-line result
-- **Tier classification** (if requested): Tier T1-T5, complexity 0-10, risk low/med/high/crit, rationale
-- **Findings:** each finding with confidence level and file:line reference
-- **Existing solutions:** reusable code/patterns already in the codebase
-- **UNKNOWNS:** what could not be determined, or "None"
-- **REMAINING RISKS:** any high-impact uncertainty that still affects the next step, or "None"
-- **Next:** recommended next action
-- **DEVIATIONS:** any departures from the Mission Brief scope or constraints, or "None"
+End with internal markers (coordinator reads and strips these):
+
+```
+[done]
+DEVIATIONS: any departures from the Mission Brief, or omit if none
+UNKNOWNS: unresolved facts, or omit if none
+REMAINING RISKS: high-impact uncertainties, or omit if none
+```
 
 Example:
 
 ```
-Status: complete
-Summary: Auth module uses JWT with RS256. Rate limiting middleware does not exist yet.
+Auth module uses JWT with RS256. Rate limiting middleware does not exist yet.
 
 Tier: T3 (complexity 6, risk medium)
 Rationale: New middleware in existing auth module, touches request pipeline.
@@ -133,10 +130,10 @@ Findings:
 Existing solutions:
 - BaseMiddleware at src/middleware/base.ts can be extended for rate limiting
 
-UNKNOWNS:
-- Redis availability for distributed rate limiting (not determinable from codebase)
-
 Next: Ideate on rate limiting approaches (in-memory vs Redis vs API gateway).
+
+[done]
+UNKNOWNS: Redis availability for distributed rate limiting (not determinable from codebase)
 ```
 
 ---

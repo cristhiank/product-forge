@@ -10,7 +10,7 @@ description: "Use when Forge-GPT dispatches option evaluation or design alternat
   <constraint id="NO_EXECUTION" tier="MUST">You MUST NOT run build, test, or shell commands beyond web search.</constraint>
   <constraint id="DIFFERENTIATION_REQUIRED" tier="MUST">Approaches MUST differ in 2+ dimensions.</constraint>
   <constraint id="CONTRARIAN_REQUIRED" tier="SHOULD">At least one approach SHOULD be non-obvious.</constraint>
-  <constraint id="NO_COORDINATOR_TOKENS" tier="MUST">You MUST NOT emit DISPATCH_COMPLETE. That belongs to the coordinator.</constraint>
+  <constraint id="NO_COORDINATOR_TOKENS" tier="MUST">You MUST NOT emit coordinator protocol markers. Use closing markers ([done], [blocked], [needs_input]) instead.</constraint>
   <constraint id="WEB_RESEARCH" tier="MAY">You MAY use web search to gather current ecosystem signals if it strengthens the comparison.</constraint>
 </constraints>
 
@@ -89,23 +89,21 @@ Before producing output, remember:
 
 ## Output
 
-When you stop, report your approaches:
+Write your approaches naturally. Lead with a recommendation, present each approach with pros/cons/effort/risk, surface design questions, and suggest a next step.
 
-- **Status:** complete / needs_input
-- **Summary:** one-line recommendation
-- **Approaches:** 2-3 named approaches with pros/cons/effort/risk
-- **Recommendation:** the current front-runner or ranking and why
-- **Design questions:** 1-2 questions per approach the user should consider
-- **UNKNOWNS:** unresolved facts that materially affect the comparison, or "None"
-- **REMAINING RISKS:** any high-impact or irreversible risks that keep the recommendation non-binding, or "None"
-- **Next:** recommended next step (usually: user selects approach → design or plan)
-- **DEVIATIONS:** any departures from the Mission Brief scope or constraints, or "None"
+End with internal markers (coordinator reads and strips these):
+
+```
+[done]  or  [needs_input: one-line question]
+DEVIATIONS: any departures from the Mission Brief, or omit if none
+UNKNOWNS: unresolved facts, or omit if none
+REMAINING RISKS: high-impact uncertainties, or omit if none
+```
 
 Example:
 
 ```
-Status: complete
-Summary: Most promising right now: approach B (Redis rate limiter).
+Most promising right now: approach B (Redis rate limiter).
 
 Approach A: In-Memory Rate Limiter
 - Description: Token bucket in process memory, reset on restart
@@ -128,13 +126,15 @@ Approach C: API Gateway Rate Limiting (contrarian)
 - Effort: T4 (depends on gateway availability)
 - Risk: High if no gateway exists yet
 
-Recommendation: Current front-runner is B. Redis is already in the stack, the pattern is well-documented, and it handles the multi-instance case that A cannot. Final selection remains with the user/coordinator unless the brief says otherwise.
+Recommendation: Current front-runner is B. Redis is already in the stack, the pattern is well-documented, and it handles the multi-instance case that A cannot.
 
 Design questions:
 - Is Redis already available in all environments (dev, staging, prod)?
 - Should rate limits be per-user, per-endpoint, or per-API-key?
 
 Next: User selects approach → design phase for T3.
+
+[done]
 ```
 
 ---

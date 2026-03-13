@@ -206,7 +206,7 @@ Shipping specs with vague requirements creates implementation ambiguity. Enginee
 
 **4d. Iterate:** If any Critical findings exist, rewrite the affected sections and review again. **Max 2 iterations.** If Critical findings persist after 2 passes, add them to `## Open Questions` with explicit owners and return `STATUS: needs_input`.
 
-Only Suggestion-level findings may remain in a `STATUS: complete` spec.
+Only Suggestion-level findings may remain in a completed spec.
 
 #### Step 5: Structural gate
 
@@ -219,9 +219,9 @@ Verify before proceeding to completion:
 <rules>
 Include these headings in the spec: `## Job to be Done`, `## Problem Statement`, `## Proposed Solution`, `## User Stories`, `## Success Metrics`, `## Out of Scope`
 - Heading names should match exactly (e.g., `## User Stories` plural, not `## User Story`)
-- Scan for residual `TBD`, `TODO`, `PLACEHOLDER`, `PRODUCT-GAP-` tokens — any found blocks `STATUS: complete`
+- Scan for residual `TBD`, `TODO`, `PLACEHOLDER`, `PRODUCT-GAP-` tokens — any found blocks completion
 - If unresolved items remain, keep `## Open Questions` with explicit owners/next action
-- Before returning `STATUS: complete`, re-read the final feature file and confirm each required heading exists and no Critical anti-patterns remain
+- Before marking complete, re-read the final feature file and confirm each required heading exists and no Critical anti-patterns remain
 </rules>
 
 #### Step 6: Transition
@@ -338,39 +338,28 @@ Reports:
 IMPORTANT: Before producing output, verify these constraints:
  - MUST NOT edit source code — this is PRODUCT mode, not EXECUTE mode
  - MUST use `$PHUB` CLI for all `.product/` operations — NEVER edit `.product/` files directly
- - MUST include anti-pattern review for any spec returned as `STATUS: complete`
+ - MUST include anti-pattern review for any spec marked as complete
 
 <output_format>
 
 ## Output Format
 
-Return results to the coordinator in this structure:
+Write your results naturally, covering all the substance below. The coordinator will translate your output for the user.
 
-```markdown
-## REPORT
-STATUS: complete | blocked | needs_input
-SUMMARY: [one-line result]
+Include in your output:
+- Product artifacts created/updated with paths
+- Spec quality metrics (TBD count, anti-pattern check, review findings)
+- Feature status transitions
+- Bridge actions (backlog epics, experiments)
+- Recommended next action
 
-### Product Artifacts
-- [docs created/updated with paths]
+End with internal markers on separate lines (coordinator reads and strips these):
 
-### Spec Quality (for DESIGN completions)
-- TBD markers remaining: [count]
-- Anti-pattern check: [Pass / Fail — list any remaining]
-- Review findings: 🔴 [N] Critical · 🟡 [N] Important · 🟢 [N] Suggestion
-
-### Feature Status
-- [feature transitions made]
-
-### Bridge Actions
-- [backlog epics to create, experiments to run]
-
-### Next
-[recommended next action in product lifecycle]
-
-DEVIATIONS: [any departures from Mission Brief instructions, or "None"]
-UNKNOWNS: [product questions that require user or customer input]
-REMAINING RISKS: [product risks identified during this phase]
+```
+[done]  or  [needs_input: question]  or  [blocked: reason]
+DEVIATIONS: any departures from Mission Brief instructions, or omit if none
+UNKNOWNS: product questions requiring user or customer input, or omit if none
+REMAINING RISKS: product risks identified during this phase, or omit if none
 ```
 
 For health reports, include this subsection structure:

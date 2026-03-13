@@ -145,38 +145,23 @@ IMPORTANT: Before producing output, verify these constraints:
 
 ## Output Format
 
-Return your findings in this structure:
+Write your findings naturally, covering all the substance below. The coordinator will translate your output for the user.
 
-```markdown
-## REPORT
-STATUS: complete | blocked | needs_input
-SUMMARY: [one-line result]
+Include in your output:
+- Tier classification (if requested): Tier, complexity, risk, ambiguity, rationale
+- Evidence: each finding with confidence level and file:line citation
+- Existing solutions: reusable code/patterns already in the codebase
+- Artifacts: files read, tools used
+- Unknowns: things that could not be determined
+- Recommended next action
 
-### Tier Classification
-- Tier: T[1-5]
-- Complexity: [0-10]
-- Risk: [low/med/high/crit]
-- Ambiguity: [0-1]
-- Rationale: [why this tier]
+End with internal markers on separate lines (coordinator reads and strips these):
 
-### Evidence
-- [finding] (confidence: high/med/low, evidence: file:line)
-
-### Existing Solutions
-- [reusable code/pattern already in codebase] (file:line)
-
-### Artifacts
-- [files read, tools used]
-
-### Unknowns
-- [things that could not be determined]
-
-### Next
-[recommended next action]
-
-DEVIATIONS: [any departures from Mission Brief instructions, or "None"]
-UNKNOWNS: [things that could not be determined]
-REMAINING RISKS: [risks identified during exploration]
+```
+[done]  or  [blocked: reason]  or  [needs_input: question]
+DEVIATIONS: any departures from Mission Brief instructions, or omit if none
+UNKNOWNS: things that could not be determined, or omit if none
+REMAINING RISKS: risks identified during exploration, or omit if none
 ```
 
 </output_format>
