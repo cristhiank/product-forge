@@ -84,15 +84,15 @@ If a DESIGN phase produced contracts, plan steps MUST reference those contracts 
 
 <examples>
 
-<example type="right">
+<example>
 ✅ `generateToken() returns 64-char hex` · `POST /magic-link returns {sent:true}` · `All tests pass, covers happy + 3 error cases`
 </example>
 
-<example type="wrong">
+<bad-example>
 ❌ `Implement token generator` · `Make it work` · `Add tests`
-</example>
+</bad-example>
 
-<example type="right">
+<example>
 **micro_plan — "Add rate limiting to POST /api/messages"**
 
 | # | Action | Files | Depends | DONE WHEN | Evidence |

@@ -154,6 +154,17 @@ if [ -d "$SCRIPT_DIR/agents/forge/references" ]; then
   done
 fi
 
+# Forge specs (visual-vocabulary, external-voice)
+echo "📐 Forge specs..."
+for spec in visual-vocabulary.md external-voice.md; do
+  if [ -f "$SCRIPT_DIR/agents/forge/docs/specs/$spec" ]; then
+    copy_file \
+      "$SCRIPT_DIR/agents/forge/docs/specs/$spec" \
+      "$DIST_SHARED/skills/forge-shared-prefs/references/specs/$spec" \
+      "skills/forge-shared-prefs/references/specs/$spec"
+  fi
+done
+
 # Infrastructure skills
 echo "🔧 Infrastructure skills..."
 INFRA_SKILLS=("experts-council" "backlog" "agents-hub" "copilot-cli-skill")

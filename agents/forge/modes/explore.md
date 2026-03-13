@@ -95,7 +95,7 @@ Tier classification determines how the Forge coordinator routes work downstream.
 </rationale>
 
 <examples>
-<example type="right">
+<example>
 Task: "Add a created_at timestamp column to the users table."
 Findings: 3 high-confidence (migration pattern found, ORM config located, no downstream consumers of schema), 1 medium (test fixtures may need updating).
 Classification:
@@ -105,7 +105,7 @@ Classification:
 - Tier: T1 (Trivial)
 - Rationale: additive migration with clear precedent; low risk and low ambiguity
 </example>
-<example type="right">
+<example>
 Task: "Replace the payment gateway from Stripe to Adyen."
 Findings: 2 high-confidence (Stripe SDK usage in 4 services, webhook handlers in src/payments/), 3 medium (refund flow unclear, currency conversion logic inferred, retry policy undocumented), 1 low (may affect subscription billing).
 Classification:
@@ -115,13 +115,13 @@ Classification:
 - Tier: T5 (Critical)
 - Rationale: high complexity across multiple services, critical financial risk, and significant unknowns in refund/billing paths
 </example>
-<example type="wrong">
+<bad-example>
 Task: "Add a created_at column to users table."
 Classification:
 - Tier: T3 (Standard)
 - Rationale: "database changes are risky"
 Problem: No evidence of actual risk. The classification inflates complexity without citing specific findings, wasting downstream budget on unnecessary ideation.
-</example>
+</bad-example>
 </examples>
 
 ---

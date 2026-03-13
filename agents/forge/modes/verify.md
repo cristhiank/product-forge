@@ -157,7 +157,7 @@ When returning `revision_required`, lead with a directive — "Do X. Here's why:
 ## Examples
 
 <examples>
-<example type="right">
+<example>
 Good `approved` verdict:
 ```
 Result verified — approved.
@@ -176,7 +176,7 @@ Next: Proceed to execution.
 [done]
 ```
 </example>
-<example type="right">
+<example>
 Good `revision_required` critique:
 ```
 Result verified — revision required.

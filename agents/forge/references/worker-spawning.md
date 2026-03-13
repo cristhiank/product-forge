@@ -81,3 +81,14 @@ Independent groups = 2+ → Parallel workers via copilot-cli-skill
    - OR "All N items touch overlapping files. Executing sequentially in one subagent."
 
 Do not default to single subagent when parallelism is available.
+
+## Workers vs task() Synchronization
+
+Workers and `task()` subagents have different synchronization models:
+
+| Mechanism | Synchronization | Coordinator behavior |
+|-----------|----------------|---------------------|
+| `task(mode: "sync")` | Synchronous — output returns inline | Evaluate immediately, chain next dispatch or stop |
+| `copilot-cli-skill` workers | Asynchronous — spawn, monitor, merge | Use `sdk.listAll()` / `sdk.checkWorker()` to poll status |
+
+`task()` dispatches always use `mode: "sync"` so the coordinator can evaluate output before responding. Workers are inherently async because they run in isolated worktrees and may take minutes — the spawn→monitor→merge ceremony handles their lifecycle.

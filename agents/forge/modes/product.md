@@ -127,12 +127,12 @@ $PHUB feature create F-XXX "Feature Title" "Description"
 <examples>
 Replace vague qualifiers with measurable targets:
 
-<example type="wrong">
+<bad-example>
 "The page should be fast"
 "Support major browsers"
-</example>
+</bad-example>
 
-<example type="right">
+<example>
 "Page load time MUST be < 2.5s at p95 on 4G mobile"
 "MUST support Chrome 120+, Firefox 121+, Safari 17+"
 </example>

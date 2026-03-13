@@ -30,8 +30,8 @@ If `backend-architecture` or `frontend-architecture` was loaded alongside this s
 ### Code Little → Test Little → Repeat
 
 <examples>
-<example type="wrong">Write 200 lines → Run tests → Debug for 30 minutes</example>
-<example type="right">
+<bad-example>Write 200 lines → Run tests → Debug for 30 minutes</bad-example>
+<example>
 1. Write 10-20 lines → check diagnostics → fix
 2. Write 10-20 more → check diagnostics → fix
 3. Logical unit done → build → fix

@@ -113,13 +113,13 @@ Quality Constraints live at Level 1 (Bass, Clements & Kazman, Software Architect
 </anti_patterns>
 
 <examples>
-<example type="right">
+<example>
 Good capability statements:
 - "Send email notifications when [event] occurs, with retry on transient failure"
 - "Track delivery status per notification: pending, sent, failed, bounced"
 - "Rate-limit to 100 emails/minute per tenant"
 </example>
-<example type="right">
+<example>
 Good quality constraints:
 - "Must handle 500 notifications/minute at peak"
 - "Email delivery latency: < 30s from trigger to provider API call"
@@ -445,18 +445,18 @@ Pushback is valuable. The whole point is to surface disagreements at the design 
 At every level, include **2-4 targeted questions** that invite the user to add context only they have. These are not filler questions — they should surface decisions that would otherwise be made silently in implementation.
 
 <examples>
-<example type="right">
+<example>
 Good design questions:
 - "Should this reuse the existing `EventBus` or do we need a separate channel?"
 - "The retry strategy could be exponential (safer) or fixed-interval (simpler) — which fits your SLA?"
 - "I see `UserService` already handles email validation. Should `NotificationService` delegate to it or duplicate the logic?"
 </example>
-<example type="wrong">
+<bad-example>
 Bad design questions (answers are obvious or always the same):
 - "What language should I use?" (obvious from codebase)
 - "Should I add error handling?" (always yes)
 - "Do you want tests?" (always yes)
-</example>
+</bad-example>
 </examples>
 
 ---

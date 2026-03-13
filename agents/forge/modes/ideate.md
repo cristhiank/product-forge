@@ -45,12 +45,12 @@ The contrarian option prevents tunnel vision. Without it, ideation drifts toward
 </rationale>
 
 <examples>
-<example type="wrong">
+<bad-example>
 15-min vs 30-min token expiry (same mechanism, different knob)
 Redis vs Memcached (both in-memory caches)
 PostgreSQL vs MySQL (both relational SQL databases)
-</example>
-<example type="right">
+</bad-example>
+<example>
 Email magic link vs WebAuthn passkeys (different auth paradigm)
 Server-side cache vs No cache — optimize the query instead (eliminates the layer)
 SQL database vs Event sourcing (different data model and read/write pattern)
@@ -83,16 +83,16 @@ Design questions transform IDEATE from a one-shot presentation into a collaborat
 </rationale>
 
 <examples>
-<example type="right">
+<example>
 "This wraps BullMQ in a RetryQueue — should we use BullMQ's native retry instead?"
 "Approach B assumes a new DB table. Could we extend the existing `events` table instead?"
 "This introduces a new `NotificationChannel` abstraction. Is that justified given we only have email for v1?"
 </example>
-<example type="wrong">
+<bad-example>
 "Should we add error handling?" (always yes)
 "What language should this use?" (obvious from codebase)
 "Do you want this to be fast?" (obviously yes)
-</example>
+</bad-example>
 </examples>
 
 </rules>

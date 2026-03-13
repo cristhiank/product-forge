@@ -148,7 +148,7 @@ store_memory({
 ## Examples
 
 <examples>
-<example type="right">
+<example>
 **GOOD extraction — convention discovered, clear citation, actionable, durable**
 
 Trail entry: "During review, found that all 23 repository service files use the Result<T> wrapper for error returns instead of throwing exceptions."
@@ -166,7 +166,7 @@ store_memory({
 Why this passes: The fact is under 200 characters, cites specific files, describes a durable convention (not tied to a single PR), and tells future sessions exactly what to do.
 </example>
 
-<example type="wrong">
+<bad-example>
 **REJECTED extraction — too vague, speculative, session-specific**
 
 Trail entry: "The tests seem slow, maybe we should look into parallelizing them."
@@ -182,7 +182,7 @@ store_memory({
 ```
 
 Why this fails: "Might be slow" is speculative — no measurement was taken. "Could benefit" is a hypothesis, not a verified fact. The citation is vague. This memory would mislead a future session into assuming a problem that was never confirmed.
-</example>
+</bad-example>
 </examples>
 
 ---

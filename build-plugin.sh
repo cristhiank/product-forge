@@ -199,6 +199,13 @@ copy_file \
   "$DIST/skills/forge/references/specs/visual-vocabulary.md" \
   "skills/forge/references/specs/visual-vocabulary.md"
 
+# --- Step 5f: External voice spec ---
+echo "🗣️  External voice..."
+copy_file \
+  "$SCRIPT_DIR/agents/forge/docs/specs/external-voice.md" \
+  "$DIST/skills/forge/references/specs/external-voice.md" \
+  "skills/forge/references/specs/external-voice.md"
+
 # --- Step 6: Infrastructure skills ---
 echo ""
 echo "🔧 Infrastructure skills..."

@@ -9,12 +9,12 @@ For any product intent (discover/design/validate/health):
 5. For product health, dispatch a product subagent that returns stale/missing/attention output.
 
 <examples>
-<example type="wrong">
+<bad-example>
 **Framework-only (missing forge-product):**
 `Invoke the \`jobs-to-be-done\` skill as your first action.`
-</example>
+</bad-example>
 
-<example type="right">
+<example>
 **Product-first:**
 `Invoke the \`forge-product\` skill as your first action.`
 `Also invoke the \`jobs-to-be-done\` skill for customer switching-force analysis.`
