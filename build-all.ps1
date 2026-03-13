@@ -179,11 +179,30 @@ if (Test-Path $sharedDir -PathType Container) {
     }
 }
 
+Write-Host "🧾 Forge schemas..."
+$forgeSchemasDir = "$ScriptDir\agents\forge\schemas"
+if (Test-Path $forgeSchemasDir -PathType Container) {
+    Get-ChildItem "$forgeSchemasDir\*.md" | ForEach-Object {
+        Copy-PluginFile $_.FullName "$DistShared\skills\forge-shared-prefs\references\schemas\$($_.Name)" "skills/forge-shared-prefs/references/schemas/$($_.Name)" | Out-Null
+    }
+}
+
 Write-Host "📚 Forge references..."
 $refsDir = "$ScriptDir\agents\forge\references"
 if (Test-Path $refsDir -PathType Container) {
     Get-ChildItem "$refsDir\*.md" | ForEach-Object {
         Copy-PluginFile $_.FullName "$DistShared\skills\forge-shared-prefs\references\$($_.Name)" "skills/forge-shared-prefs/references/$($_.Name)" | Out-Null
+    }
+}
+
+Write-Host "📐 Forge specs..."
+foreach ($spec in @('visual-vocabulary.md', 'external-voice.md')) {
+    $specPath = "$ScriptDir\agents\forge\docs\specs\$spec"
+    if (Test-Path $specPath -PathType Leaf) {
+        Copy-PluginFile `
+            $specPath `
+            "$DistShared\skills\forge-shared-prefs\references\specs\$spec" `
+            "skills/forge-shared-prefs/references/specs/$spec" | Out-Null
     }
 }
 
