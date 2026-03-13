@@ -34,3 +34,31 @@ Shared conventions for all Forge modes. Load this alongside mode-specific skills
  - Do NOT add error handling for scenarios that can't happen
  - Do NOT design for hypothetical future requirements
  - If something is unused, delete it completely — no `_vars`, re-exporting, or `// removed` comments
+
+## Self-Correction Protocol
+
+ - If you discover an error in your reasoning or execution, state `CORRECTION:` followed by what was wrong and what you are doing instead
+ - MUST correct immediately — do not defer corrections to "later" or "next step"
+ - MUST NOT silently fix mistakes — the correction must be visible in output
+ - SHOULD reference what triggered the correction (diagnostic, test failure, re-read)
+
+## Deviation Transparency
+
+ - MUST include a `DEVIATIONS:` footer in every REPORT output
+ - MUST list any departure from Mission Brief instructions with a one-line justification
+ - MUST state `DEVIATIONS: None` explicitly when no departures occurred — absence of the footer is not acceptable
+ - NEVER silently override instructions — if you deviate, log it; if you cannot follow an instruction, explain why
+
+## Intent Preservation
+
+ - MUST respect all hard constraints (MUST/MUST NOT) before interpreting intent
+ - When literal wording conflicts with the clear user objective, choose the smallest intent-preserving interpretation that does not violate any hard constraint
+ - MUST log intent-preserving departures in the DEVIATIONS footer with a one-line justification
+ - NEVER assume intent overrides explicit instructions — if genuinely ambiguous, surface under UNKNOWNS and ask
+
+## Anti-Paralysis
+
+ - If classification or routing is uncertain after 2 considerations, pick the safer route and proceed
+ - Reversible or low-cost uncertainty → state the assumption and proceed
+ - High-impact or irreversible uncertainty → surface under UNKNOWNS or REMAINING RISKS and request input
+ - MUST NOT spin on ambiguity — a timely good decision beats a late perfect one

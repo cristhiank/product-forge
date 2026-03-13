@@ -11,6 +11,18 @@ Follow the plan exactly, make small testable changes, and verify as you go. Oper
 
 If `backend-architecture` or `frontend-architecture` was loaded alongside this skill, follow its patterns for module structure, boundaries, contracts, and testing. Architecture skill wins over personal preference.
 
+## Complexity Calibration
+
+| Complexity | Execute Behavior | Edit Cadence | Verification |
+|------------|-----------------|--------------|--------------|
+| **Simple** | Fast loop — edit, verify, done | 20-30 lines per cycle | Build + basic test |
+| **Moderate** | Standard — code little, test little | 10-20 lines per cycle | Diagnostics + build + targeted tests |
+| **Complex-ambiguous** | Careful — draft-then-apply, extra review | 10-15 lines per cycle | Diagnostics + build + full test suite + hotspot check |
+
+ - MUST match execution cadence to the stated complexity
+ - MUST use draft-then-apply for complex-ambiguous changes touching shared interfaces
+ - MUST NOT rush complex changes — proportional care prevents compounding errors
+
 ---
 
 ## Interleaved Thinking Protocol
@@ -81,6 +93,17 @@ For each change:
 4. **Adjust** — Fix any issues before continuing.
 5. **Repeat** — Until logical unit complete.
 
+**Deliberation floor:** Before each code edit, state in one sentence WHAT you are changing and WHY. This prevents premature literalism without killing execution speed.
+
+<example>
+Changing AuthController.cs:41 — adding email format validation to the signup handler because the current regex accepts malformed addresses.
+[then edits the file]
+</example>
+
+<bad-example>
+[immediately edits AuthController.cs without stating intent]
+</bad-example>
+
 ---
 
 ## Pre-Commit Checklist
@@ -105,11 +128,12 @@ Before every `git commit`:
 
 ## Scope Discipline
 
-IMPORTANT: Do NOT add features, utilities, or abstractions not in the Mission Brief. If you discover something needed, return `STATUS: needs_input` instead of implementing it.
-
- - **Do:** Fix blocking issues · Follow plan · Update backlog · Log at least 1 trail.
- - **NEVER:** Fix unrelated typos · Refactor nearby code · Add unplanned features · Skip backlog updates.
- - **Unrelated issues found during implementation:** Note them, create a backlog item, don't fix.
+ - MUST stay inside the objective, scope, and out_of_scope defined in the Mission Brief
+ - MUST NOT add features, utilities, or abstractions not in the Mission Brief — if you discover something needed, return `STATUS: needs_input` instead of implementing it
+ - MUST fix blocking issues, follow plan, update backlog, and log at least 1 trail
+ - MUST NOT fix unrelated typos, refactor nearby code, add unplanned features, or skip backlog updates
+ - SHOULD note unrelated issues found during implementation as backlog items — do not fix them
+ - SHOULD use CORRECTION: protocol when discovering errors mid-execution (see engineering-preferences.md)
 
 Also load `shared/engineering-preferences.md` from the forge skill directory for coding conventions.
 
@@ -191,6 +215,11 @@ Before completing:
 
 ---
 
+IMPORTANT: Before producing output, verify these constraints:
+ - MUST NOT implement beyond the plan — if something new is needed, return `STATUS: needs_input`
+ - MUST have updated backlog status and logged at least 1 trail
+ - MUST have run build + tests before reporting `STATUS: complete`
+
 <output_format>
 
 ## Output Format
@@ -220,11 +249,29 @@ Build: ✓/✗ | Tests: N/M ✓/✗
 
 ### Next
 [Ready for verification]
+
+DEVIATIONS: [any departures from Mission Brief or plan, or "None"]
+UNKNOWNS: [uncertainties discovered during implementation]
+REMAINING RISKS: [risks that emerged during execution]
 ```
 
 </output_format>
 
 ---
+
+## Done When
+
+ - MUST have completed all plan steps with evidence of each DONE WHEN criterion
+ - MUST have a clean build and passing tests
+ - MUST have updated backlog status and logged at least 1 trail
+ - MUST have run pre-commit cleanup
+
+## Non-Goals
+
+ - MUST NOT expand scope beyond the Mission Brief — return `STATUS: needs_input` for new requirements
+ - MUST NOT refactor beyond what the plan requires — "while you're here" changes are scope creep
+ - MUST NOT skip verification — every logical unit gets diagnostics, every step gets tests
+ - MUST NOT keep trying after 2 consecutive self-verify failures — escalate instead
 
 <stop_conditions>
 **Complete when:** All plan steps completed · Build passes · Tests pass · Backlog updated · Trail logged.

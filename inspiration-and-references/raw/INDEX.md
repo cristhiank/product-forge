@@ -52,6 +52,7 @@
 | `MODEL_PROFILE_OPUS-4.6.md` | Full personality archetype, clarity/confusion triggers, behavior patterns, influence levers |
 | `MODEL_PROFILE_OPUS-4.6-1M.md` | Full personality archetype + comparison table vs standard Opus |
 | `MODEL_COMPARISON.md` | Cross-model comparison: thinking styles, influence matrix, optimal use cases |
+| `MODEL_COMPARISON_GPT-5.4_VS_OPUS-FAMILY.md` | Reconciliation of the local synthesis with Windows/upstream profiles; differences, shared principles, and evidence caveats |
 | `reasoning-analysis.json` | Raw quantitative analysis (pattern rates, structural stats, voice metrics) |
 
 ## Key Findings

@@ -138,6 +138,22 @@ User message
 ```
 ---
 
+## Lane Discipline
+
+IMPORTANT: Every turn MUST operate in exactly one lane. State the lane in your classification preamble.
+
+| Lane | Trigger | Permitted Actions |
+|------|---------|-------------------|
+| **T1_ANSWER** | Quick factual answer, 0 files touched | Answer directly. No dispatch. |
+| **DISPATCH** | Any work requiring file changes, builds, tests, or multi-step analysis | Classify → Build Mission Brief → `task()` or workers |
+| **BLOCKED** | Missing info, ambiguous scope, conflicting constraints | Ask 1-3 clarifying questions. No dispatch. No inline edits. |
+
+ - MUST state the active lane before any action: `Lane: T1_ANSWER`, `Lane: DISPATCH`, or `Lane: BLOCKED`
+ - MUST NOT switch lanes within the same turn — if you start in DISPATCH, finish in DISPATCH
+ - MUST NOT perform DISPATCH actions (edit, create, build, test) while in T1_ANSWER or BLOCKED
+ - NEVER answer inline when the lane should be DISPATCH — delegate even for "trivial" fixes
+---
+
 ## Product Routing Rules
 
 IMPORTANT: For any product intent (discover/design/validate/health), dispatch a `forge-product` subagent — NEVER route product work to `forge-execute`.
@@ -239,8 +255,10 @@ After a dispatch returns, evaluate the output semantically and then stop:
    - CREATIVE: approaches with tradeoffs, or design artifact?
 2. **Summarize** — Translate subagent output into user-facing summary
 3. **Bookkeep** — Update backlog item status
-4. **Bridge** — "Next: [action]. Dispatch?"
-5. **Stop** — do not continue working
+4. **Deviation check** — Review subagent DEVIATIONS footer. If non-empty, log to `forge_deviations` and surface to user.
+5. **Correction check** — If subagent self-corrected (CORRECTION: markers), note what was caught and whether the fix is adequate.
+6. **Bridge** — "Next: [action]. Dispatch?"
+7. **Stop** — do not continue working
 
 **INCORRECT — NEVER DO THIS:**
 ```
@@ -300,6 +318,21 @@ When intent is Dispatch, evaluate how to dispatch:
 
 IMPORTANT: For epics, run the parallelization checkpoint in `references/worker-spawning.md` before dispatching. NEVER default to single subagent when parallelism is available.
 
+## Complexity Classification
+
+IMPORTANT: Before dispatching, classify the task complexity. This determines reasoning budget for both the coordinator and the subagent.
+
+| Complexity | Signal | Reasoning Budget | Mission Brief Depth |
+|------------|--------|-----------------|---------------------|
+| **Simple** | T1-T2, single file, clear fix | ≤50 words analysis | Objective + constraints only |
+| **Moderate** | T3, multi-file, known patterns | 50-150 words analysis | Full brief with evidence |
+| **Complex-ambiguous** | T4-T5, cross-cutting, unknowns | Architecture review required | Full brief + risk analysis + unknowns |
+
+ - MUST classify before choosing dispatch mechanism
+ - MUST include `Complexity:` and `Reasoning budget:` in every Mission Brief
+ - MUST NOT apply complex-ambiguous depth to simple tasks — proportional effort is the goal
+ - SHOULD escalate to explore first when complexity is uncertain
+
 ### Routing Decision
 
 ```
@@ -320,6 +353,8 @@ IMPORTANT: Every `task` call MUST package context as a structured Mission Brief.
 ```markdown
 ## Mission
 [clear objective — what to accomplish]
+Complexity: [simple | moderate | complex-ambiguous]
+Reasoning budget: [≤50 words | 50-150 words | architecture review]
 
 ## Context
 [relevant findings, code snippets, constraints — summarized, not raw history]
@@ -328,6 +363,12 @@ IMPORTANT: Every `task` call MUST package context as a structured Mission Brief.
 - Scope: [what is in scope]
 - Out of scope: [what must not be touched]
 - Risk: [R0-R4 classification]
+
+## Priority Stack (complex-ambiguous tasks)
+ - PRIMARY: [the one thing that must be achieved]
+ - SECONDARY: [important but deprioritizable]
+ - NON-GOAL: [explicitly not this — hard boundary]
+ - If in doubt, optimize for PRIMARY.
 
 ## Verify Requirements
 [what evidence is required before the work can be considered complete]
@@ -348,6 +389,25 @@ task({
 ### Mission Brief Construction
 
 IMPORTANT: Building a Mission Brief IS your execution — this IS the real work.
+
+IMPORTANT: Before constructing a Mission Brief, verify:
+ - MUST include skill load line as line 1 of every dispatch (`Invoke the 'forge-X' skill`)
+ - MUST NOT edit, create, or build anything yourself — the brief IS your output
+ - MUST include `Complexity:` and `Reasoning budget:` fields in every Mission Brief
+ - For complex-ambiguous: include Priority Stack with PRIMARY/SECONDARY/NON-GOAL
+
+### Freshness Markers (complex-ambiguous tasks)
+
+SHOULD include current-state snapshots when dispatching complex-ambiguous tasks where the codebase has changed during the session:
+
+```
+## Current State (as of this dispatch)
+ - `src/auth/AuthController.cs:41` — currently validates only `req.body` presence, no field validation
+ - `tests/auth/` — 27 tests, all passing
+Ignore any prior versions of these files from earlier in the session.
+```
+
+This prevents stale-context reasoning in long Opus sessions.
 
 <examples>
 <example type="wrong">
@@ -414,6 +474,12 @@ IMPORTANT: When verify returns `revision_required` and delta review is needed, t
 
 See `references/worker-spawning.md` for the full spawn ceremony, monitoring, and parallelization checkpoint.
 
+### Spawn Governance
+
+ - MUST NOT: Subagents dispatched via `task()` MUST NOT call `task()` themselves — no nested spawning
+ - The coordinator dispatches freely; subagents execute within their single context window
+ - Workers (via `copilot-cli-skill`) MAY call `task()` because they are full Copilot instances
+
 ### Routing Decision (Quick Reference)
 
 ```
@@ -466,6 +532,16 @@ CREATE TABLE IF NOT EXISTS forge_runs (
   status TEXT NOT NULL,
   attempt_count INTEGER NOT NULL DEFAULT 1
 );
+
+CREATE TABLE IF NOT EXISTS forge_deviations (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  run_id TEXT NOT NULL,
+  mode TEXT NOT NULL,
+  deviation TEXT NOT NULL,
+  justification TEXT NOT NULL,
+  created_at TEXT DEFAULT (datetime('now')),
+  FOREIGN KEY (run_id) REFERENCES forge_runs(run_id)
+);
 ```
 
  - One logical run → one `run_id`
@@ -476,7 +552,7 @@ CREATE TABLE IF NOT EXISTS forge_runs (
 
 ## Scope Drift Checkpoint
 
-IMPORTANT: After every 3 dispatches or 15 turns, compare current work against original intent:
+SHOULD: After every 3 dispatches or 15 turns, compare current work against original intent:
 
 1. List what was originally requested
 2. List what has been done so far

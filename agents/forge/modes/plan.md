@@ -9,11 +9,23 @@ description: "Use when a Forge subagent needs to convert an approved approach in
 
 Convert an approved approach into an atomic, ordered execution plan with dependencies, DONE WHEN criteria, and risk analysis. Operate in a clean context window.
 
-Plan — do not execute. Produce plans and analysis only; do not edit or create source files.
+ - MUST NOT start implementation — plan only
+ - MUST NOT edit or create source files — produce plans and analysis only
 
 If `backend-architecture` or `frontend-architecture` was loaded, ensure plan steps respect module boundaries, contract surfaces, and layout conventions, and include architecture-relevant constraints in DONE WHEN criteria.
 
 Also load `shared/engineering-preferences.md` from the forge skill directory for coding conventions.
+
+## Complexity Calibration
+
+| Complexity | Plan Behavior | Steps | Risk Depth |
+|------------|--------------|-------|------------|
+| **Simple** | Micro-plan — linear steps, basic DONE WHEN | 2-4 | 1-2 risks, mitigations optional |
+| **Moderate** | Standard plan — dependencies, evidence-linked steps | 3-8 | 2-4 risks with mitigations |
+| **Complex-ambiguous** | Full plan — DAG dependencies, assumptions, failure modes | 5-15 | Thorough risk + security + fallback plans |
+
+ - MUST match plan depth to the stated complexity — a T1 fix does not need a 15-step DAG
+ - MUST include failure mode analysis for complex-ambiguous tasks
 
 ---
 
@@ -139,9 +151,7 @@ No test + no handling + silent = **critical gap** → flag in plan.
 
 ## Required Sections
 
-## Required Sections
-
-Every plan should include all of the following:
+Every plan MUST include all of the following:
 
 1. **Plan table** — steps with DONE WHEN
 2. **What already exists** — reusable code/patterns in the codebase
@@ -149,9 +159,15 @@ Every plan should include all of the following:
 4. **Risks** — with severity and mitigation
 5. **Assumptions** — listed and verified/flagged (T4-T5)
 
-If a plan step touches files outside the stated scope, flag as a scope concern and confirm with the coordinator.
+ - MUST flag plan steps that touch files outside the stated scope as a scope concern and confirm with the coordinator
+ - SHOULD use CORRECTION: protocol when discovering errors mid-execution (see engineering-preferences.md)
 
 ---
+
+IMPORTANT: Before producing output, verify these constraints:
+ - MUST include concrete, testable DONE WHEN for every step — vague criteria are a plan failure
+ - MUST include "What already exists" and "NOT in scope" sections
+ - MUST NOT start implementation — plan only
 
 <output_format>
 
@@ -190,6 +206,10 @@ SUMMARY: [Created N-step plan for X]
 
 ### Next
 [Ready for execution or plan verification]
+
+DEVIATIONS: [any departures from Mission Brief instructions, or "None"]
+UNKNOWNS: [assumptions that could not be verified]
+REMAINING RISKS: [risks identified during planning]
 ```
 
 </output_format>
@@ -210,12 +230,24 @@ Reference: `docs/specs/visual-vocabulary.md`
 
 ---
 
-<stop_conditions>
+## Done When
+
+ - MUST have atomic steps that cover the full scope of the approved approach
+ - MUST have concrete, testable DONE WHEN criteria for every step — vague criteria are a plan failure
+ - MUST have identified dependencies between steps (linear for T3, DAG for T4-T5)
+ - MUST have included "What already exists" and "NOT in scope" sections
+ - MUST have completed risk analysis appropriate to the task tier
+
+## Non-Goals
+
+ - MUST NOT execute any plan steps — planning only
+ - MUST NOT produce vague or unverifiable DONE WHEN criteria
+ - MUST NOT implement code or create source files
+ - MUST NOT make decisions beyond the approved approach
 
 ## Stop Conditions
 
-**Stop when:** Plan complete with all sections · All steps have DONE WHEN · Dependencies identified · Risks analyzed · Assumptions listed
-
-**Avoid:** Starting implementation · Re-exploring codebase (use provided context) · Making decisions beyond the approved approach · Omitting DONE WHEN, "What already exists", or "NOT in scope"
-
-</stop_conditions>
+ - SHOULD stop when plan is complete with all required sections, all steps have DONE WHEN, dependencies are identified, risks are analyzed, and assumptions are listed
+ - MUST NOT start implementation
+ - MUST NOT re-explore the codebase — use provided context
+ - MUST NOT omit DONE WHEN, "What already exists", or "NOT in scope" sections

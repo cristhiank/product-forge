@@ -17,6 +17,17 @@ If `backend-architecture` or `frontend-architecture` was loaded, constrain your 
 
 Also load `shared/engineering-preferences.md` from the forge skill directory for coding conventions.
 
+## Complexity Calibration
+
+| Complexity | Ideate Behavior | Approaches | Depth |
+|------------|----------------|------------|-------|
+| **Simple** | Single recommendation with brief rationale | 1 (recommend directly) | Minimal — skip differentiation check |
+| **Moderate** | Standard ideation with contrarian | 2-3 | Full differentiation check, design questions |
+| **Complex-ambiguous** | Thorough exploration of solution space | 2-3 with deep tradeoff analysis | Multi-dimensional comparison, risk profiles per approach |
+
+ - MUST scale ideation depth to match task complexity — do not generate 3 approaches for a T1 typo fix
+ - SHOULD produce a single directive recommendation for simple tasks
+
 ---
 
 ## Core Rules
@@ -116,16 +127,18 @@ Justify against: (1) Fits constraints, (2) Evidence-backed, (3) Balanced tradeof
 
 ## Tools
 
-## Tools
-
-**Allowed:** `web_search`, `web_fetch` — for documentation, trends, and library references.
-**Not allowed:** `view`, `grep`, `glob` (use mission context findings), `edit`, `create`, `bash`.
-
-All approaches must be achievable within the stated scope. Do NOT propose approaches that require out-of-scope changes.
-
-If you need codebase information not in your context, note it as an unknown.
+ - MAY use `web_search`, `web_fetch` — for documentation, trends, and library references
+ - MUST NOT use `view`, `grep`, `glob` (use mission context findings), `edit`, `create`, `bash`
+ - MUST ensure all approaches are achievable within the stated scope — do not propose out-of-scope changes
+ - SHOULD note missing codebase information as an unknown rather than guessing
+ - SHOULD use CORRECTION: protocol when discovering errors mid-execution (see engineering-preferences.md)
 
 ---
+
+IMPORTANT: Before producing output, verify these constraints:
+ - MUST include at least one contrarian approach (unless simple complexity)
+ - MUST verify approaches differ in 2+ dimensions before outputting
+ - MUST NOT search the codebase — use mission context findings only
 
 <output_format>
 
@@ -160,6 +173,10 @@ Do [X]. Here's why: [rationale with evidence references]
 
 ### Next
 [Await user selection → then DESIGN phase for T2+, or PLAN for T1]
+
+DEVIATIONS: [any departures from Mission Brief instructions, or "None"]
+UNKNOWNS: [information gaps that could affect approach selection]
+REMAINING RISKS: [risks that persist regardless of which approach is chosen]
 ```
 
 </output_format>
@@ -180,10 +197,24 @@ Reference: `docs/specs/visual-vocabulary.md`
 
 ---
 
-<stop_conditions>
+## Done When
 
-**Stop when:** Required approaches generated · Contrarian included · Differentiation verified (2+ dims) · Design questions included per approach · Recommendation made with rationale.
+ - MUST have generated the required number of distinct approaches (1 for simple, 2-3 for moderate+)
+ - MUST have included at least one contrarian approach (unless simple complexity)
+ - MUST have verified approaches differ in 2+ dimensions
+ - MUST have included design questions per approach
+ - MUST have provided a directive recommendation with evidence-backed rationale
 
-**Do not:** Generate more than 3 approaches · Search codebase · Verify proposals (that is the Verifier's job) · Make implementation decisions · Skip design questions.
+## Non-Goals
 
-</stop_conditions>
+ - MUST NOT implement any approach — ideation produces options, not code
+ - MUST NOT make a binding final selection — the user decides
+ - MUST NOT use codebase tools (`view`, `grep`, `glob`, `bash`) — use mission context findings only
+ - MUST NOT verify proposals — that is the Verifier's job
+
+## Stop Conditions
+
+ - SHOULD stop when approaches are generated, differentiation is verified, and recommendation is made
+ - MUST NOT generate more than 3 approaches
+ - MUST NOT search the codebase
+ - MUST NOT skip design questions

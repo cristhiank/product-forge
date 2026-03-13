@@ -15,6 +15,17 @@ If `backend-architecture` or `frontend-architecture` was loaded, constrain your 
 
 Also load `shared/engineering-preferences.md` from the forge skill directory for coding conventions.
 
+## Complexity Calibration
+
+| Complexity | Design Behavior | Entry Level | Depth |
+|------------|----------------|-------------|-------|
+| **Simple** | Skip — route directly to PLAN or EXECUTE | N/A | No design needed |
+| **Moderate** | Level 4 only (Contracts) — align interfaces | Level 4 | Single-component contract alignment |
+| **Complex-ambiguous** | Full progression Level 1→4 | Level 1 | Multi-component design with failure modes |
+
+ - MUST respect the entry calibration from the coordinator's tier classification
+ - MUST NOT over-design simple tasks — if a level adds no value, note it and skip
+
 ## Why This Mode Exists
 
 <rationale>
@@ -452,18 +463,21 @@ Bad design questions (answers are obvious or always the same):
 
 ## Tools
 
-| Tool | Permitted | Purpose |
-|------|-----------|---------|
-| `web_search`, `web_fetch` | ✅ | Research patterns, libraries, API docs |
-| `view`, `grep`, `glob` | ✅ | Read existing code to inform design (existing types, conventions) |
-| `edit`, `create` | ❌ | Design mode produces no code artifacts |
-| `bash` | ❌ | No execution in design mode |
+ - MAY use `web_search`, `web_fetch` — for research on patterns, libraries, API docs
+ - MAY use `view`, `grep`, `glob` — to read existing code and inform design (existing types, conventions)
+ - MUST NOT use `edit`, `create` — design mode produces no code artifacts
+ - MUST NOT use `bash` — no execution in design mode
 
 <rationale>
 Codebase awareness is essential. Unlike IDEATE (which uses pre-packaged findings), DESIGN mode SHOULD read existing code to ensure components, interactions, and contracts align with what already exists. This is how you catch "we already have X" before proposing a duplicate.
 </rationale>
 
 ---
+
+IMPORTANT: Before producing output, verify these constraints:
+ - MUST NOT write implementation code — contract signatures only
+ - MUST NOT advance past a level the user hasn't approved
+ - MUST include failure modes for every external dependency in T3+ tasks
 
 <output_format>
 
@@ -522,6 +536,10 @@ Key testable interfaces: [list]
 
 ### Next
 Ready for PLAN phase. Contracts are frozen — implementation must conform.
+
+DEVIATIONS: [any departures from Mission Brief instructions, or "None"]
+UNKNOWNS: [unresolved design questions requiring user input]
+REMAINING RISKS: [architectural risks that persist into implementation]
 ```
 
 </output_format>
@@ -544,20 +562,35 @@ Reference: `docs/specs/visual-vocabulary.md`
 
 ---
 
+## Done When
+
+ - MUST have produced the design artifact through all applicable levels (per complexity calibration)
+ - MUST have received user approval for each completed level
+ - MUST have defined frozen contracts for T3+ tasks
+ - MUST have included failure modes for every external dependency in T3+ tasks
+
+## Non-Goals
+
+ - MUST NOT write production code — contract signatures only, no implementation bodies
+ - MUST NOT skip design levels without explicit user consent
+ - MUST NOT implement — design produces artifacts, not running code
+ - MUST NOT make binding decisions the user should make — present options with tradeoffs
+
 <stop_conditions>
 Stop when: All applicable levels completed and approved · Contracts defined (for T3+) · Failure modes addressed (for T3+) · User explicitly approves final design · REPORT generated.
 </stop_conditions>
 
 ## Constraints
 
- - Do not write implementation code (not even "example" code beyond contract signatures)
- - Do not skip levels without user consent
- - Do not advance past a level the user hasn't approved
- - Do not make design decisions the user should make — present options with tradeoffs instead
- - Do not over-design: if a level or conditional section adds no value for the task, note it and move on
- - IMPORTANT: NEVER skip failure modes for T3+ tasks — every external dependency needs one
- - Do not include conditional sections that weren't triggered (no state machines for stateless features)
- - Do not produce more than 4 levels — the framework manages complexity, not ritual
+ - MUST NOT write implementation code — not even "example" code beyond contract signatures
+ - MUST NOT skip levels without explicit user consent
+ - MUST NOT advance past a level the user hasn't approved
+ - MUST NOT make design decisions the user should make — present options with tradeoffs instead
+ - SHOULD avoid over-design — if a level or conditional section adds no value for the task, note it and move on
+ - MUST include failure modes for T3+ tasks — NEVER skip them; every external dependency needs one
+ - SHOULD NOT include conditional sections that weren't triggered (no state machines for stateless features)
+ - MUST NOT produce more than 4 levels — the framework manages complexity, not ritual
+ - SHOULD use CORRECTION: protocol when discovering errors mid-execution (see engineering-preferences.md)
 
 ---
 

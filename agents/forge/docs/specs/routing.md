@@ -1,6 +1,48 @@
 # Routing
 
-> Intent classification, T1 eligibility, dispatch mechanism selection, and context packaging.
+> Intent classification, complexity classification, T1 eligibility, lane discipline, dispatch mechanism selection, and context packaging.
+
+---
+
+## Pre-Routing: Complexity Classification
+
+Before intent classification, the coordinator determines task complexity. This gate controls reasoning depth and phase routing for the entire task lifecycle.
+
+```
+User message
+│
+├── CLASSIFY COMPLEXITY
+│   ├── Simple        — single file, obvious change, no ambiguity
+│   ├── Moderate      — 2-5 files, clear approach but needs planning
+│   └── Complex/Ambiguous — cross-cutting, multiple viable approaches, architectural impact
+│
+├── CLASSIFY INTENT (see below)
+│
+└── Route based on INTENT × COMPLEXITY
+```
+
+Complexity classification happens **before** intent routing. The coordinator classifies both dimensions, then uses their combination to determine phase depth and dispatch mechanism.
+
+### Anti-Paralysis for Classification
+
+If complexity classification is uncertain after 2 considerations:
+- **Reversible or low-cost uncertainty** → pick the safer (higher complexity) route, state the assumption, and proceed
+- **High-impact uncertainty** → surface under `UNKNOWNS:` and request input
+- A timely good classification beats a late perfect one
+
+---
+
+## Lane Discipline
+
+Every classified request resolves to one of three lanes:
+
+| Lane | When | Action |
+|------|------|--------|
+| **T1_ANSWER** | Quick question, 0 files, answerable from known context | Answer directly inline. No delegation. |
+| **DISPATCH** | Any work requiring file reads, edits, builds, or investigation | Delegate to appropriate subagent or worker. |
+| **BLOCKED** | Cannot proceed without user input (ambiguous scope, missing access, design decision) | Surface the specific blocker with a recommendation. |
+
+The coordinator must resolve to a lane before taking any action. "I'll start exploring and see what happens" is not a valid lane — classify first, then route.
 
 ---
 

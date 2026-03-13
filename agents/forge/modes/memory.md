@@ -13,6 +13,17 @@ IMPORTANT: This mode runs on explicit user request only. Do NOT extract memories
 
 Also load `shared/engineering-preferences.md` from the forge skill directory for coding conventions.
 
+## Complexity Calibration
+
+| Complexity | Memory Behavior | Extraction Depth | Cross-Session |
+|------------|----------------|-----------------|---------------|
+| **Simple** | Quick extract — 1-3 high-confidence memories | Surface trail scan | Skip cross-session query |
+| **Moderate** | Standard extract — full trail + scoring | All triggers evaluated | Basic cross-session correlation |
+| **Complex-ambiguous** | Deep extract — thorough trail + cross-session patterns | Full scoring + deduplication | Multi-session pattern analysis |
+
+ - MUST match extraction depth to the volume and complexity of session trails
+ - SHOULD skip cross-session queries when trail entries are few and straightforward
+
 <rationale name="why-memory-extraction-matters">
 Memories enable cross-session learning. Discoveries, conventions, verified commands, and gotchas persist beyond the current context window so future sessions start with accumulated project knowledge rather than re-discovering the same facts. Without extraction, every session begins from zero.
 </rationale>
@@ -180,6 +191,11 @@ Why this fails: "Might be slow" is speculative — no measurement was taken. "Co
 
 Return extracted memories in this structure:
 
+IMPORTANT: Before producing output, verify these constraints:
+ - MUST NOT store speculative or single-observation conclusions — require 2+ instances or user confirmation
+ - MUST check for duplicates against existing memories before storing
+ - MUST NOT run without an explicit user request
+
 <output_format>
 
 ```markdown
@@ -200,22 +216,39 @@ SUMMARY: [Extracted N memories from M trail entries]
 
 ### Next
 Memory extraction complete.
+
+DEVIATIONS: [any departures from Mission Brief instructions, or "None"]
+UNKNOWNS: [trail entries that lacked sufficient evidence for extraction]
+REMAINING RISKS: [patterns that may need re-evaluation in future sessions]
 ```
 
 </output_format>
 
 ---
 
-## Stop Conditions
+## Done When
+
+ - MUST have processed all trail entries against extraction triggers
+ - MUST have scored and deduplicated candidate memories
+ - MUST have stored qualifying memories via `store_memory` with proper citations
+ - MUST have completed cross-session correlation (when applicable per complexity)
+
+## Non-Goals
+
+ - MUST NOT store secrets, credentials, or tokens
+ - MUST NOT store session-specific temporary facts that won't remain relevant
+ - MUST NOT modify source files
+ - MUST NOT run without an explicit user request
 
 ## Stop Conditions
 
-Stop when all trail entries are processed, cross-session queries are completed, and deduplication is done.
+ - SHOULD stop when all trail entries are processed, cross-session queries are completed, and deduplication is done
 
 ## Constraints
 
- - Do not modify source files.
- - IMPORTANT: Do NOT store speculative or single-observation conclusions. Require evidence from 2+ instances or explicit user confirmation.
- - Do not store secrets, tokens, or credentials.
- - IMPORTANT: Do not run without an explicit user request.
- - Do not over-complicate extraction — prefer fewer high-quality memories over exhaustive low-quality ones.
+ - MUST NOT modify source files
+ - MUST NOT store speculative or single-observation conclusions — require evidence from 2+ instances or explicit user confirmation
+ - MUST NOT store secrets, tokens, or credentials
+ - MUST NOT run without an explicit user request
+ - SHOULD prefer fewer high-quality memories over exhaustive low-quality ones
+ - SHOULD use CORRECTION: protocol when discovering errors mid-execution (see engineering-preferences.md)

@@ -12,6 +12,24 @@ Evidence is judged **semantically**: does the subagent's output contain concrete
 
 ---
 
+## Cross-Role Evidence Requirements
+
+These apply to **every** role in addition to the role-specific evidence below.
+
+### DEVIATIONS (required)
+
+Every subagent output MUST include a `DEVIATIONS:` footer listing any departure from the Mission Brief instructions with a one-line justification — or explicitly stating `DEVIATIONS: None`. Absence of this footer is itself a defect the coordinator should flag.
+
+### UNKNOWNS and REMAINING RISKS (recommended)
+
+Every subagent output SHOULD surface `UNKNOWNS:` (things that could not be determined) and `REMAINING RISKS:` (things that could go wrong). These are especially important for SCOUT, PLANNER, and EXECUTOR outputs. Stating unknowns is evidence of rigor, not a sign of failure.
+
+### CORRECTION statements (positive quality signal)
+
+If a subagent includes `CORRECTION:` statements in its output, this indicates mid-execution self-correction — the subagent caught an error in its own reasoning or approach and fixed it in real-time. Corrections are a mark of quality, not a defect. The coordinator should not penalize corrected work.
+
+---
+
 ## Evidence by Role
 
 ### SCOUT (Explore)

@@ -210,8 +210,8 @@ No cache, refetch on mount      Shared cache + stale-while-revalidate
 
 ### ⑩ Dashboard
 
-**When to use:** Status overview, results summary.
-**Modes:** verify (results overview), coordinator (dispatch results)
+**When to use:** Status overview, results summary, complexity gate summaries.
+**Modes:** verify (results overview), coordinator (dispatch results, complexity classification summary)
 
 ```
 ┌─ Verification Results ─────────────────────────┐
@@ -271,6 +271,7 @@ Status emoji (use sparingly):
 - Use emoji sparingly and only for status: 🟢🟡🔴 ✅❌⚠️
 - Tables always work — use them as the baseline visual aid
 - Diagrams supplement tables, never replace them
+- When reporting 3+ deviations or risks, use a simple table rather than inline prose
 - Label all arrows and connections
 - Prefer box-drawing characters (`┌─┐`) over ASCII approximations (`+--+`)
 - Test readability in a monospaced terminal font before committing

@@ -1,0 +1,632 @@
+{
+  "gpt-5.4": {
+    "model": "gpt-5.4",
+    "total_events": 1534,
+    "total_chars": 1369198,
+    "avg_len": 892,
+    "median_len": 469,
+    "max_len": 10726,
+    "len_distribution": {
+      "short_<200": 108,
+      "medium_200_1000": 1025,
+      "long_1000_5000": 385,
+      "very_long_5000+": 16
+    },
+    "with_tool_calls": 1417,
+    "reason_only": 117,
+    "tool_call_ratio": 0.924,
+    "patterns": {
+      "self_correction": {
+        "actually": 170,
+        "wait": 86,
+        "hmm": 18,
+        "but wait": 5,
+        "let me reconsider": 4,
+        "reconsider": 4,
+        "hold on": 1,
+        "doesnt work": 1,
+        "let me rethink": 0,
+        "thats wrong": 0
+      },
+      "uncertainty": {
+        "it seems": 585,
+        "maybe": 555,
+        "might be": 539,
+        "I think": 516,
+        "could be": 295,
+        "possibly": 270,
+        "I wonder": 212,
+        "perhaps": 126,
+        "probably": 126,
+        "I believe": 15
+      },
+      "confidence": {
+        "this is/means": 132,
+        "definitely": 77,
+        "the right way": 50,
+        "clearly": 40,
+        "exactly": 23,
+        "I know": 14,
+        "must be": 13,
+        "the answer is": 7,
+        "obviously": 0
+      },
+      "planning": {
+        "numbered list": 920,
+        "first...then": 161,
+        "my plan": 34,
+        "I need to (list)": 20,
+        "goal statement": 19,
+        "let me plan": 7,
+        "numbered steps": 1
+      },
+      "proactiveness": {
+        "I should also": 162,
+        "additionally": 136,
+        "let me also": 30,
+        "improvement": 15,
+        "it would be good": 12,
+        "beyond what": 5,
+        "optimization": 3,
+        "while at it": 1,
+        "I notice": 0,
+        "this also means": 0
+      },
+      "instruction_adherence": {
+        "but the rules": 27,
+        "violation": 26,
+        "instructions say": 24,
+        "as instructed": 12,
+        "must follow": 11,
+        "rules say": 11,
+        "according to": 2,
+        "not allowed": 0,
+        "supposed to": 0
+      },
+      "override_signals": {
+        "but more effective": 58,
+        "instructions but": 6,
+        "pragmatic": 2,
+        "deviate": 1,
+        "in this case better": 1,
+        "real world": 0,
+        "common sense": 0
+      },
+      "confusion": {
+        "conflicting": 70,
+        "contradicts": 15,
+        "ambiguous": 5,
+        "dont understand": 4,
+        "which one": 2,
+        "confused": 1,
+        "tricky": 1,
+        "what does X mean": 0,
+        "multiple options": 0
+      }
+    },
+    "pattern_rates": {
+      "self_correction": 2.11,
+      "uncertainty": 23.79,
+      "confidence": 2.6,
+      "planning": 8.49,
+      "proactiveness": 2.66,
+      "instruction_adherence": 0.83,
+      "override_signals": 0.5,
+      "confusion": 0.72
+    },
+    "structural": {
+      "bold_per_10k": 10.3,
+      "headings_per_10k": 0.2,
+      "bullets_per_10k": 2.3,
+      "code_blocks_per_10k": 0.2,
+      "numbered_lists_per_10k": 5.5,
+      "questions_per_10k": 1.5
+    },
+    "voice": {
+      "first_person_I_per_10k": 72.0,
+      "we_per_10k": 2.6,
+      "top_sentence_starters": [
+        [
+          "It",
+          1190
+        ],
+        [
+          "The",
+          766
+        ],
+        [
+          "Let",
+          548
+        ],
+        [
+          "This",
+          264
+        ],
+        [
+          "Maybe",
+          226
+        ],
+        [
+          "Since",
+          226
+        ],
+        [
+          "However",
+          192
+        ],
+        [
+          "There",
+          191
+        ],
+        [
+          "If",
+          168
+        ],
+        [
+          "So",
+          119
+        ],
+        [
+          "For",
+          111
+        ],
+        [
+          "My",
+          110
+        ],
+        [
+          "But",
+          107
+        ],
+        [
+          "Also",
+          88
+        ],
+        [
+          "That",
+          86
+        ],
+        [
+          "Now",
+          77
+        ],
+        [
+          "Using",
+          74
+        ],
+        [
+          "First",
+          67
+        ],
+        [
+          "Additionally",
+          61
+        ],
+        [
+          "After",
+          53
+        ]
+      ]
+    }
+  },
+  "claude-opus-4.6": {
+    "model": "claude-opus-4.6",
+    "total_events": 7668,
+    "total_chars": 3068038,
+    "avg_len": 400,
+    "median_len": 97,
+    "max_len": 23663,
+    "len_distribution": {
+      "short_<200": 4665,
+      "medium_200_1000": 2199,
+      "long_1000_5000": 768,
+      "very_long_5000+": 36
+    },
+    "with_tool_calls": 7312,
+    "reason_only": 356,
+    "tool_call_ratio": 0.954,
+    "patterns": {
+      "self_correction": {
+        "actually": 1214,
+        "wait": 398,
+        "but wait": 78,
+        "let me reconsider": 45,
+        "reconsider": 45,
+        "hmm": 32,
+        "doesnt work": 5,
+        "need to rethink": 4,
+        "let me rethink": 2,
+        "hold on": 1
+      },
+      "uncertainty": {
+        "maybe": 265,
+        "might be": 209,
+        "could be": 83,
+        "I think": 82,
+        "it seems": 82,
+        "probably": 75,
+        "perhaps": 21,
+        "possibly": 19,
+        "not sure": 4,
+        "I believe": 4
+      },
+      "confidence": {
+        "this is/means": 1223,
+        "clearly": 96,
+        "the answer is": 56,
+        "exactly": 50,
+        "the right way": 50,
+        "must be": 48,
+        "I know": 29,
+        "definitely": 20,
+        "obviously": 0
+      },
+      "planning": {
+        "numbered list": 6818,
+        "first...then": 599,
+        "I need to (list)": 191,
+        "numbered steps": 161,
+        "let me plan": 156,
+        "my plan": 66,
+        "goal statement": 22
+      },
+      "proactiveness": {
+        "additionally": 529,
+        "let me also": 328,
+        "I should also": 39,
+        "improvement": 29,
+        "optimization": 18,
+        "beyond what": 12,
+        "while at it": 0,
+        "it would be good": 0,
+        "I notice": 0,
+        "this also means": 0
+      },
+      "instruction_adherence": {
+        "as instructed": 243,
+        "violation": 51,
+        "but the rules": 42,
+        "instructions say": 39,
+        "must follow": 27,
+        "according to": 11,
+        "rules say": 9,
+        "supposed to": 5,
+        "not allowed": 0
+      },
+      "override_signals": {
+        "but more effective": 25,
+        "pragmatic": 25,
+        "instructions but": 13,
+        "deviate": 7,
+        "real world": 1,
+        "in this case better": 0,
+        "common sense": 0
+      },
+      "confusion": {
+        "conflicting": 172,
+        "which one": 16,
+        "dont understand": 14,
+        "contradicts": 10,
+        "tricky": 5,
+        "ambiguous": 2,
+        "confused": 1,
+        "what does X mean": 0,
+        "multiple options": 0
+      }
+    },
+    "pattern_rates": {
+      "self_correction": 5.95,
+      "uncertainty": 2.76,
+      "confidence": 5.12,
+      "planning": 26.12,
+      "proactiveness": 3.11,
+      "instruction_adherence": 1.39,
+      "override_signals": 0.23,
+      "confusion": 0.72
+    },
+    "structural": {
+      "bold_per_10k": 18.2,
+      "headings_per_10k": 0.5,
+      "bullets_per_10k": 8.5,
+      "code_blocks_per_10k": 0.6,
+      "numbered_lists_per_10k": 21.0,
+      "questions_per_10k": 1.3
+    },
+    "voice": {
+      "first_person_I_per_10k": 31.7,
+      "we_per_10k": 0.8,
+      "top_sentence_starters": [
+        [
+          "Let",
+          2942
+        ],
+        [
+          "The",
+          2531
+        ],
+        [
+          "This",
+          755
+        ],
+        [
+          "But",
+          486
+        ],
+        [
+          "Now",
+          298
+        ],
+        [
+          "Read",
+          250
+        ],
+        [
+          "Since",
+          237
+        ],
+        [
+          "Check",
+          222
+        ],
+        [
+          "Create",
+          221
+        ],
+        [
+          "So",
+          208
+        ],
+        [
+          "It",
+          204
+        ],
+        [
+          "My",
+          202
+        ],
+        [
+          "They",
+          191
+        ],
+        [
+          "For",
+          189
+        ],
+        [
+          "Add",
+          148
+        ],
+        [
+          "Then",
+          141
+        ],
+        [
+          "Search",
+          132
+        ],
+        [
+          "Find",
+          131
+        ],
+        [
+          "Looking",
+          118
+        ],
+        [
+          "First",
+          118
+        ]
+      ]
+    }
+  },
+  "claude-opus-4.6-1m": {
+    "model": "claude-opus-4.6-1m",
+    "total_events": 3275,
+    "total_chars": 2470142,
+    "avg_len": 754,
+    "median_len": 300,
+    "max_len": 21879,
+    "len_distribution": {
+      "short_<200": 1369,
+      "medium_200_1000": 1228,
+      "long_1000_5000": 615,
+      "very_long_5000+": 63
+    },
+    "with_tool_calls": 3129,
+    "reason_only": 146,
+    "tool_call_ratio": 0.955,
+    "patterns": {
+      "self_correction": {
+        "actually": 1073,
+        "wait": 317,
+        "but wait": 53,
+        "let me reconsider": 47,
+        "reconsider": 47,
+        "hmm": 30,
+        "hold on": 6,
+        "let me rethink": 4,
+        "doesnt work": 3,
+        "I was wrong": 1
+      },
+      "uncertainty": {
+        "might be": 268,
+        "maybe": 140,
+        "I think": 111,
+        "it seems": 102,
+        "could be": 101,
+        "probably": 70,
+        "possibly": 30,
+        "perhaps": 23,
+        "I wonder": 9,
+        "not sure": 7
+      },
+      "confidence": {
+        "this is/means": 555,
+        "clearly": 62,
+        "exactly": 62,
+        "the answer is": 44,
+        "definitely": 34,
+        "the right way": 34,
+        "must be": 30,
+        "I know": 15,
+        "obviously": 0
+      },
+      "planning": {
+        "numbered list": 4671,
+        "first...then": 351,
+        "let me plan": 115,
+        "I need to (list)": 82,
+        "numbered steps": 81,
+        "my plan": 44,
+        "goal statement": 22
+      },
+      "proactiveness": {
+        "additionally": 477,
+        "let me also": 230,
+        "I should also": 41,
+        "improvement": 34,
+        "beyond what": 12,
+        "optimization": 4,
+        "it would be good": 2,
+        "this also means": 1,
+        "while at it": 0,
+        "I notice": 0
+      },
+      "instruction_adherence": {
+        "violation": 53,
+        "as instructed": 21,
+        "but the rules": 14,
+        "must follow": 11,
+        "not allowed": 7,
+        "rules say": 5,
+        "instructions say": 4,
+        "according to": 2,
+        "supposed to": 1
+      },
+      "override_signals": {
+        "but more effective": 24,
+        "pragmatic": 15,
+        "instructions but": 8,
+        "deviate": 3,
+        "real world": 1,
+        "in this case better": 0,
+        "common sense": 0
+      },
+      "confusion": {
+        "conflicting": 175,
+        "dont understand": 13,
+        "which one": 11,
+        "contradicts": 9,
+        "ambiguous": 6,
+        "tricky": 3,
+        "confused": 0,
+        "what does X mean": 0,
+        "multiple options": 0
+      }
+    },
+    "pattern_rates": {
+      "self_correction": 6.4,
+      "uncertainty": 3.54,
+      "confidence": 3.38,
+      "planning": 21.72,
+      "proactiveness": 3.24,
+      "instruction_adherence": 0.48,
+      "override_signals": 0.21,
+      "confusion": 0.88
+    },
+    "structural": {
+      "bold_per_10k": 9.4,
+      "headings_per_10k": 0.4,
+      "bullets_per_10k": 6.7,
+      "code_blocks_per_10k": 0.8,
+      "numbered_lists_per_10k": 17.7,
+      "questions_per_10k": 1.5
+    },
+    "voice": {
+      "first_person_I_per_10k": 34.1,
+      "we_per_10k": 1.0,
+      "top_sentence_starters": [
+        [
+          "The",
+          2003
+        ],
+        [
+          "Let",
+          1768
+        ],
+        [
+          "This",
+          544
+        ],
+        [
+          "But",
+          372
+        ],
+        [
+          "Now",
+          282
+        ],
+        [
+          "So",
+          272
+        ],
+        [
+          "It",
+          235
+        ],
+        [
+          "My",
+          230
+        ],
+        [
+          "For",
+          225
+        ],
+        [
+          "They",
+          157
+        ],
+        [
+          "Since",
+          151
+        ],
+        [
+          "Then",
+          147
+        ],
+        [
+          "Search",
+          144
+        ],
+        [
+          "Looking",
+          138
+        ],
+        [
+          "Check",
+          125
+        ],
+        [
+          "If",
+          122
+        ],
+        [
+          "That",
+          100
+        ],
+        [
+          "Read",
+          93
+        ],
+        [
+          "Create",
+          92
+        ],
+        [
+          "Find",
+          87
+        ]
+      ]
+    }
+  }
+}

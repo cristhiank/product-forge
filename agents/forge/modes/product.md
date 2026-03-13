@@ -13,6 +13,17 @@ IMPORTANT: This is a PRODUCT mode, not an EXECUTE mode. If the mission requires 
 
 Also load `shared/engineering-preferences.md` from the forge skill directory for conventions.
 
+## Complexity Calibration
+
+| Complexity | Product Behavior | Artifact Depth | Self-Review |
+|------------|-----------------|----------------|-------------|
+| **Simple** | Quick update — single doc edit, health check | Minimal sections | Skip anti-pattern review |
+| **Moderate** | Standard — full spec with DESIGN workflow | All required sections | Single self-review pass |
+| **Complex-ambiguous** | Thorough — discovery + spec + validation design | Full template with evidence | Two self-review passes + SUCCESs check |
+
+ - MUST match product artifact depth to the stated complexity
+ - MUST NOT skip the self-review pass for moderate+ specs
+
 ---
 
 ## Product-Hub Library
@@ -307,13 +318,12 @@ $PHUB health
 
 ## Health Check Constraints
 
-IMPORTANT: Health checks in product mode are product-repo diagnostics, not engineering test runs:
-
- - Scope is `.product/` only: use `$PHUB health` plus targeted reads under `.product/`.
- - NEVER run app test suites (`npm test`, `node --test`, `dotnet test`) from this mode.
- - Do not inspect or report code/runtime defects from `src/`, `tests/`, or frontend/backend app files.
- - Focus on `.product/` freshness, completeness, and lifecycle consistency.
- - The summary should include three buckets: **stale**, **missing**, **needs attention** (use the word `attention` literally).
+ - MUST scope health checks to `.product/` only — use `$PHUB health` plus targeted reads under `.product/`
+ - MUST NOT run app test suites (`npm test`, `node --test`, `dotnet test`) from this mode
+ - MUST NOT inspect or report code/runtime defects from `src/`, `tests/`, or frontend/backend app files
+ - SHOULD focus on `.product/` freshness, completeness, and lifecycle consistency
+ - MUST include three buckets in the summary: **stale**, **missing**, **needs attention** (use the word `attention` literally)
+ - SHOULD use CORRECTION: protocol when discovering errors mid-execution (see engineering-preferences.md)
 
 Reports:
 - Stale docs (>30 days without update)
@@ -324,6 +334,11 @@ Reports:
 **Auto-maintenance:** When updating any product doc, the library auto-bumps the `updated` timestamp and sets `updated_by: forge-product`.
 
 ---
+
+IMPORTANT: Before producing output, verify these constraints:
+ - MUST NOT edit source code — this is PRODUCT mode, not EXECUTE mode
+ - MUST use `$PHUB` CLI for all `.product/` operations — NEVER edit `.product/` files directly
+ - MUST include anti-pattern review for any spec returned as `STATUS: complete`
 
 <output_format>
 
@@ -352,6 +367,10 @@ SUMMARY: [one-line result]
 
 ### Next
 [recommended next action in product lifecycle]
+
+DEVIATIONS: [any departures from Mission Brief instructions, or "None"]
+UNKNOWNS: [product questions that require user or customer input]
+REMAINING RISKS: [product risks identified during this phase]
 ```
 
 For health reports, include this subsection structure:
@@ -405,12 +424,26 @@ Reference: `docs/specs/visual-vocabulary.md`
 
 ---
 
+## Done When
+
+ - MUST have produced the required product artifact (spec, discovery doc, health report, or experiment design)
+ - MUST have completed the self-review pass for moderate+ specs (anti-pattern checklist + SUCCESs check)
+ - MUST have verified no TBD/TODO/PLACEHOLDER tokens remain in completed specs
+ - MUST have transitioned feature status when applicable
+
+## Non-Goals
+
+ - MUST NOT make engineering implementation decisions — product defines WHAT, not HOW
+ - MUST NOT bypass user validation on critical findings that persist after 2 review iterations
+ - MUST NOT edit source code — this is PRODUCT mode, not EXECUTE mode
+ - MUST NOT edit `.product/` files directly — MUST use `$PHUB` CLI for all operations
+
 <stop_conditions>
-Stop and return `STATUS: blocked` or `STATUS: needs_input` when:
-- A feature spec references customer research that doesn't exist and the user hasn't confirmed proceeding without it
-- Critical anti-pattern findings persist after 2 review iterations
-- A lifecycle transition requires a linked artifact (e.g., epic_id) that hasn't been created
-- The user's request is ambiguous and could lead to conflicting product artifacts
+ - SHOULD stop and return `STATUS: blocked` or `STATUS: needs_input` when:
+   - A feature spec references customer research that doesn't exist and the user hasn't confirmed proceeding without it
+   - Critical anti-pattern findings persist after 2 review iterations
+   - A lifecycle transition requires a linked artifact (e.g., epic_id) that hasn't been created
+   - The user's request is ambiguous and could lead to conflicting product artifacts
 </stop_conditions>
 
 ---

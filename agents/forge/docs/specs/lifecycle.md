@@ -8,6 +8,39 @@
 
 Every non-trivial task flows through phases. The coordinator drives transitions; subagents execute within phases.
 
+### Complexity Gate (Pre-Phase)
+
+Before entering the phase machine, the coordinator classifies task complexity:
+
+```
+User message
+│
+├── CLASSIFY complexity: simple / moderate / complex-ambiguous
+│
+├── Simple → fast-track: minimal phases, act with momentum
+├── Moderate → standard flow: explore → plan → execute → verify
+└── Complex-ambiguous → full synthesis: all phases, full design progression
+```
+
+This gate determines how aggressively phases may be skipped (see Phase Skip Rules below) and how much reasoning budget each phase receives. Classification happens once at task entry and may be revised if exploration reveals unexpected complexity.
+
+### Behavioral Protocol (7-Step)
+
+The phase machine's behavioral manifestation follows this protocol, which maps to the phases but operates at the per-turn level:
+
+```
+1. CLASSIFY    — Determine task type and complexity (simple / moderate / complex-ambiguous)
+2. SCOPE       — State objective, done criteria, and explicit non-goals
+3. ORIENT      — If complex: list assumptions, assess system impact, identify risks
+                 If simple: skip to step 4
+4. PLAN        — Outline approach in bounded steps (proportional to complexity)
+5. EXECUTE     — Act with momentum. Adhere to contracts. Use tight edit loops.
+6. VERIFY      — Confirm exit criteria are met. Run relevant checks.
+7. CLOSE       — State what was done, log any deviations, flag remaining risks. Stop.
+```
+
+Steps 1-3 map to EXPLORE/IDEATE/DESIGN phases. Steps 4-7 map to PLAN/EXECUTE/VERIFY/ITERATE. For simple tasks, steps 2-3 may collapse into a single sentence. The protocol ensures every task — regardless of complexity — follows a classify→act→verify→close arc.
+
 ```
 EXPLORE ──→ IDEATE ──→ DESIGN ──→ PLAN ──→ EXECUTE ──→ VERIFY ──→ ITERATE
    │           │          │         │          │           │
@@ -37,7 +70,7 @@ EXPLORE ──→ IDEATE ──→ DESIGN ──→ PLAN ──→ EXECUTE ─�
 
 | From | Condition | To |
 |------|-----------|-----|
-| START | Any request | Classify → route to appropriate phase |
+| START | Any request | Classify complexity → route to appropriate phase |
 | EXPLORE | Findings gathered | IDEATE (if options needed) or PLAN (if approach is clear) |
 | IDEATE | User selects approach | DESIGN (T2+) or PLAN (T1) |
 | DESIGN | Contracts agreed | PLAN |
@@ -59,6 +92,8 @@ EXPLORE ──→ IDEATE ──→ DESIGN ──→ PLAN ──→ EXECUTE ─�
 Not every task needs every phase.
 
 ### Design depth by tier
+
+Simple tasks (T1) skip aggressively — they may go directly from classification to execution with only a brief scope statement. The complexity gate ensures this aggressive skipping is a deliberate routing decision, not oversight.
 
 | Tier | Complexity | Design entry | Phases used |
 |------|-----------|-------------|-------------|
