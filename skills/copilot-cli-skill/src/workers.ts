@@ -111,6 +111,11 @@ export class WorkerManager {
         data: { error: err instanceof Error ? err.message : String(err) },
         timestamp: new Date().toISOString(),
       });
+      this.stateStore.writeExit(workerId, {
+        exitCode: 1,
+        completedAt: new Date().toISOString(),
+        terminatedBy: 'spawn_failed',
+      });
     });
 
     const eventsLog = join(stateDir, 'events.ndjson');
@@ -341,6 +346,18 @@ export class WorkerManager {
    */
   async sendMessage(workerId: string, message: string): Promise<string | null> {
     return this.sessionRunner.sendMessage(workerId, message);
+  }
+
+  /**
+   * Subscribe to live WorkerEvents emitted by the SessionRunner for a specific worker.
+   * Returns an unsubscribe function; call it to stop receiving events.
+   */
+  onEvent(workerId: string, callback: (event: import('./types.js').WorkerEvent) => void): () => void {
+    const handler = (evtWorkerId: string, evt: import('./types.js').WorkerEvent): void => {
+      if (evtWorkerId === workerId) callback(evt);
+    };
+    this.sessionRunner.on('event', handler);
+    return () => this.sessionRunner.off('event', handler);
   }
 
   /**

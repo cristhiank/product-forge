@@ -1,18 +1,19 @@
 {
   "name": "@devpartner/workers",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Worker management for Copilot CLI - spawn, monitor, and cleanup isolated worker processes",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
-    "build": "ncc build src/skill-cli.ts -o scripts --minify --no-source-map-register && node -e \"const fs=require('fs');const walk=(d)=>{for(const e of fs.readdirSync(d,{withFileTypes:true})){const p=d+'/'+e.name;if(e.isDirectory()){walk(p);if(fs.readdirSync(p).length===0)fs.rmdirSync(p);}else if(p.endsWith('.d.ts')||p.endsWith('.d.ts.map')){fs.rmSync(p,{force:true});}}};if(fs.existsSync('scripts'))walk('scripts');\"",
+    "build": "ncc build src/skill-cli.ts -o scripts --minify --no-source-map-register && node -e \"const fs=require('fs');const walk=(d)=>{for(const e of fs.readdirSync(d,{withFileTypes:true})){const p=d+'/'+e.name;if(e.isDirectory()){walk(p);if(fs.readdirSync(p).length===0)fs.rmdirSync(p);}else if(p.endsWith('.d.ts')||p.endsWith('.d.ts.map')){fs.rmSync(p,{force:true});}}};if(fs.existsSync('scripts'))walk('scripts');\" && node -e \"const fs=require('fs');const patch='import{createRequire as _cr}from\\\"module\\\";const require=_cr(import.meta.url);\\n';for(const f of fs.readdirSync('scripts')){if(f.endsWith('.index.js')){const p='scripts/'+f;const c=fs.readFileSync(p,'utf8');if(!c.includes('createRequire')){fs.writeFileSync(p,patch+c);console.log('patched',f);}}}\"",
     "dev": "tsc --watch",
     "test": "node -e \"require('fs').rmSync('.test-dist',{recursive:true,force:true})\" && tsc -p tsconfig.test.json && node --test .test-dist/tests/**/*.test.js",
     "clean": "node -e \"const fs=require('fs');for(const p of ['dist','scripts/index.js'])fs.rmSync(p,{recursive:true,force:true});\"",
     "publish:skill": "node publish-skill.mjs"
   },
   "dependencies": {
+    "@github/copilot-sdk": "^0.1.0",
     "commander": "^13.1.0"
   },
   "devDependencies": {
