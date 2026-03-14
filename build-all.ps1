@@ -157,7 +157,7 @@ Copy-PluginFile "$ScriptDir\plugin-shared.json" "$DistShared\plugin.json" "plugi
 Copy-PluginFile "$ScriptDir\.mcp.json" "$DistShared\.mcp.json" ".mcp.json" | Out-Null
 
 Write-Host "⚙️  Shared forge modes..."
-foreach ($mode in @('explore','ideate','design','plan','memory','product')) {
+foreach ($mode in @('explore','ideate','design','plan','memory','product','assess')) {
     Copy-PluginFile "$ScriptDir\agents\forge\modes\$mode.md" "$DistShared\skills\forge-$mode\SKILL.md" "skills/forge-$mode/SKILL.md" | Out-Null
 }
 
@@ -325,7 +325,7 @@ Write-Host "📜 GPT coordinator skill..."
 Copy-PluginFile "$ScriptDir\agents\forge-gpt\SKILL.md" "$DistGpt\skills\forge-gpt\SKILL.md" "skills/forge-gpt/SKILL.md" | Out-Null
 
 Write-Host "⚙️  GPT modes..."
-foreach ($mode in @('execute','verify','explore','ideate','design','plan','memory','product')) {
+foreach ($mode in @('execute','verify','explore','ideate','design','plan','memory','product','assess')) {
     Copy-PluginFile "$ScriptDir\agents\forge-gpt\modes\$mode.md" "$DistGpt\skills\forge-$mode-gpt\SKILL.md" "skills/forge-$mode-gpt/SKILL.md" | Out-Null
 }
 

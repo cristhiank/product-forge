@@ -191,7 +191,7 @@ Copy-PluginFile `
 # --- Step 4: GPT mode skills (all 8 from forge-gpt) ---
 Write-Host ""
 Write-Host "⚙️  GPT mode skills..."
-foreach ($mode in @('execute','verify','explore','ideate','design','plan','memory','product')) {
+foreach ($mode in @('execute','verify','explore','ideate','design','plan','memory','product','assess')) {
     Copy-PluginFile `
         "$ScriptDir\agents\forge-gpt\modes\$mode.md" `
         "$Dist\skills\forge-$mode-gpt\SKILL.md" `

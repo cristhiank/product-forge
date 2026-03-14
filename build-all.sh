@@ -110,7 +110,7 @@ copy_file "$SCRIPT_DIR/.mcp.json" "$DIST_SHARED/.mcp.json" ".mcp.json"
 
 # Shared forge modes
 echo "⚙️  Shared forge modes..."
-SHARED_MODES=("explore" "ideate" "design" "plan" "memory" "product")
+SHARED_MODES=("explore" "ideate" "design" "plan" "memory" "product" "assess")
 for mode in "${SHARED_MODES[@]}"; do
   copy_file \
     "$SCRIPT_DIR/agents/forge/modes/${mode}.md" \
@@ -325,7 +325,7 @@ copy_file "$SCRIPT_DIR/agents/forge-gpt/SKILL.md" "$DIST_GPT/skills/forge-gpt/SK
 
 # GPT modes (all from forge-gpt)
 echo "⚙️  GPT modes..."
-GPT_MODES=("execute" "verify" "explore" "ideate" "design" "plan" "memory" "product")
+GPT_MODES=("execute" "verify" "explore" "ideate" "design" "plan" "memory" "product" "assess")
 for mode in "${GPT_MODES[@]}"; do
   copy_file \
     "$SCRIPT_DIR/agents/forge-gpt/modes/${mode}.md" \

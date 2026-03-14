@@ -135,7 +135,7 @@ copy_file \
 # --- Step 4: Mode skills ---
 echo ""
 echo "⚙️  Mode skills..."
-MODES=("explore" "ideate" "design" "plan" "execute" "verify" "memory" "product")
+MODES=("explore" "ideate" "design" "plan" "execute" "verify" "memory" "product" "assess")
 for mode in "${MODES[@]}"; do
   copy_file \
     "$SCRIPT_DIR/agents/forge/modes/${mode}.md" \

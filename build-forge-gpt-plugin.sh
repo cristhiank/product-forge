@@ -157,7 +157,7 @@ copy_file \
 # --- Step 4: GPT mode skills (all from forge-gpt) ---
 echo ""
 echo "⚙️  GPT mode skills..."
-GPT_MODES=("execute" "verify" "explore" "ideate" "design" "plan" "memory" "product")
+GPT_MODES=("execute" "verify" "explore" "ideate" "design" "plan" "memory" "product" "assess")
 for mode in "${GPT_MODES[@]}"; do
   copy_file \
     "$SCRIPT_DIR/agents/forge-gpt/modes/${mode}.md" \

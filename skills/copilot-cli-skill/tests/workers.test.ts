@@ -58,41 +58,40 @@ test('getStatus returns completed_no_exit when process is gone and no exit.json 
   rmSync(repoRoot, { recursive: true, force: true });
 });
 
-test('cleanup rejects non-force cleanup while worker is still spawning', () => {
+test('cleanup succeeds when worker has no active SDK session (non-force)', async () => {
   const repoRoot = makeRepoRoot('cleanup-spawning');
   const workerId = 'w-cleanup-spawning';
   writeWorkerState(repoRoot, workerId, { status: 'spawning' }, process.pid);
   const manager = new WorkerManager(repoRoot);
 
-  assert.throws(
-    () => manager.cleanup(workerId, false),
-    /still spawning; cleanup requires force=true/,
-  );
-
-  rmSync(repoRoot, { recursive: true, force: true });
-});
-
-test('cleanup with force bypasses spawning lock when process is not running', () => {
-  const repoRoot = makeRepoRoot('cleanup-force');
-  const workerId = 'w-cleanup-force';
-  writeWorkerState(repoRoot, workerId, { status: 'spawning' }, 999999);
-  const manager = new WorkerManager(repoRoot);
-
-  const result = manager.cleanup(workerId, true);
+  // Without an active SDK session, cleanup proceeds even without force=true
+  const result = await manager.cleanup(workerId, false);
   assert.equal(result.status, 'cleaned');
 
   rmSync(repoRoot, { recursive: true, force: true });
 });
 
-test('spawn deduplicates active taskId by throwing with existing worker info', () => {
+test('cleanup with force bypasses spawning lock when process is not running', async () => {
+  const repoRoot = makeRepoRoot('cleanup-force');
+  const workerId = 'w-cleanup-force';
+  writeWorkerState(repoRoot, workerId, { status: 'spawning' }, 999999);
+  const manager = new WorkerManager(repoRoot);
+
+  const result = await manager.cleanup(workerId, true);
+  assert.equal(result.status, 'cleaned');
+
+  rmSync(repoRoot, { recursive: true, force: true });
+});
+
+test('spawn deduplicates active taskId by throwing with existing worker info', async () => {
   const repoRoot = makeRepoRoot('spawn-dedup');
   const workerId = 'w-existing';
   writeWorkerState(repoRoot, workerId, { status: 'running', task_id: 'TASK-123' }, process.pid);
   const manager = new WorkerManager(repoRoot);
 
-  assert.throws(
-    () => manager.spawn({ prompt: 'hello', taskId: 'TASK-123' }),
-    /taskId already active: TASK-123 \(workerId=w-existing, status=running, pid=/,
+  await assert.rejects(
+    async () => manager.spawn({ prompt: 'hello', taskId: 'TASK-123' }),
+    /taskId already active: TASK-123 \(workerId=w-existing, status=running\)/,
   );
 
   rmSync(repoRoot, { recursive: true, force: true });
@@ -126,18 +125,16 @@ test('listWorkers surfaces spawn_failed and completed_no_exit status from meta',
   rmSync(repoRoot, { recursive: true, force: true });
 });
 
-test('listWorkers with autoCleanup removes non-running workers and returns only running', () => {
+test('listWorkers with autoCleanup removes non-running workers and returns only active SDK sessions', () => {
   const repoRoot = makeRepoRoot('list-autocleanup');
-  // spawn_failed worker (should be cleaned)
+  // Both workers have no active SDK session — both are stale
   writeWorkerState(repoRoot, 'w-dead', { status: 'spawn_failed' }, 0);
-  // "running" worker (pid=process.pid so it looks alive)
-  writeWorkerState(repoRoot, 'w-alive', { status: 'running' }, process.pid);
+  writeWorkerState(repoRoot, 'w-stale', { status: 'running' }, process.pid);
   const manager = new WorkerManager(repoRoot);
 
   const workers = manager.listWorkers({ autoCleanup: true });
-  // Only the running worker should remain
-  assert.equal(workers.length, 1);
-  assert.equal(workers[0]?.workerId, 'w-alive');
+  // Without active SDK sessions, all workers are stale and cleaned up
+  assert.equal(workers.length, 0);
 
   rmSync(repoRoot, { recursive: true, force: true });
 });
@@ -210,62 +207,62 @@ test('sdk.spawnWorker forwards taskId into manager.spawn options', () => {
 // awaitCompletion tests
 // ──────────────────────────────────────────────────
 
-test('awaitCompletion returns immediately for already-completed worker', () => {
+test('awaitCompletion returns immediately for already-completed worker', async () => {
   const root = makeRepoRoot('await-completed');
   const stateDir = writeWorkerState(root, 'done-w', { status: 'running' });
   writeFileSync(join(stateDir, 'exit.json'), JSON.stringify({ exitCode: 0, completedAt: new Date().toISOString() }));
 
   const manager = new WorkerManager(root);
-  const result = manager.awaitCompletion('done-w');
+  const result = await manager.awaitCompletion('done-w');
   assert.equal(result.status, 'completed');
   rmSync(root, { recursive: true, force: true });
 });
 
-test('awaitCompletion returns immediately for spawn_failed worker', () => {
+test('awaitCompletion returns immediately for spawn_failed worker', async () => {
   const root = makeRepoRoot('await-spawn-failed');
   writeWorkerState(root, 'sf-w', { status: 'spawn_failed' });
 
   const manager = new WorkerManager(root);
-  const result = manager.awaitCompletion('sf-w');
+  const result = await manager.awaitCompletion('sf-w');
   assert.equal(result.status, 'spawn_failed');
   rmSync(root, { recursive: true, force: true });
 });
 
-test('awaitCompletion throws on timeout', () => {
-  const root = makeRepoRoot('await-timeout');
+test('awaitCompletion returns completed_no_exit when worker has no active session', async () => {
+  const root = makeRepoRoot('await-no-session');
   writeWorkerState(root, 'slow-w', { status: 'running' }, process.pid);
 
   const manager = new WorkerManager(root);
-  assert.throws(
-    () => manager.awaitCompletion('slow-w', { pollIntervalMs: 50, timeoutMs: 100 }),
-    /Timed out waiting for worker slow-w/,
-  );
+  // Without an active SDK session the worker is terminal (completed_no_exit)
+  const result = await manager.awaitCompletion('slow-w', { pollIntervalMs: 50, timeoutMs: 100 });
+  assert.equal(result.status, 'completed_no_exit');
   rmSync(root, { recursive: true, force: true });
 });
 
-test('awaitCompletion invokes onProgress callback', () => {
+test('awaitCompletion returns failed for already-failed worker (no onProgress for terminal)', async () => {
   const root = makeRepoRoot('await-progress');
   const stateDir = writeWorkerState(root, 'prog-w', { status: 'running' });
   writeFileSync(join(stateDir, 'exit.json'), JSON.stringify({ exitCode: 1, completedAt: new Date().toISOString() }));
 
   const calls: string[] = [];
   const manager = new WorkerManager(root);
-  const result = manager.awaitCompletion('prog-w', {
+  const result = await manager.awaitCompletion('prog-w', {
     onProgress: (s) => calls.push(s.status),
   });
   assert.equal(result.status, 'failed');
-  assert.ok(calls.includes('failed'), 'onProgress should be called with terminal status');
+  // onProgress is not called for already-terminal workers (returns before timer is set)
+  assert.equal(calls.length, 0);
   rmSync(root, { recursive: true, force: true });
 });
 
-test('sdk.awaitWorker delegates to manager.awaitCompletion', () => {
+test('sdk.awaitWorker delegates to manager.awaitCompletion', async () => {
   const root = makeRepoRoot('sdk-await');
   const stateDir = writeWorkerState(root, 'sdk-aw', { status: 'running' });
   writeFileSync(join(stateDir, 'exit.json'), JSON.stringify({ exitCode: 0, completedAt: new Date().toISOString() }));
 
   const manager = new WorkerManager(root);
   const sdk = new WorkerSDK(manager);
-  const result = sdk.awaitWorker('sdk-aw');
+  const result = await sdk.awaitWorker('sdk-aw');
   assert.equal(result.status, 'completed');
   rmSync(root, { recursive: true, force: true });
 });
@@ -499,51 +496,49 @@ test('sdk.validateWorker delegates to manager.validateWorker', () => {
 // Dual-PID tracking tests (copilot.pid)
 // ──────────────────────────────────────────────────
 
-test('getStatus returns running when only copilot.pid process is alive', () => {
+test('getStatus returns completed_no_exit when worker has no active SDK session (copilot.pid ignored)', () => {
   const repoRoot = makeRepoRoot('copilot-pid-alive');
   const workerId = 'w-copilot-alive';
   const stateDir = writeWorkerState(repoRoot, workerId, { status: 'running' }, 999999);
-  // wrapper PID 999999 is dead; write copilot.pid with current process PID (alive)
+  // copilot.pid is ignored — status is determined by sessionRunner.isActive()
   writeFileSync(join(stateDir, 'copilot.pid'), String(process.pid));
 
   const manager = new WorkerManager(repoRoot);
   const status = manager.getStatus(workerId);
-  assert.equal(status.status, 'running', 'should be running because copilot PID is alive');
-  assert.equal(status.copilotPid, process.pid);
+  assert.equal(status.status, 'completed_no_exit', 'no active SDK session → completed_no_exit');
+  assert.equal(status.copilotPid, 0, 'copilotPid is always 0 in SDK-based impl');
 
   rmSync(repoRoot, { recursive: true, force: true });
 });
 
-test('getStatus returns completed_no_exit when both wrapper and copilot PIDs are dead', () => {
+test('getStatus returns completed_no_exit when no exit.json and no active SDK session', () => {
   const repoRoot = makeRepoRoot('both-pids-dead');
   const workerId = 'w-both-dead';
   const stateDir = writeWorkerState(repoRoot, workerId, { status: 'running' }, 999999);
-  // Both PIDs are dead (999998 and 999999 don't exist)
   writeFileSync(join(stateDir, 'copilot.pid'), '999998');
 
   const manager = new WorkerManager(repoRoot);
   const status = manager.getStatus(workerId);
-  assert.equal(status.status, 'completed_no_exit', 'should be completed_no_exit when both PIDs are dead');
-  assert.equal(status.copilotPid, 999998);
+  assert.equal(status.status, 'completed_no_exit', 'should be completed_no_exit with no active session');
+  assert.equal(status.copilotPid, 0, 'copilotPid is always 0 in SDK-based impl');
 
   rmSync(repoRoot, { recursive: true, force: true });
 });
 
-test('getStatus returns copilotPid=0 when copilot.pid file does not exist', () => {
+test('getStatus returns completed_no_exit when no active SDK session regardless of PID', () => {
   const repoRoot = makeRepoRoot('no-copilot-pid');
   const workerId = 'w-no-copilot-pid';
   writeWorkerState(repoRoot, workerId, { status: 'running' }, process.pid);
-  // No copilot.pid file written
 
   const manager = new WorkerManager(repoRoot);
   const status = manager.getStatus(workerId);
-  assert.equal(status.status, 'running', 'wrapper PID alive means running');
-  assert.equal(status.copilotPid, 0, 'copilotPid should be 0 when file does not exist');
+  assert.equal(status.status, 'completed_no_exit', 'no active SDK session → completed_no_exit');
+  assert.equal(status.copilotPid, 0, 'copilotPid is always 0 in SDK-based impl');
 
   rmSync(repoRoot, { recursive: true, force: true });
 });
 
-test('getStatus includes copilotPid in returned status', () => {
+test('getStatus always returns copilotPid=0 (SDK-based impl does not track PIDs)', () => {
   const repoRoot = makeRepoRoot('copilot-pid-field');
   const workerId = 'w-copilot-field';
   const stateDir = writeWorkerState(repoRoot, workerId, { status: 'running' }, process.pid);
@@ -551,7 +546,7 @@ test('getStatus includes copilotPid in returned status', () => {
 
   const manager = new WorkerManager(repoRoot);
   const status = manager.getStatus(workerId);
-  assert.equal(status.copilotPid, 12345, 'copilotPid should reflect file content');
+  assert.equal(status.copilotPid, 0, 'copilotPid is always 0 in SDK-based impl');
 
   rmSync(repoRoot, { recursive: true, force: true });
 });

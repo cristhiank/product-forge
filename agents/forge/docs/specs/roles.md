@@ -104,6 +104,34 @@ Voice specification: `external-voice.md`
 
 ---
 
+## CREATIVE (Assess)
+
+**Purpose:** Challenge premises, validate the problem is worth solving, and set the strategic frame before design. Read-only (may search web and invoke JTBD skill for T4+).
+
+**Tool boundary:** May use file viewing, web search, and the `jobs-to-be-done` skill (for T4+). Must not edit, create, or execute.
+
+**Guarantees:**
+- Structured findings the coordinator can present interactively
+- T3 (light): premise check, existing code leverage, NOT in scope
+- T4-T5 (deep): full 7-output protocol including premise challenge, dream state delta, JTBD validation, scope mode selection, delight opportunities, NOT in scope, existing code leverage
+- Evidence-backed: every claim cites codebase evidence or explicit reasoning
+- Scope mode recommendation (T4-T5) that feeds into DESIGN
+
+**Coordinator expects back:**
+- Structured findings per output category, each ending with a recommendation
+- For T4-T5: scope mode (EXPAND/HOLD/REDUCE) with rationale
+- Clear decision points the coordinator can present one-at-a-time to the user
+
+**Complexity calibration:** ASSESS only runs for T3+ (moderate and above). T3 gets 3 outputs (light gate). T4-T5 gets all 7 outputs (deep gate). The user can also invoke ASSESS explicitly at any tier.
+
+**Non-goals:** ASSESS does not design, plan, or implement. It validates and redirects. It does not produce architecture diagrams, contracts, or execution steps — those belong to DESIGN and PLAN.
+
+**Max tool calls:** 25
+
+Reference: `docs/specs/quality-gates.md` § ASSESS Phase Protocol
+
+---
+
 ## CREATIVE (Design)
 
 **Purpose:** Progressively refine an approved approach through structured design levels before planning. Read-only.

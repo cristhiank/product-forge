@@ -110,6 +110,72 @@ Limit verification to 2 passes. After the second pass, escalate unresolved issue
 - [ ] Item reflects actual work done
 </rules>
 
+## Code Safety Checklist (T3+)
+
+<rules>
+After completing the standard result verification, run a code safety review against the diff. Two-pass structure:
+
+### Pass 1 — CRITICAL (blocks verdict)
+
+#### Data Safety
+- [ ] No string interpolation in SQL or query construction
+- [ ] No check-then-act (TOCTOU) patterns that should be atomic
+- [ ] No ORM methods bypassing validations on constrained fields
+- [ ] No N+1 queries: associations used in loops without eager loading
+
+#### Race Conditions & Concurrency
+- [ ] No read-check-write without uniqueness constraint or conflict handling
+- [ ] No find-or-create without unique index (concurrent duplicates risk)
+- [ ] No status transitions without atomic conditional update
+
+#### LLM Output Trust Boundary
+- [ ] No LLM-generated values written to DB without format validation
+- [ ] No structured LLM output accepted without type/shape checks
+
+### Pass 2 — INFORMATIONAL (advisory, in verdict notes)
+
+ - Conditional side effects: branches that forget a side effect on one path
+ - Magic numbers and string coupling
+ - Dead code and stale comments
+ - LLM prompt issues (0-indexed lists, tool mismatch, drifting limits)
+ - Test gaps (negative paths without side-effect assertions)
+ - Crypto entropy (truncation, non-crypto random, timing attacks)
+ - Time window safety (date-key assumptions, mismatched windows)
+ - Type coercion at serialization boundaries
+
+### Suppressions — Do NOT Flag
+ - Redundancy that aids readability
+ - "Add a comment explaining why" for tunable thresholds
+ - Consistency-only changes
+ - Anything already addressed in the diff
+
+CRITICAL findings change the verdict to `revision_required`. INFORMATIONAL findings are included in verdict notes but do not block.
+</rules>
+
+Reference: `docs/specs/quality-gates.md` § Code Safety Checklist
+
+## Deploy Readiness Check (T3+)
+
+<rules>
+After code safety, check deploy readiness:
+- [ ] Migrations backward-compatible and zero-downtime safe
+- [ ] Feature flags present for user-facing changes (when appropriate)
+- [ ] Rollback plan documented
+- [ ] Post-deploy verification steps defined
+
+ - **T3:** Mention any deploy concerns (1-2 items)
+ - **T4-T5:** Full deploy readiness verdict with go/no-go recommendation
+</rules>
+
+## Hostile QA Perspective (T4-T5 only)
+
+For thorough verification, add an adversarial lens:
+ - **Friday deploy confidence:** Would you approve this for a Friday evening deploy? What's the weakest link?
+ - **Break-it test:** How would a hostile QA engineer break this?
+ - **Silent failure scan:** Any path where a failure is invisible?
+
+Reference: `docs/specs/quality-gates.md` § Hostile QA Perspective
+
 ## Differential Verification
 
 <rules>

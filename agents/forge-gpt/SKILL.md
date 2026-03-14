@@ -73,11 +73,12 @@ Pass complexity to the subagent through the Mission Brief `<complexity>` and `<r
 |------|--------|
 | Pure knowledge answer | Stay in `T1_ANSWER` |
 | Codebase investigation | Dispatch `forge-explore-gpt` |
+| Premise challenge, CEO review, problem validation | Dispatch `forge-assess-gpt` |
 | Option evaluation or design alternatives | Dispatch `forge-ideate-gpt` |
 | Progressive design refinement | Dispatch `forge-design-gpt` |
 | Plan decomposition | Dispatch `forge-plan-gpt` |
 | Implementation | Dispatch `forge-execute-gpt` |
-| Verification | Dispatch `forge-verify-gpt` |
+| Verification (plan or result) | Dispatch `forge-verify-gpt` |
 | Memory extraction | Dispatch `forge-memory-gpt` on explicit request |
 | Product work | Dispatch `forge-product-gpt` |
 | Missing scope or conflicting requirements | Stay in `BLOCKED` |
@@ -85,6 +86,20 @@ Pass complexity to the subagent through the Mission Brief `<complexity>` and `<r
 Use `general-purpose` for any dispatch that needs a Forge-GPT mode skill. The built-in `explore` agent cannot load skills.
 
 If implementation is requested and the codebase context is not strong enough yet, explore first and then execute.
+
+<design_guard>
+Important: For `complex-ambiguous` tasks (T3+), ASSESS and DESIGN are mandatory before PLAN or EXECUTE — regardless of how the user phrases the request.
+
+- If the user says "plan it" or "implement it" for a T3+ task, and neither ASSESS nor DESIGN has been completed in this session, dispatch `forge-assess-gpt` first (T3+ auto, T4+ deep).
+- After ASSESS completes, present findings interactively — one decision at a time. Collect scope mode and user decisions. **If `forge_review_present` tool is available**, call it with structured findings to generate an HTML review artifact, then collect decisions via `ask_user` and persist with `forge_review_decision_log`.
+- Then dispatch `forge-design-gpt` with the ASSESS context (scope mode, decisions).
+- After DESIGN completes, chain to PLAN or EXECUTE in the same turn.
+- For T3+ tasks, after PLAN completes, dispatch `forge-verify-gpt` for plan verification before proceeding to EXECUTE.
+- Skip ASSESS when: (a) complexity is `simple`, (b) ASSESS was already completed earlier in this session, or (c) user explicitly says "skip assess."
+- Skip DESIGN only when: (a) complexity is `simple` or `moderate`, (b) DESIGN was already completed earlier in this session, or (c) user explicitly says "skip design."
+- "Plan it" means "move forward" — and for T3+ tasks, the next forward step is ASSESS → DESIGN → PLAN.
+- User says "challenge this" or "CEO review" → dispatch ASSESS explicitly at any tier.
+</design_guard>
 
 ## Clarification gate
 
@@ -154,10 +169,50 @@ Replace `<target-mode-skill>` with the specific skill selected from the routing 
 
 - Line 1 loads the selected GPT mode skill.
 - `complexity` and `reasoning_budget` are set.
+- `model` is set per the Model Selection Table below.
 - The objective is concise and free of raw transcript text.
 - Context contains summarized evidence only.
 - `scope` and `out_of_scope` are explicit.
 - Risk is declared.
+
+### Dispatch template
+
+Always use this structure for `task()` calls:
+
+```
+task({
+  agent_type: "general-purpose",
+  mode: "sync",
+  model: "<from Model Selection Table>",
+  description: "<3-5 word summary>",
+  prompt: "<skill load line>\n\n<mission brief>"
+})
+```
+
+<model_selection>
+### Model Selection Table
+
+The `model` parameter is required on every `task()` call. Never omit it.
+
+Never use `claude-haiku-4.5`, `claude-sonnet-4.5`, `claude-sonnet-4`, `gpt-5-mini`, `gpt-4.1`, `gpt-5.1-codex-mini`, or any model tagged as "fast/cheap." These models lack the reasoning depth required for Forge-GPT work.
+
+If a model is not in this table, do not use it. If uncertain, use `gpt-5.4`.
+
+| Phase | Role | Model | Rationale |
+|-------|------|-------|-----------|
+| Explore (lookup) | SCOUT | `claude-sonnet-4.6` | Fast investigation with capable reasoning |
+| Explore (investigate) | SCOUT | `claude-sonnet-4.6` | Structured findings need solid analysis |
+| Assess | CREATIVE | `gpt-5.4` | CEO gate demands premium reasoning |
+| Ideate | CREATIVE | `gpt-5.4` | Creativity benefits from strongest reasoning |
+| Design | CREATIVE | `gpt-5.4` | Architecture decisions require deep reasoning |
+| Plan | PLANNER | `gpt-5.4` | Decomposition requires precision and foresight |
+| Execute | EXECUTOR | `gpt-5.4` | Implementation with strong reasoning |
+| Verify | VERIFIER | `gpt-5.4` | Critical review demands premium model |
+| Memory | ARCHIVIST | `claude-sonnet-4.6` | Extraction needs solid understanding |
+| Product | CREATIVE | `gpt-5.4` | Strategy work needs premium reasoning |
+
+Floor rule: `claude-sonnet-4.6` is the absolute minimum for any Forge-GPT dispatch.
+</model_selection>
 
 ## Run ledger
 
@@ -294,3 +349,21 @@ On resume:
 - If state is unknown, say that it is unknown and recover it.
 - Do not invent state, capability loss, or blockers that are not recorded or observed.
 - If the session database and the conversation disagree, prefer the database and surface the mismatch.
+
+---
+
+## Extension Integration (forge-review)
+
+The `forge-review` extension (user-scoped) enhances interactive review phases with structured artifacts and decision tracking. When loaded, it provides:
+
+**Tools:**
+- `forge_review_present` — After ASSESS dispatch completes, call this with structured findings (`{id, title, description, evidence, severity, category}[]`, tier, summary). Generates an HTML review artifact and returns formatted findings.
+- `forge_review_decision_log` — Call with action `record` + decisions array after collecting user verdicts. Call with action `get` to retrieve the decision log. Decisions auto-inject as context for downstream phases.
+
+**Automatic behaviors (hooks):**
+- Gate enforcement for T3+ tasks (ASSESS required before PLAN/EXECUTE)
+- Post-ASSESS prompting to use review tools
+- Pressure signal detection with gate reminders
+- Decision context auto-injection on phase transitions
+
+**Fallback:** If tools are not loaded, present findings directly in your response and collect decisions via `ask_user` as before.

@@ -42,13 +42,15 @@ The phase machine's behavioral manifestation follows this protocol, which maps t
 Steps 1-3 map to EXPLORE/IDEATE/DESIGN phases. Steps 4-7 map to PLAN/EXECUTE/VERIFY/ITERATE. For simple tasks, steps 2-3 may collapse into a single sentence. The protocol ensures every task — regardless of complexity — follows a classify→act→verify→close arc.
 
 ```
-EXPLORE ──→ IDEATE ──→ DESIGN ──→ PLAN ──→ EXECUTE ──→ VERIFY ──→ ITERATE
-   │           │          │         │          │           │
-   │           │          │         │          │           └─→ findings → PLAN (new items)
-   │           │          │         │          └─→ blocker → user
-   │           │          │         └─→ plan verified → EXECUTE
-   │           │          └─→ contracts agreed → PLAN
-   │           └─→ user selects approach → DESIGN or PLAN
+EXPLORE ──→ IDEATE ──→ ASSESS ──→ DESIGN ──→ PLAN ──→ VERIFY(plan) ──→ EXECUTE ──→ VERIFY(result) ──→ ITERATE
+   │           │          │          │         │           │                │            │
+   │           │          │          │         │           │                │            └─→ findings → PLAN
+   │           │          │          │         │           │                └─→ blocker → user
+   │           │          │          │         │           └─→ plan verified → EXECUTE
+   │           │          │          │         └─→ plan produced → VERIFY(plan)
+   │           │          │          └─→ contracts agreed → PLAN
+   │           │          └─→ scope mode + decisions → DESIGN
+   │           └─→ user selects approach → ASSESS (T3+) or DESIGN or PLAN
    └─→ evidence gathered → IDEATE or PLAN
 ```
 
@@ -58,10 +60,11 @@ EXPLORE ──→ IDEATE ──→ DESIGN ──→ PLAN ──→ EXECUTE ─�
 |-------|---------|-------------|--------|
 | EXPLORE | Understand the codebase and classify complexity | SCOUT subagent | Findings, tier classification |
 | IDEATE | Generate and evaluate approaches | CREATIVE subagent | Approaches with tradeoffs, recommendation |
+| ASSESS | Challenge premises, validate the problem, set strategic frame | CREATIVE subagent (assess mode) | Premise validation, scope mode, JTBD, delight opportunities |
 | DESIGN | Progressive refinement of chosen approach | CREATIVE subagent | Design artifact with frozen contracts |
 | PLAN | Decompose into atomic executable steps | PLANNER subagent | Ordered steps with DONE WHEN criteria |
+| VERIFY | Independently validate plans or results | VERIFIER subagent | Verdict: approved / revision_required / blocked |
 | EXECUTE | Implement the plan | EXECUTOR subagent or workers | Code changes with evidence |
-| VERIFY | Independently validate the result | VERIFIER subagent | Verdict: approved / revision_required / blocked |
 | ITERATE | Decide what's next | Coordinator (inline) | Next action or completion |
 
 ---
@@ -72,16 +75,19 @@ EXPLORE ──→ IDEATE ──→ DESIGN ──→ PLAN ──→ EXECUTE ─�
 |------|-----------|-----|
 | START | Any request | Classify complexity → route to appropriate phase |
 | EXPLORE | Findings gathered | IDEATE (if options needed) or PLAN (if approach is clear) |
-| IDEATE | User selects approach | DESIGN (T2+) or PLAN (T1) |
+| IDEATE | User selects approach | ASSESS (T3+) or DESIGN (T2) or PLAN (T1) |
+| ASSESS | Findings presented, user decides | DESIGN (with scope mode and decisions) |
+| ASSESS | Needs input | Back to user |
 | DESIGN | Contracts agreed | PLAN |
 | DESIGN | Needs input | Back to user |
-| PLAN | Plan produced | VERIFY (plan review) |
-| PLAN | User says "proceed" | EXECUTE |
+| PLAN | Plan produced | VERIFY (plan review, T3+) or EXECUTE (T1-T2) |
+| VERIFY (plan) | Plan approved | EXECUTE |
+| VERIFY (plan) | Revision required | PLAN (refine) |
 | EXECUTE | All steps done | VERIFY (result review) |
 | EXECUTE | Blocker | Back to user |
-| VERIFY | Approved | ITERATE or COMPLETE |
-| VERIFY | Revision required | PLAN (new items) or EXECUTE (with feedback) |
-| VERIFY | Blocked | Back to user |
+| VERIFY (result) | Approved | ITERATE or COMPLETE |
+| VERIFY (result) | Revision required | PLAN (new items) or EXECUTE (with feedback) |
+| VERIFY (result) | Blocked | Back to user |
 | Any | "What's next?" | Check backlog → present options |
 | Any | Ad-hoc request | Classify and route (may skip phases) |
 
@@ -99,8 +105,8 @@ Simple tasks (T1) skip aggressively — they may go directly from classification
 |------|-----------|-------------|-------------|
 | T1 (0-2) | Trivial | Skip design entirely | EXPLORE (optional) → EXECUTE → VERIFY (optional) |
 | T2 (3-4) | Simple | Level 4 only (contracts) | EXPLORE → IDEATE (optional) → DESIGN (brief) → PLAN → EXECUTE → VERIFY |
-| T3 (5-6) | Moderate | Level 2→4 | EXPLORE → IDEATE → DESIGN → PLAN → EXECUTE → VERIFY |
-| T4-T5 (7+) | Complex | Level 1→4 (full) | All phases, full progression |
+| T3 (5-6) | Moderate | Level 2→4 | EXPLORE → IDEATE → ASSESS (light) → DESIGN → PLAN → VERIFY (plan) → EXECUTE → VERIFY (result) |
+| T4-T5 (7+) | Complex | Level 1→4 (full) | All phases, full progression including ASSESS (deep) + VERIFY (plan) |
 
 ### User overrides
 
@@ -108,6 +114,8 @@ Simple tasks (T1) skip aggressively — they may go directly from classification
 - "Just give me contracts" → DESIGN Level 4 only
 - "Full design please" → DESIGN Level 1→4 regardless of tier
 - "Just fix it" → EXECUTE with targeted context (coordinator gathers minimal context first)
+- "Challenge this" / "CEO review" → ASSESS (any tier, explicit invocation)
+- "Skip assess" → route to DESIGN directly (bypass CEO gate)
 
 ### When to skip EXPLORE
 
@@ -153,9 +161,12 @@ Key property: contracts frozen after DESIGN become the specification for PLAN an
 | Completed phase | Default next | Alternative |
 |----------------|-------------|-------------|
 | EXPLORE | IDEATE (if options needed) | PLAN directly (if approach is obvious) |
-| IDEATE | DESIGN (T2+) | PLAN (T1) |
+| IDEATE | ASSESS (T3+) or DESIGN (T2) | PLAN (T1) |
+| ASSESS | DESIGN (with scope mode context) | — |
 | DESIGN | PLAN | EXECUTE (if plan is trivial, T2) |
-| PLAN | EXECUTE (on user "proceed") | VERIFY (plan check) first |
-| EXECUTE | VERIFY | Skip for T1 |
-| VERIFY (clean) | ITERATE / COMPLETE | — |
-| VERIFY (findings) | PLAN (new items) → EXECUTE | Report if informational only |
+| PLAN | VERIFY (plan, T3+) or EXECUTE (T1-T2) | EXECUTE directly (on user "proceed") |
+| VERIFY (plan, clean) | EXECUTE | — |
+| VERIFY (plan, findings) | PLAN (refine) | — |
+| EXECUTE | VERIFY (result) | Skip for T1 |
+| VERIFY (result, clean) | ITERATE / COMPLETE | — |
+| VERIFY (result, findings) | PLAN (new items) → EXECUTE | Report if informational only |

@@ -5,7 +5,7 @@
  */
 
 import { WorkerManager } from './workers.js';
-import type { SpawnOptions, WorkerInfo, WorkerStatus, CleanupResult, AwaitOptions, ValidateWorkerOptions, ValidationResult } from './types.js';
+import type { SpawnOptions, WorkerInfo, WorkerStatus, CleanupResult, AwaitOptions, ValidateWorkerOptions, ValidationResult, WorkerEvent } from './types.js';
 
 export interface WorkerSDKOptions {
   /** Default agent for spawned workers */
@@ -118,6 +118,23 @@ export class WorkerSDK {
   /** Validate a worker's output: commits, file scope, build result */
   validateWorker(workerId: string, opts?: ValidateWorkerOptions): ValidationResult {
     return this.manager.validateWorker(workerId, opts);
+  }
+
+  /**
+   * Send a follow-up message to an active worker session.
+   * Returns the assistant's response text, or null if the session is inactive.
+   */
+  async sendMessage(workerId: string, message: string): Promise<string | null> {
+    return this.manager.sendMessage(workerId, message);
+  }
+
+  /**
+   * Subscribe to live WorkerEvents streamed from the SessionRunner for a specific worker.
+   * The callback receives each event as it is emitted in real time.
+   * Returns an unsubscribe function — call it to stop receiving events.
+   */
+  streamEvents(workerId: string, callback: (event: WorkerEvent) => void): () => void {
+    return this.manager.onEvent(workerId, callback);
   }
 
   /** Clean up all stopped workers */

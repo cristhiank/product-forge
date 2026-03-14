@@ -140,7 +140,7 @@ Copy-PluginFile `
 # --- Step 4: Mode skills ---
 Write-Host ""
 Write-Host "⚙️  Mode skills..."
-$modes = @("explore", "ideate", "design", "plan", "execute", "verify", "memory", "product")
+$modes = @("explore", "ideate", "design", "plan", "execute", "verify", "memory", "product", "assess")
 foreach ($mode in $modes) {
     Copy-PluginFile `
         "$ScriptDir\agents\forge\modes\$mode.md" `

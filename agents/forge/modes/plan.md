@@ -158,9 +158,64 @@ Every plan MUST include all of the following:
 3. **NOT in scope** — deferred work with one-line rationale
 4. **Risks** — with severity and mitigation
 5. **Assumptions** — listed and verified/flagged (T4-T5)
+6. **Test Coverage Map** — codepaths mapped to test coverage (T3+)
+7. **Observability** — what metrics indicate health/failure (T3+)
+8. **Deploy & Rollout** — migration safety, rollback, feature flags (T3+)
 
  - MUST flag plan steps that touch files outside the stated scope as a scope concern and confirm with the coordinator
  - SHOULD use CORRECTION: protocol when discovering errors mid-execution (see engineering-preferences.md)
+
+---
+
+## Test Coverage Map (T3+)
+
+For T3+ tasks, map every new codepath to its test coverage:
+
+```markdown
+| Codepath / Feature       | Test Type    | Happy Path  | Error Path  | Edge Case   |
+|--------------------------|-------------|-------------|-------------|-------------|
+| [new feature]            | Unit         | ✓ [what]    | ✓ [what]    | — (defer)   |
+| [integration point]      | Integration  | ✓ [what]    | ✓ [what]    | ✓ [what]    |
+```
+
+For T4-T5, also answer these confidence tests:
+ - **Friday deploy:** Would you ship this at 2am on a Friday? What test gives you that confidence?
+ - **Hostile QA:** What would a hostile QA engineer write to break this?
+ - **Chaos test:** What happens if the database is slow, the API times out, or the user double-clicks?
+
+Reference: `docs/specs/quality-gates.md` § Test Coverage Map
+
+## Observability Section (T3+)
+
+For T3+ tasks, define what tells you the feature is working or broken:
+
+```markdown
+| Feature / Codepath       | Health Metric              | Broken Signal              |
+|--------------------------|----------------------------|----------------------------|
+| [new feature]            | [what success looks like]  | [what failure looks like]   |
+```
+
+ - **T3:** 1-2 sentences per new codepath
+ - **T4-T5:** Full table with health metric, broken signal, and recommended alert threshold
+
+Reference: `docs/specs/quality-gates.md` § Observability Section
+
+## Deploy & Rollout Section (T3+)
+
+For T3+ tasks, address deploy concerns:
+
+| Concern | Answer |
+|---------|--------|
+| Migration safety | Backward-compatible? Zero-downtime? |
+| Feature flags | Should any part be behind a flag? |
+| Rollout order | Migrate → deploy → verify? Or flag-gated? |
+| Rollback plan | Explicit steps. How long? |
+| Post-deploy verification | What to check in first 5 minutes? |
+
+ - **T3:** Basic answers (1-2 sentences per concern)
+ - **T4-T5:** Full answers with explicit rollback steps and verification checklist
+
+Reference: `docs/specs/quality-gates.md` § Deploy & Rollout Section
 
 ---
 

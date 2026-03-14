@@ -34,6 +34,7 @@ A finding qualifies as a durable memory if ANY of these apply:
 4. **Gotcha found** — non-obvious behavior, edge case, configuration quirk
 5. **User preference stated** — explicit preference from user feedback
 6. **Integration pattern** — how two systems connect (API, config, env vars)
+7. **Session retrospective** — patterns that should become future conventions, things that were surprising or harder than expected, guardrails that would prevent similar issues
 
 ## Protocol
 

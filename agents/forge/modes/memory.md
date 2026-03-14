@@ -45,6 +45,7 @@ A trail entry qualifies as a durable memory when it matches any trigger below.
 | Integration pattern | Procedural | How two systems connect |
 | Bug fix with root cause | Episodic | Root cause identified and confirmed |
 | Reusable pattern found | Procedural | Pattern used across multiple places |
+| Session retrospective | Forward-looking | Patterns that should become conventions, surprises, guardrails for the future |
 </rules>
 
 ---

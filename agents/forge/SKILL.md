@@ -58,6 +58,16 @@ When a user message arrives, classify and route:
  - When a task needs codebase understanding before implementation, dispatch explore first
  - When unsure whether explore is needed, dispatch it — it's always safe
 
+### Assess (CEO quality gate)
+ - Delegate to assess subagent (`forge-assess` skill)
+ - Triggers: "challenge this", "CEO review", "is this the right problem", "validate premise", "should we build this", "JTBD"
+ - AUTO-CHAINED after IDEATE for T3+ tasks: When user selects an approach and task is T3+, Forge routes to ASSESS before DESIGN
+ - EXPLICIT invocation: User can trigger ASSESS at any tier
+ - T3 (moderate): Light gate — 3 outputs (premise check, existing leverage, NOT in scope)
+ - T4-T5 (complex): Deep gate — 7 outputs including JTBD skill invocation and scope mode selection
+ - INTERACTIVE: Coordinator presents ASSESS findings one-at-a-time to the user, collects decisions, then passes context to DESIGN
+ - **EXTENSION INTEGRATION**: After evaluating ASSESS output, call `forge_review_present` (if available) with structured findings to generate an interactive HTML review artifact. Then collect decisions via `ask_user` and persist them with `forge_review_decision_log` action 'record'. The extension auto-injects prior decisions as context for downstream phases.
+
 ### Ideate
  - Delegate to ideate subagent
  - Triggers: "explore options", "approaches", "how should we", "architecture decision", "evaluate options"
@@ -65,17 +75,21 @@ When a user message arrives, classify and route:
 ### Design (progressive refinement)
  - Delegate to design subagent
  - Triggers: "design", "walk me through the design", "design first", "whiteboard", "what components", "what interfaces", "define contracts", "refine the approach"
- - CHAINED after IDEATE: When user selects an approach and task is T3+, Forge auto-routes to DESIGN before PLAN
+ - CHAINED after IDEATE: When user selects an approach and task is T3+, Forge auto-routes to ASSESS then DESIGN before PLAN
+ - CHAINED before PLAN/EXECUTE: For T3+ tasks, ASSESS and DESIGN are mandatory before PLAN or EXECUTE — regardless of how the user phrases the request. See DESIGN GUARD on PLAN and DISPATCH sections.
  - ENTRY CALIBRATION by tier: T2 (3-4) → Level 4 only (Contracts); T3 (5-6) → Level 2→4; T4-T5 (7+) → Level 1→4 (full progression)
  - SKIP for T1: No design needed, route directly to PLAN or EXECUTE
 
 ### Plan
  - Delegate to plan subagent
  - Triggers: "create plan", "break down", "create epic", "decompose", "user stories", "plan the implementation"
+ - **ASSESS + DESIGN GUARD**: If task is T3+ and ASSESS/DESIGN have NOT been completed in this session, auto-chain ASSESS → DESIGN before PLAN. The user saying "plan it" does NOT skip ASSESS/DESIGN — it means "I'm ready to move forward," and ASSESS → DESIGN is the next forward step for T3+ tasks. Only skip if: (a) the task is T1-T2, (b) completed earlier in this session, or (c) user explicitly says "skip assess" / "skip design."
+ - **PLAN VERIFY GATE (T3+)**: After PLAN completes for T3+ tasks, dispatch `forge-verify` for plan verification before proceeding to EXECUTE. The verify subagent checks plan completeness, file path validity, and DONE WHEN testability.
 
 ### Dispatch (implementation)
  - Route via dispatch decision: 1-2 items or overlapping files → `task()` subagent; 3+ independent items → `copilot-cli-skill` workers (see Worker Spawning Protocol)
  - Triggers: "implement", "fix", "do your job", "work on epic", "proceed", "keep going", "build", "refactor", "migrate"
+ - **ASSESS + DESIGN GUARD**: Same rule as PLAN — if T3+ and no ASSESS/DESIGN completed, route to ASSESS → DESIGN first. "Implement it" for a T3+ task means ASSESS → DESIGN → PLAN → VERIFY(plan) → EXECUTE.
  - YOUR ACTION: Run dispatch routing → Build Mission Brief → dispatch
  - **NOT YOUR ACTION:** edit files, create files, run builds, run tests
 
@@ -396,11 +410,35 @@ Line 1 of every dispatch must load the target mode skill:
 task({
   agent_type: "general-purpose",
   mode: "sync",
-  model: "<see model selection table>",
+  model: "<from Model Selection Table below>",
   description: "<3-5 word summary>",
   prompt: "<skill load line>\n\n<mission brief>"
 })
 ```
+
+### Model Selection Table
+
+IMPORTANT: The `model` parameter is **REQUIRED** on every `task()` call. NEVER omit it. NEVER use a model below the floor listed here.
+
+IMPORTANT: **NEVER** use `claude-haiku-4.5`, `claude-sonnet-4.5`, `claude-sonnet-4`, `gpt-5-mini`, `gpt-4.1`, `gpt-5.1-codex-mini`, or any model tagged as "fast/cheap." These models lack the reasoning depth required for Forge work.
+
+ - If a model is not in this table, do not use it.
+ - If you are uncertain which model to use, use `claude-opus-4.6`.
+
+| Phase | Role | Model | Rationale |
+|-------|------|-------|-----------|
+| Explore (lookup) | SCOUT | `claude-sonnet-4.6` | Fast investigation with capable reasoning |
+| Explore (investigate) | SCOUT | `claude-sonnet-4.6` | Structured findings need solid analysis |
+| Assess | CREATIVE | `claude-opus-4.6` | CEO gate demands premium judgment |
+| Ideate | CREATIVE | `claude-opus-4.6` | Creativity benefits from strongest reasoning |
+| Design | CREATIVE | `claude-opus-4.6` | Architecture decisions require deep reasoning |
+| Plan | PLANNER | `claude-opus-4.6` | Decomposition requires precision and foresight |
+| Execute | EXECUTOR | `claude-sonnet-4.6` | Code generation — well-constrained, capable |
+| Verify | VERIFIER | `claude-opus-4.6` | Critical review demands premium model |
+| Memory | ARCHIVIST | `claude-sonnet-4.6` | Extraction still needs solid understanding |
+| Product | CREATIVE | `claude-opus-4.6` | Strategy work needs premium reasoning |
+
+**Floor rule:** `claude-sonnet-4.6` is the absolute minimum for any Forge dispatch. No exceptions.
 
 ### Mission Brief Construction
 
@@ -427,13 +465,14 @@ This prevents stale-context reasoning in long Opus sessions.
 
 <examples>
 <bad-example>
-**Raw instructions, no skill loading, no structure:**
+**Raw instructions, no skill loading, no structure, no model:**
 ```
 task({
   agent_type: "general-purpose",
   prompt: "Implement B-055.6: Replace Task.Run with proper async in AuthService.cs"
 })
 ```
+Missing: `mode: "sync"`, `model:` (REQUIRED — see Model Selection Table), skill load line, Mission Brief structure.
 </bad-example>
 
 <example>
@@ -624,3 +663,21 @@ Explore subagent confirms or overrides during investigation.
 | Conflicting results | Use experts-council to break tie | 1 |
 
 Surface errors transparently, report facts honestly, and respect every gate in the pipeline.
+
+---
+
+## Extension Integration (forge-review)
+
+The `forge-review` extension (user-scoped) enhances interactive review phases with structured artifacts and decision tracking. When loaded, it provides:
+
+**Tools:**
+- `forge_review_present` — After ASSESS dispatch completes, call this with structured findings (`{id, title, description, evidence, severity, category}[]`, tier, summary). Generates an HTML review artifact in the session workspace and returns formatted findings for presentation.
+- `forge_review_decision_log` — Call with action `record` + decisions array after collecting user verdicts. Call with action `get` to retrieve the full decision log. Decisions are auto-injected as context for downstream DESIGN/PLAN/EXECUTE phases.
+
+**Automatic behaviors (hooks):**
+- Gate enforcement: If you dispatch PLAN or EXECUTE for a T3+ task without ASSESS completed, the extension injects a warning into context.
+- Post-ASSESS prompting: After an ASSESS dispatch returns, the extension injects instructions to use the review tools.
+- Pressure detection: If the user signals urgency ("just do it", "ship it") and ASSESS is incomplete for T3+, the extension injects a reminder.
+- Decision context: When the user signals a phase transition after ASSESS, prior decisions are auto-injected.
+
+**Coordinator responsibility:** The extension enhances but does not replace the coordinator's judgment. Use the tools when available; fall back to direct presentation if tools are not loaded.

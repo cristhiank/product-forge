@@ -285,6 +285,35 @@ Failure Modes are not optional. For every external dependency or cross-component
 - ❌ State machines without invariants → Always state which transitions are impossible.
 </anti_patterns>
 
+### Error & Rescue Registry (T3+)
+
+<rule name="error-registry-required">
+For T3+ tasks, produce an Error & Rescue Registry alongside the interaction flows. This makes error handling design explicit rather than leaving it as an implementation afterthought. Generic "handle errors" is never acceptable — name the specific error type.
+</rule>
+
+```markdown
+**Error & Rescue Registry:**
+
+| Method/Codepath      | Failure Mode         | Error Class/Type     |
+|----------------------|----------------------|----------------------|
+| ServiceX.call()      | API timeout          | TimeoutError         |
+|                      | Rate limited (429)   | RateLimitError       |
+|                      | Malformed response   | ParseError           |
+
+| Error Class/Type     | Handled? | Handler Action         | User Sees              |
+|----------------------|----------|------------------------|------------------------|
+| TimeoutError         | Yes      | Retry 2x, then raise   | "Temporarily unavailable" |
+| RateLimitError       | Yes      | Backoff + retry         | Nothing (transparent)  |
+| ParseError           | NO ← GAP| —                      | 500 error ← BAD        |
+```
+
+ - `catch(Exception)` / `rescue StandardError` is always a smell — flag it
+ - Every rescued error must: retry with backoff, degrade gracefully, or re-raise with context
+ - For LLM/AI calls: trace malformed response, empty response, hallucinated JSON, and refusal as distinct failure modes
+ - Any row with Handled=NO and User Sees=500/silent → **CRITICAL GAP** — must resolve before design advances
+
+Reference: `docs/specs/quality-gates.md` § Error & Rescue Registry
+
 **Conditional sections — include when triggered:**
 
 | Section | Trigger |
@@ -534,15 +563,22 @@ Reference: `docs/specs/design-artifacts.md` — the full semantic spec for this 
 
 ### When to Generate
 
-Generate an HTML design review artifact when ALL of these are true:
-- Task complexity is T2+ (3+ complexity score)
-- Design involves 3+ components or has sequence flows / state machines
-- You have completed at least Level 2 (Components)
+<rule name="artifact-trigger">
+IMPORTANT: For T3+ tasks (complex-ambiguous) with 3+ components, generating the HTML design review artifact is **MANDATORY** — not optional. The artifact MUST be a real file written to disk, not terminal text that mentions the artifact. If you say "opened in browser" but did not call `create` to write an HTML file, that is an error — use `CORRECTION:` and generate the file immediately.
+</rule>
 
-Do NOT generate artifacts for:
-- T1 tasks or single-component contract alignment
-- Level 4 only (contracts) — terminal output is sufficient
-- When the user explicitly says to keep output in terminal
+ - **MUST generate** (T3+ with 3+ components and Level 2+ reached): Write the HTML file, open in browser, then present a concise terminal summary with anchor IDs
+ - **SHOULD generate** (T2 with 3+ components and Level 2+ reached): Generate unless the design is straightforward enough for terminal review
+ - **MUST NOT generate** for: T1 tasks, single-component contract alignment, Level 4 only (contracts), or when user explicitly requests terminal-only output
+
+<anti_patterns>
+ - ❌ Saying "Design review artifact opened in browser" without actually calling `create` to write an HTML file — this is the most common failure mode. The file MUST exist on disk.
+ - ❌ Producing only terminal markdown tables for a T3+ design with 3+ components — the terminal is insufficient for spatial relationships
+ - ❌ Writing Mermaid syntax directly instead of using the JSON intermediate — syntax errors are common
+ - ❌ Generating multiple HTML files for one design — one artifact with tabs
+ - ❌ Skipping the feedback panel — the artifact exists to collect structured feedback
+ - ❌ Delivering a broken diagram — use the degradation chain (simplified → raw text → styled HTML → terminal fallback)
+</anti_patterns>
 
 ### How to Generate
 
@@ -637,10 +673,12 @@ These enable precise CLI feedback that the agent can parse and act on.
 
 <anti_patterns>
 - ❌ Generating an artifact for T1 tasks — the context switch isn't worth it
+- ❌ Claiming "opened in browser" without writing an actual HTML file to disk — always verify you called `create`
 - ❌ Writing Mermaid syntax directly instead of using the JSON intermediate — syntax errors are common
 - ❌ Generating multiple HTML files for one design — one artifact with tabs
 - ❌ Skipping the feedback panel — the artifact exists to collect structured feedback
 - ❌ Delivering a broken diagram — use the degradation chain (simplified diagram → raw text → styled HTML → terminal fallback)
+- ❌ Producing terminal-only output for T3+ designs with 3+ components — use the HTML artifact
 </anti_patterns>
 
 ---
@@ -651,6 +689,7 @@ These enable precise CLI feedback that the agent can parse and act on.
  - MUST have received user approval for each completed level
  - MUST have defined frozen contracts for T3+ tasks
  - MUST have included failure modes for every external dependency in T3+ tasks
+ - MUST have written the HTML design review artifact to disk for T3+ tasks with 3+ components — verify the file exists before reporting done
 
 ## Non-Goals
 

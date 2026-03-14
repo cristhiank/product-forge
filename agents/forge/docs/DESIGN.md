@@ -232,16 +232,21 @@ Forge decides to explore the codebase:
 
 ### Model Selection
 
-Forge chooses the model per delegation based on task type:
+Forge chooses the model per delegation based on task type. The authoritative model tables live in each agent's SKILL.md (`agents/forge/SKILL.md` and `agents/forge-gpt/SKILL.md`).
 
-| Mode | Default Model | Rationale |
-|------|--------------|-----------|
-| explore | Fast model (Haiku/Sonnet) | Speed over depth for codebase search |
-| ideate | Premium model (Opus) | Creativity benefits from stronger reasoning |
-| plan | Standard model (Sonnet) | Structured output, well-defined task |
-| execute | Standard/Fast model (Sonnet/Codex) | Code generation, well-constrained |
-| verify | Premium model (Opus) | Critical thinking, hallucination detection |
-| memory | Fast model (Haiku) | Simple extraction, pattern matching |
+**Hard floor:** `claude-sonnet-4.6` is the absolute minimum for any dispatch. No haiku, no sonnet-4.5, no fast/cheap models.
+
+| Mode | Forge (Claude) | Forge-GPT | Rationale |
+|------|---------------|-----------|-----------|
+| explore | `claude-sonnet-4.6` | `claude-sonnet-4.6` | Investigation needs capable reasoning — Haiku is insufficient |
+| assess | `claude-opus-4.6` | `gpt-5.4` | CEO gate demands premium judgment |
+| ideate | `claude-opus-4.6` | `gpt-5.4` | Creativity benefits from strongest reasoning |
+| design | `claude-opus-4.6` | `gpt-5.4` | Architecture decisions require deep reasoning |
+| plan | `claude-opus-4.6` | `gpt-5.4` | Decomposition requires precision and foresight |
+| execute | `claude-sonnet-4.6` | `gpt-5.4` | Code generation — constrained but needs quality |
+| verify | `claude-opus-4.6` | `gpt-5.4` | Critical review demands premium model |
+| memory | `claude-sonnet-4.6` | `claude-sonnet-4.6` | Extraction still needs solid understanding |
+| product | `claude-opus-4.6` | `gpt-5.4` | Strategy work needs premium reasoning |
 
 ---
 

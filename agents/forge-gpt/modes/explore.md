@@ -79,6 +79,17 @@ If you discover an error in your reasoning or output during execution, state `CO
 - MUST NOT run builds, tests, or migrations
 - MUST NOT produce implementation plans or design specifications
 
+## Pre-investigation audit (T3+)
+
+For moderate and complex tasks, run a lightweight audit before deep exploration:
+
+- Check `git log -10` on files in scope to identify recent churn
+- Grep for `TODO`, `FIXME`, `HACK`, `XXX` in affected files
+- Note high-churn files (changed 3+ times recently) as risk factors
+- Include audit findings in output so downstream phases can calibrate
+
+Reference: `docs/specs/quality-gates.md` § Pre-Investigation Audit
+
 ## Stop conditions
 
 Stop when:

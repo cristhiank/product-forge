@@ -73,7 +73,7 @@ export function runCli(): void {
     .option('--task-id <id>', 'Associate spawn request with a task ID for deduplication')
     .option('--auto-commit [message]', 'Auto-commit changes on successful exit (optionally with custom message)')
     .option('--context-providers <json>', 'JSON array of context providers to apply to the worktree')
-    .action((opts) => {
+    .action(async (opts) => {
       try {
         const repoRoot = resolve(program.opts().repoRoot);
         const manager = new WorkerManager(repoRoot);
@@ -91,7 +91,7 @@ export function runCli(): void {
             throw new Error('Invalid JSON for --context-providers');
           }
         }
-        const result = manager.spawn({
+        const result = await manager.spawn({
           prompt: opts.prompt,
           agent: opts.agent,
           model: opts.model,
@@ -153,7 +153,7 @@ export function runCli(): void {
     .argument('<worker-id>', 'Worker ID to wait for')
     .option('--poll-interval <ms>', 'Polling interval in ms (default: 3000)')
     .option('--timeout <ms>', 'Maximum wait time in ms (0 = no limit, default: 0)')
-    .action((workerId, opts) => {
+    .action(async (workerId, opts) => {
       try {
         const repoRoot = resolve(program.opts().repoRoot);
         const manager = new WorkerManager(repoRoot);
@@ -163,7 +163,7 @@ export function runCli(): void {
         const timeoutMs = opts.timeout !== undefined
           ? parseNonNegativeInt(opts.timeout, '--timeout')
           : undefined;
-        const result = manager.awaitCompletion(workerId, { pollIntervalMs, timeoutMs });
+        const result = await manager.awaitCompletion(workerId, { pollIntervalMs, timeoutMs });
         output(result, program.opts().pretty);
       } catch (err) {
         handleError(err);
@@ -176,11 +176,11 @@ export function runCli(): void {
     .description('Clean up a worker and its worktree')
     .argument('<worker-id>', 'Worker ID to clean up')
     .option('--force', 'Force kill process if graceful shutdown fails')
-    .action((workerId, opts) => {
+    .action(async (workerId, opts) => {
       try {
         const repoRoot = resolve(program.opts().repoRoot);
         const manager = new WorkerManager(repoRoot);
-        const result = manager.cleanup(workerId, opts.force);
+        const result = await manager.cleanup(workerId, opts.force);
         output(result, program.opts().pretty);
       } catch (err) {
         handleError(err);
@@ -224,6 +224,23 @@ export function runCli(): void {
         const sdk = new WorkerSDK(manager);
         const results = await sdk.cleanupAll(opts.force);
         output({ cleaned: results, total: results.length }, program.opts().pretty);
+      } catch (err) {
+        handleError(err);
+      }
+    });
+
+  // ============ send command ============
+  program
+    .command('send')
+    .description('Send a follow-up message to a running worker')
+    .argument('<worker-id>', 'Worker ID to send message to')
+    .requiredOption('--message <text>', 'Message to send to the worker')
+    .action(async (workerId, opts) => {
+      try {
+        const repoRoot = resolve(program.opts().repoRoot);
+        const manager = new WorkerManager(repoRoot);
+        const result = await manager.sendMessage(workerId, opts.message);
+        output({ workerId, response: result }, program.opts().pretty);
       } catch (err) {
         handleError(err);
       }

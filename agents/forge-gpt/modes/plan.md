@@ -82,6 +82,35 @@ If you discover an error in your reasoning or output during execution, state `CO
 - MUST NOT produce vague or unverifiable completion criteria
 - MUST NOT edit or create source files
 
+## Test Coverage Map (T3+)
+
+For moderate and complex tasks, map codepaths to test coverage:
+
+| Codepath / Feature | Test Type | Happy Path | Error Path | Edge Case |
+|-------------------|-----------|------------|------------|-----------|
+| [feature] | [Unit/Integration/E2E] | [what] | [what] | [what or defer] |
+
+For complex-ambiguous, also answer:
+- Friday deploy: What test gives confidence for a 2am Friday ship?
+- Hostile QA: What would break this?
+- Chaos: What if DB is slow, API times out, user double-clicks?
+
+## Observability Section (T3+)
+
+Define health and failure signals:
+
+| Feature / Codepath | Health Metric | Broken Signal |
+|-------------------|---------------|---------------|
+| [feature] | [success looks like] | [failure looks like] |
+
+## Deploy & Rollout Section (T3+)
+
+Address: migration safety, feature flags, rollout order, rollback plan, post-deploy verification.
+- Moderate: 1-2 sentences per concern
+- Complex: full answers with explicit steps
+
+Reference for all T3+ sections: `docs/specs/quality-gates.md`
+
 ## Stop conditions
 
 Stop when:

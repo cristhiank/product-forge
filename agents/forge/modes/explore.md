@@ -55,6 +55,21 @@ Also load `shared/engineering-preferences.md` from the forge skill directory for
 
 ---
 
+## Pre-Investigation Audit (T3+)
+
+For T3+ tasks, run a lightweight audit before diving into exploration. This grounds downstream phases with churn and debt context.
+
+ - SHOULD run `git log -10` on files in scope to identify recent churn
+ - SHOULD grep for `TODO`, `FIXME`, `HACK`, `XXX` in affected files
+ - SHOULD check `git stash list` for in-flight work that might conflict
+ - SHOULD note high-churn files (changed 3+ times recently) as risk factors
+
+Include audit findings in your output so ASSESS, DESIGN, and PLAN phases can calibrate. High-churn areas and existing TODOs get flagged as risk factors.
+
+Reference: `docs/specs/quality-gates.md` § Pre-Investigation Audit
+
+---
+
 ## Fact Confidence Levels
 
 | Level | When | Example |

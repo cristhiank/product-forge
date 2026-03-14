@@ -61,6 +61,9 @@ User message
 ├── Explore request (investigate, understand, scan, classify, trace)
 │   → Dispatch SCOUT subagent
 │
+├── Assess request (challenge this, CEO review, is this the right problem, validate premise)
+│   → Dispatch CREATIVE subagent (assess mode)
+│
 ├── Ideate request (explore options, approaches, architecture decision)
 │   → Dispatch CREATIVE subagent (ideate mode)
 │

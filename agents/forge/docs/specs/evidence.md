@@ -66,6 +66,23 @@ If a subagent includes `CORRECTION:` statements in its output, this indicates mi
 
 ---
 
+### CREATIVE (Assess)
+
+| Evidence type | Example |
+|--------------|---------|
+| Premise finding | "Current search averages 3.2s — users report abandoning after 2s (support tickets #142, #156)" |
+| Existing code reference | "`src/search/SearchService.ts:41` already implements fuzzy matching — plan should extend, not rebuild" |
+| JTBD statement | "User hires this feature to reduce time-to-answer when investigating a customer complaint" |
+| Scope mode recommendation | "Recommend HOLD: scope is right, focus on making search sub-2s with proper caching" |
+| Delight opportunity | "Auto-suggest recent searches (<30 min, high delight, low effort)" |
+| NOT in scope item | "Full-text search across attachments — deferred, requires infrastructure change" |
+
+**Minimum for completion:** T3: premise check + existing code leverage + NOT in scope. T4-T5: all 7 outputs with evidence-backed recommendations. Each output must end with a clear recommendation.
+
+**When evidence is absent:** If premises cannot be evaluated (e.g., no product context in codebase, no user data), report as `needs_input` with specific questions about the product context.
+
+---
+
 ### CREATIVE (Design)
 
 | Evidence type | Example |

@@ -58,6 +58,54 @@ Do not keep verifying after the limit.
 - Security or safety expectations are still met
 - No unintended out-of-scope changes
 
+## Code safety checklist (T3+)
+
+After standard result validation, run a code safety review against the diff.
+
+### Pass 1 — CRITICAL (blocks verdict)
+
+- No string interpolation in SQL or query construction
+- No TOCTOU (check-then-act) patterns that should be atomic
+- No ORM bypassing validations on constrained fields
+- No N+1 queries (associations in loops without eager loading)
+- No read-check-write without uniqueness constraint
+- No find-or-create without unique index
+- No status transitions without atomic conditional update
+- No LLM output written to DB without format validation
+- No LLM structured output accepted without type checks
+
+### Pass 2 — INFORMATIONAL (advisory, in verdict notes)
+
+- Conditional side effects (branches forgetting a side effect)
+- Magic numbers, string coupling
+- Dead code, stale comments
+- LLM prompt issues (0-indexed lists, tool mismatch)
+- Test gaps (negative paths without side-effect assertions)
+- Crypto entropy issues
+- Time window safety
+- Type coercion at boundaries
+
+### Suppressions
+
+Do not flag: redundancy aiding readability, threshold comments, consistency-only changes, anything already fixed in the diff.
+
+CRITICAL findings → `revision_required`. INFORMATIONAL → included in verdict notes but do not block.
+
+## Deploy readiness (T3+)
+
+- Migration safety (backward-compatible, zero-downtime)
+- Feature flags for user-facing changes
+- Rollback plan documented
+- Post-deploy verification defined
+
+## Hostile QA perspective (T4-T5)
+
+- Friday deploy confidence: weakest link?
+- Break-it test: how would hostile QA break this?
+- Silent failure scan: any invisible failure paths?
+
+Reference: `docs/specs/quality-gates.md`
+
 ## Hallucination detection
 
 - File path not found → flag it
