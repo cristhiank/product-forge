@@ -57,15 +57,15 @@ export interface SessionInfo {
 // Helpers
 // ---------------------------------------------------------------------------
 
-/** Maps a raw SDK event (PascalCase Type/Data) to a typed WorkerEvent, or null for unknowns. */
+/** Maps a raw SDK event to a typed WorkerEvent, or null for unknowns. */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapSdkEvent(sdkEvent: any): WorkerEvent | null {
   const timestamp = new Date().toISOString();
-  switch (sdkEvent.Type) {
+  switch (sdkEvent.type) {
     case 'assistant.message_delta':
       return {
         type: 'assistant.message_delta',
-        data: { deltaContent: String(sdkEvent.Data?.DeltaContent ?? '') },
+        data: { deltaContent: String(sdkEvent.data?.deltaContent ?? '') },
         timestamp,
       };
     case 'session.idle':
@@ -74,8 +74,8 @@ function mapSdkEvent(sdkEvent: any): WorkerEvent | null {
       return {
         type: 'tool.execution_start',
         data: {
-          toolName: String(sdkEvent.Data?.ToolName ?? ''),
-          toolArgs: (sdkEvent.Data?.ToolArgs as Record<string, unknown>) ?? {},
+          toolName: String(sdkEvent.data?.toolName ?? ''),
+          toolArgs: (sdkEvent.data?.arguments as Record<string, unknown>) ?? {},
         },
         timestamp,
       };
@@ -83,8 +83,8 @@ function mapSdkEvent(sdkEvent: any): WorkerEvent | null {
       return {
         type: 'tool.execution_complete',
         data: {
-          toolName: String(sdkEvent.Data?.ToolName ?? ''),
-          result: (sdkEvent.Data?.Result as unknown) ?? null,
+          toolName: '',
+          result: (sdkEvent.data?.result as unknown) ?? null,
         },
         timestamp,
       };
@@ -227,7 +227,12 @@ export class SessionRunner extends EventEmitter {
 
     // 2. Create and start the client
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const client: any = new CopilotClient();
+    const client: any = new CopilotClient({
+      env: {
+        ...process.env,
+        NODE_OPTIONS: [process.env.NODE_OPTIONS, '--experimental-sqlite'].filter(Boolean).join(' '),
+      },
+    });
     await client.start();
 
     // 3. Permission handler
@@ -283,7 +288,7 @@ export class SessionRunner extends EventEmitter {
 
     // 9. Wire event listener — forward SDK events to StateStore + EventEmitter
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    session.On((sdkEvent: any) => {
+    session.on((sdkEvent: any) => {
       const workerEvent = mapSdkEvent(sdkEvent);
       if (!workerEvent) return;
 
@@ -292,12 +297,12 @@ export class SessionRunner extends EventEmitter {
       this.emit('event', workerId, workerEvent);
       opts.onEvent?.(workerEvent);
 
-      if (sdkEvent.Type === 'tool.execution_complete') {
-        const name = String(sdkEvent.Data?.ToolName ?? '');
+      if (sdkEvent.type === 'tool.execution_start') {
+        const name = String(sdkEvent.data?.toolName ?? '');
         active.toolCalls.set(name, (active.toolCalls.get(name) ?? 0) + 1);
         active.lastToolUsed = name;
       }
-      if (sdkEvent.Type === 'session.idle') {
+      if (sdkEvent.type === 'session.idle') {
         active.status = 'idle';
       }
     });

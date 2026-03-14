@@ -3451,14 +3451,6 @@ module.exports = __webpack_require__(58);
 
 /***/ }),
 
-/***/ 574:
-/***/ ((module) => {
-
-module.exports = eval("require")("vscode-jsonrpc/node");
-
-
-/***/ }),
-
 /***/ 324:
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
@@ -3472,6 +3464,8 @@ __webpack_require__.d(__webpack_exports__, {
 
 // EXTERNAL MODULE: external "node:child_process"
 var external_node_child_process_ = __webpack_require__(421);
+// EXTERNAL MODULE: external "node:crypto"
+var external_node_crypto_ = __webpack_require__(598);
 // EXTERNAL MODULE: external "node:fs"
 var external_node_fs_ = __webpack_require__(24);
 // EXTERNAL MODULE: external "node:net"
@@ -3534,6 +3528,11 @@ function createSessionRpc(connection, sessionId) {
     },
     permissions: {
       handlePendingPermissionRequest: async (params) => connection.sendRequest("session.permissions.handlePendingPermissionRequest", { sessionId, ...params })
+    },
+    log: async (params) => connection.sendRequest("session.log", { sessionId, ...params }),
+    shell: {
+      exec: async (params) => connection.sendRequest("session.shell.exec", { sessionId, ...params }),
+      kill: async (params) => connection.sendRequest("session.shell.kill", { sessionId, ...params })
     }
   };
 }
@@ -3546,11 +3545,10 @@ function getSdkProtocolVersion() {
 }
 
 
-// EXTERNAL MODULE: ./node_modules/@vercel/ncc/dist/ncc/@@notfound.js?vscode-jsonrpc/node
-var _notfoundvscode_jsonrpc_node = __webpack_require__(574);
 ;// CONCATENATED MODULE: ./node_modules/@github/copilot-sdk/dist/session.js
 
 
+const NO_RESULT_PERMISSION_V2_ERROR = "Permission handlers cannot return 'no-result' when connected to a protocol v2 server.";
 class CopilotSession {
   /**
    * Creates a new CopilotSession instance.
@@ -3775,7 +3773,7 @@ class CopilotSession {
       try {
         await this.rpc.tools.handlePendingToolCall({ requestId, error: message });
       } catch (rpcError) {
-        if (!(rpcError instanceof _notfoundvscode_jsonrpc_node.ConnectionError || rpcError instanceof _notfoundvscode_jsonrpc_node.ResponseError)) {
+        if (!(rpcError instanceof node.ConnectionError || rpcError instanceof node.ResponseError)) {
           throw rpcError;
         }
       }
@@ -3790,6 +3788,9 @@ class CopilotSession {
       const result = await this.permissionHandler(permissionRequest, {
         sessionId: this.sessionId
       });
+      if (result.kind === "no-result") {
+        return;
+      }
       await this.rpc.permissions.handlePendingPermissionRequest({ requestId, result });
     } catch (_error) {
       try {
@@ -3800,7 +3801,7 @@ class CopilotSession {
           }
         });
       } catch (rpcError) {
-        if (!(rpcError instanceof _notfoundvscode_jsonrpc_node.ConnectionError || rpcError instanceof _notfoundvscode_jsonrpc_node.ResponseError)) {
+        if (!(rpcError instanceof node.ConnectionError || rpcError instanceof node.ResponseError)) {
           throw rpcError;
         }
       }
@@ -3886,8 +3887,14 @@ class CopilotSession {
       const result = await this.permissionHandler(request, {
         sessionId: this.sessionId
       });
+      if (result.kind === "no-result") {
+        throw new Error(NO_RESULT_PERMISSION_V2_ERROR);
+      }
       return result;
-    } catch (_error) {
+    } catch (error) {
+      if (error instanceof Error && error.message === NO_RESULT_PERMISSION_V2_ERROR) {
+        throw error;
+      }
       return { kind: "denied-no-approval-rule-and-could-not-request-from-user" };
     }
   }
@@ -4052,10 +4059,30 @@ class CopilotSession {
   async setModel(model) {
     await this.rpc.model.switchTo({ modelId: model });
   }
+  /**
+   * Log a message to the session timeline.
+   * The message appears in the session event stream and is visible to SDK consumers
+   * and (for non-ephemeral messages) persisted to the session event log on disk.
+   *
+   * @param message - Human-readable message text
+   * @param options - Optional log level and ephemeral flag
+   *
+   * @example
+   * ```typescript
+   * await session.log("Processing started");
+   * await session.log("Disk usage high", { level: "warning" });
+   * await session.log("Connection failed", { level: "error" });
+   * await session.log("Debug info", { ephemeral: true });
+   * ```
+   */
+  async log(message, options) {
+    await this.rpc.log({ message, ...options });
+  }
 }
 
 
 ;// CONCATENATED MODULE: ./node_modules/@github/copilot-sdk/dist/client.js
+
 
 
 
@@ -4100,6 +4127,7 @@ class CopilotClient {
   options;
   isExternalServer = false;
   forceStopping = false;
+  onListModels;
   modelsCache = null;
   modelsCacheLock = Promise.resolve();
   sessionLifecycleHandlers = /* @__PURE__ */ new Set();
@@ -4165,8 +4193,9 @@ class CopilotClient {
     if (options.isChildProcess) {
       this.isExternalServer = true;
     }
+    this.onListModels = options.onListModels;
     this.options = {
-      cliPath: options.cliPath || getBundledCliPath(),
+      cliPath: options.cliUrl ? void 0 : options.cliPath || getBundledCliPath(),
       cliArgs: options.cliArgs ?? [],
       cwd: options.cwd ?? process.cwd(),
       port: options.port || 0,
@@ -4176,7 +4205,7 @@ class CopilotClient {
       cliUrl: options.cliUrl,
       logLevel: options.logLevel || "debug",
       autoStart: options.autoStart ?? true,
-      autoRestart: options.autoRestart ?? true,
+      autoRestart: false,
       env: options.env ?? process.env,
       githubToken: options.githubToken,
       // Default useLoggedInUser to false when githubToken is provided, otherwise true
@@ -4432,36 +4461,8 @@ class CopilotClient {
         throw new Error("Client not connected. Call start() first.");
       }
     }
-    const response = await this.connection.sendRequest("session.create", {
-      model: config.model,
-      sessionId: config.sessionId,
-      clientName: config.clientName,
-      reasoningEffort: config.reasoningEffort,
-      tools: config.tools?.map((tool) => ({
-        name: tool.name,
-        description: tool.description,
-        parameters: toJsonSchema(tool.parameters),
-        overridesBuiltInTool: tool.overridesBuiltInTool
-      })),
-      systemMessage: config.systemMessage,
-      availableTools: config.availableTools,
-      excludedTools: config.excludedTools,
-      provider: config.provider,
-      requestPermission: true,
-      requestUserInput: !!config.onUserInputRequest,
-      hooks: !!(config.hooks && Object.values(config.hooks).some(Boolean)),
-      workingDirectory: config.workingDirectory,
-      streaming: config.streaming,
-      mcpServers: config.mcpServers,
-      envValueMode: "direct",
-      customAgents: config.customAgents,
-      configDir: config.configDir,
-      skillDirectories: config.skillDirectories,
-      disabledSkills: config.disabledSkills,
-      infiniteSessions: config.infiniteSessions
-    });
-    const { sessionId, workspacePath } = response;
-    const session = new CopilotSession(sessionId, this.connection, workspacePath);
+    const sessionId = config.sessionId ?? (0,external_node_crypto_.randomUUID)();
+    const session = new CopilotSession(sessionId, this.connection);
     session.registerTools(config.tools);
     session.registerPermissionHandler(config.onPermissionRequest);
     if (config.onUserInputRequest) {
@@ -4470,7 +4471,47 @@ class CopilotClient {
     if (config.hooks) {
       session.registerHooks(config.hooks);
     }
+    if (config.onEvent) {
+      session.on(config.onEvent);
+    }
     this.sessions.set(sessionId, session);
+    try {
+      const response = await this.connection.sendRequest("session.create", {
+        model: config.model,
+        sessionId,
+        clientName: config.clientName,
+        reasoningEffort: config.reasoningEffort,
+        tools: config.tools?.map((tool) => ({
+          name: tool.name,
+          description: tool.description,
+          parameters: toJsonSchema(tool.parameters),
+          overridesBuiltInTool: tool.overridesBuiltInTool,
+          skipPermission: tool.skipPermission
+        })),
+        systemMessage: config.systemMessage,
+        availableTools: config.availableTools,
+        excludedTools: config.excludedTools,
+        provider: config.provider,
+        requestPermission: true,
+        requestUserInput: !!config.onUserInputRequest,
+        hooks: !!(config.hooks && Object.values(config.hooks).some(Boolean)),
+        workingDirectory: config.workingDirectory,
+        streaming: config.streaming,
+        mcpServers: config.mcpServers,
+        envValueMode: "direct",
+        customAgents: config.customAgents,
+        agent: config.agent,
+        configDir: config.configDir,
+        skillDirectories: config.skillDirectories,
+        disabledSkills: config.disabledSkills,
+        infiniteSessions: config.infiniteSessions
+      });
+      const { workspacePath } = response;
+      session["_workspacePath"] = workspacePath;
+    } catch (e) {
+      this.sessions.delete(sessionId);
+      throw e;
+    }
     return session;
   }
   /**
@@ -4510,37 +4551,7 @@ class CopilotClient {
         throw new Error("Client not connected. Call start() first.");
       }
     }
-    const response = await this.connection.sendRequest("session.resume", {
-      sessionId,
-      clientName: config.clientName,
-      model: config.model,
-      reasoningEffort: config.reasoningEffort,
-      systemMessage: config.systemMessage,
-      availableTools: config.availableTools,
-      excludedTools: config.excludedTools,
-      tools: config.tools?.map((tool) => ({
-        name: tool.name,
-        description: tool.description,
-        parameters: toJsonSchema(tool.parameters),
-        overridesBuiltInTool: tool.overridesBuiltInTool
-      })),
-      provider: config.provider,
-      requestPermission: true,
-      requestUserInput: !!config.onUserInputRequest,
-      hooks: !!(config.hooks && Object.values(config.hooks).some(Boolean)),
-      workingDirectory: config.workingDirectory,
-      configDir: config.configDir,
-      streaming: config.streaming,
-      mcpServers: config.mcpServers,
-      envValueMode: "direct",
-      customAgents: config.customAgents,
-      skillDirectories: config.skillDirectories,
-      disabledSkills: config.disabledSkills,
-      infiniteSessions: config.infiniteSessions,
-      disableResume: config.disableResume
-    });
-    const { sessionId: resumedSessionId, workspacePath } = response;
-    const session = new CopilotSession(resumedSessionId, this.connection, workspacePath);
+    const session = new CopilotSession(sessionId, this.connection);
     session.registerTools(config.tools);
     session.registerPermissionHandler(config.onPermissionRequest);
     if (config.onUserInputRequest) {
@@ -4549,7 +4560,48 @@ class CopilotClient {
     if (config.hooks) {
       session.registerHooks(config.hooks);
     }
-    this.sessions.set(resumedSessionId, session);
+    if (config.onEvent) {
+      session.on(config.onEvent);
+    }
+    this.sessions.set(sessionId, session);
+    try {
+      const response = await this.connection.sendRequest("session.resume", {
+        sessionId,
+        clientName: config.clientName,
+        model: config.model,
+        reasoningEffort: config.reasoningEffort,
+        systemMessage: config.systemMessage,
+        availableTools: config.availableTools,
+        excludedTools: config.excludedTools,
+        tools: config.tools?.map((tool) => ({
+          name: tool.name,
+          description: tool.description,
+          parameters: toJsonSchema(tool.parameters),
+          overridesBuiltInTool: tool.overridesBuiltInTool,
+          skipPermission: tool.skipPermission
+        })),
+        provider: config.provider,
+        requestPermission: true,
+        requestUserInput: !!config.onUserInputRequest,
+        hooks: !!(config.hooks && Object.values(config.hooks).some(Boolean)),
+        workingDirectory: config.workingDirectory,
+        configDir: config.configDir,
+        streaming: config.streaming,
+        mcpServers: config.mcpServers,
+        envValueMode: "direct",
+        customAgents: config.customAgents,
+        agent: config.agent,
+        skillDirectories: config.skillDirectories,
+        disabledSkills: config.disabledSkills,
+        infiniteSessions: config.infiniteSessions,
+        disableResume: config.disableResume
+      });
+      const { workspacePath } = response;
+      session["_workspacePath"] = workspacePath;
+    } catch (e) {
+      this.sessions.delete(sessionId);
+      throw e;
+    }
     return session;
   }
   /**
@@ -4610,15 +4662,15 @@ class CopilotClient {
   /**
    * List available models with their metadata.
    *
+   * If an `onListModels` handler was provided in the client options,
+   * it is called instead of querying the CLI server.
+   *
    * Results are cached after the first successful call to avoid rate limiting.
    * The cache is cleared when the client disconnects.
    *
-   * @throws Error if not authenticated
+   * @throws Error if not connected (when no custom handler is set)
    */
   async listModels() {
-    if (!this.connection) {
-      throw new Error("Client not connected");
-    }
     await this.modelsCacheLock;
     let resolveLock;
     this.modelsCacheLock = new Promise((resolve) => {
@@ -4628,10 +4680,18 @@ class CopilotClient {
       if (this.modelsCache !== null) {
         return [...this.modelsCache];
       }
-      const result = await this.connection.sendRequest("models.list", {});
-      const response = result;
-      const models = response.models;
-      this.modelsCache = models;
+      let models;
+      if (this.onListModels) {
+        models = await this.onListModels();
+      } else {
+        if (!this.connection) {
+          throw new Error("Client not connected");
+        }
+        const result = await this.connection.sendRequest("models.list", {});
+        const response = result;
+        models = response.models;
+      }
+      this.modelsCache = [...models];
       return [...models];
     } finally {
       resolveLock();
@@ -4844,6 +4904,11 @@ class CopilotClient {
       if (this.options.githubToken) {
         envWithoutNodeDebug.COPILOT_SDK_AUTH_TOKEN = this.options.githubToken;
       }
+      if (!this.options.cliPath) {
+        throw new Error(
+          "Path to Copilot CLI is required. Please provide it via the cliPath option, or use cliUrl to rely on a remote CLI."
+        );
+      }
       if (!(0,external_node_fs_.existsSync)(this.options.cliPath)) {
         throw new Error(
           `Copilot CLI not found at ${this.options.cliPath}. Ensure @github/copilot is installed.`
@@ -4943,8 +5008,6 @@ stderr: ${stderrOutput}`
           } else {
             reject(new Error(`CLI server exited with code ${code}`));
           }
-        } else if (this.options.autoRestart && this.state === "connected") {
-          void this.reconnect();
         }
       });
       setTimeout(() => {
@@ -5050,11 +5113,10 @@ stderr: ${stderrOutput}`
       async (params) => await this.handleHooksInvoke(params)
     );
     this.connection.onClose(() => {
-      if (this.state === "connected" && this.options.autoRestart) {
-        void this.reconnect();
-      }
+      this.state = "disconnected";
     });
     this.connection.onError((_error) => {
+      this.state = "disconnected";
     });
   }
   handleSessionEventNotification(notification) {
@@ -5175,7 +5237,10 @@ stderr: ${stderrOutput}`
     try {
       const result = await session._handlePermissionRequestV2(params.permissionRequest);
       return { result };
-    } catch (_error) {
+    } catch (error) {
+      if (error instanceof Error && error.message === NO_RESULT_PERMISSION_V2_ERROR) {
+        throw error;
+      }
       return {
         result: {
           kind: "denied-no-approval-rule-and-could-not-request-from-user"
@@ -5204,17 +5269,6 @@ stderr: ${stderrOutput}`
   }
   isToolResultObject(value) {
     return typeof value === "object" && value !== null && "textResultForLlm" in value && typeof value.textResultForLlm === "string" && "resultType" in value;
-  }
-  /**
-   * Attempt to reconnect to the server
-   */
-  async reconnect() {
-    this.state = "disconnected";
-    try {
-      await this.stop();
-      await this.start();
-    } catch (_error) {
-    }
   }
 }
 
