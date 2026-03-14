@@ -65,7 +65,7 @@ export class WorkerSDK {
   ) {}
 
   /** Spawn a new worker with sensible defaults */
-  spawnWorker(prompt: string, opts: Partial<SpawnOptions> = {}): WorkerInfo {
+  async spawnWorker(prompt: string, opts: Partial<SpawnOptions> = {}): Promise<WorkerInfo> {
     return this.manager.spawn({
       prompt,
       agent: opts.agent ?? this.defaults.agent,
@@ -100,8 +100,8 @@ export class WorkerSDK {
     return this.manager.getStatus(workerId);
   }
 
-  /** Block until worker reaches a terminal state, polling at configurable interval */
-  awaitWorker(workerId: string, opts?: AwaitOptions): WorkerStatus {
+  /** Block until worker reaches a terminal state, event-driven */
+  async awaitWorker(workerId: string, opts?: AwaitOptions): Promise<WorkerStatus> {
     return this.manager.awaitCompletion(workerId, opts);
   }
 
@@ -111,7 +111,7 @@ export class WorkerSDK {
   }
 
   /** Clean up a single worker */
-  cleanupWorker(workerId: string, force = false): CleanupResult {
+  async cleanupWorker(workerId: string, force = false): Promise<CleanupResult> {
     return this.manager.cleanup(workerId, force);
   }
 
@@ -121,14 +121,14 @@ export class WorkerSDK {
   }
 
   /** Clean up all stopped workers */
-  cleanupAll(force = false): CleanupResult[] {
+  async cleanupAll(force = false): Promise<CleanupResult[]> {
     const workers = this.manager.listWorkers();
     const results: CleanupResult[] = [];
 
     for (const w of workers) {
       if (w.status !== 'running' || force) {
         try {
-          results.push(this.manager.cleanup(w.workerId, force));
+          results.push(await this.manager.cleanup(w.workerId, force));
         } catch {
           // Skip workers that fail to clean up
         }

@@ -1,165 +1,94 @@
 /**
- * WorkerManager - TypeScript equivalent of spawn-worker.sh, worker-status.sh, cleanup-worker.sh
+ * WorkerManager — slim orchestrator delegating to WorktreeManager, StateStore, and SessionRunner.
  *
- * Manages Copilot CLI worker processes in isolated git worktrees.
+ * Manages Copilot CLI worker SDK sessions in isolated git worktrees.
  */
 
-import { execSync, execFileSync, spawn } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, writeFileSync, rmSync, readdirSync, statSync, createWriteStream } from 'node:fs';
-import { join, resolve, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { execSync } from 'node:child_process';
+import { existsSync, readFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import type { SpawnOptions, WorkerInfo, WorkerStatus, CleanupResult, WorkerMeta, ValidateWorkerOptions, ValidationResult } from './types.js';
-import { applyContext } from './context-providers.js';
+import { WorktreeManager } from './worktree.js';
+import { StateStore, type ExitData } from './state.js';
+import { SessionRunner } from './session.js';
+import { applyContext } from './context.js';
+import type {
+  SpawnOptions,
+  WorkerInfo,
+  WorkerStatus,
+  CleanupResult,
+  WorkerMeta,
+  ValidateWorkerOptions,
+  ValidationResult,
+  AwaitOptions,
+} from './types.js';
 
 export class WorkerManager {
-  private workersDir: string;
+  private readonly worktreeManager: WorktreeManager;
+  private readonly stateStore: StateStore;
+  private readonly sessionRunner: SessionRunner;
+  private readonly workersDir: string;
 
-  constructor(private repoRoot: string) {
+  private static readonly TERMINAL_STATUSES = new Set([
+    'completed', 'failed', 'spawn_failed', 'completed_no_exit',
+  ]);
+
+  constructor(private readonly repoRoot: string) {
     this.workersDir = join(repoRoot, '.copilot-workers');
+    this.worktreeManager = new WorktreeManager(repoRoot);
+    this.stateStore = new StateStore(this.workersDir);
+    this.sessionRunner = new SessionRunner(this.stateStore);
   }
 
-  /** Spawn a new Copilot CLI worker in an isolated worktree */
-  spawn(opts: SpawnOptions): WorkerInfo {
+  /**
+   * Spawn a new worker SDK session in an isolated git worktree.
+   * Returns a WorkerInfo immediately; the session runs asynchronously.
+   */
+  async spawn(opts: SpawnOptions): Promise<WorkerInfo> {
     if (!opts.prompt) throw new Error('prompt is required');
-    if (opts.taskId && existsSync(this.workersDir)) {
-      const entries = readdirSync(this.workersDir, { withFileTypes: true });
-      for (const entry of entries) {
-        if (!entry.isDirectory()) continue;
-        const metaPath = join(this.workersDir, entry.name, 'meta.json');
-        if (!existsSync(metaPath)) continue;
+
+    // Task deduplication: reject if a running session shares this taskId
+    if (opts.taskId) {
+      for (const wid of this.stateStore.listWorkerIds()) {
         try {
-          const existingMeta: WorkerMeta = JSON.parse(readFileSync(metaPath, 'utf-8'));
-          if (existingMeta.task_id !== opts.taskId) continue;
-          const existing = this.getStatus(entry.name);
-          if (existing.status === 'running' || existing.status === 'spawning') {
+          const existing = this.stateStore.readMeta(wid);
+          if (existing.task_id !== opts.taskId) continue;
+          if (this.sessionRunner.isActive(wid) ||
+              existing.status === 'spawning' ||
+              existing.status === 'running') {
             throw new Error(
-              `taskId already active: ${opts.taskId} (workerId=${existing.workerId}, status=${existing.status}, pid=${existing.pid})`
+              `taskId already active: ${opts.taskId} (workerId=${wid}, status=${existing.status})`,
             );
           }
-        } catch (error) {
-          if (error instanceof Error && error.message.includes('taskId already active:')) {
-            throw error;
-          }
+        } catch (err) {
+          if (err instanceof Error && err.message.includes('taskId already active:')) throw err;
         }
       }
     }
 
     const workerId = randomUUID();
-    const worktreeBase = opts.worktreeBase ?? '../worktrees';
-    const branchPrefix = opts.branchPrefix ?? 'worker';
 
-    // Resolve worktree path
-    const worktreeBaseAbs = resolve(this.repoRoot, worktreeBase);
-    mkdirSync(worktreeBaseAbs, { recursive: true });
-    const worktreePath = join(worktreeBaseAbs, workerId);
+    // 1. Create git worktree + state directory
+    const { worktreePath, branchName, baseSha, stateDir } = this.worktreeManager.create({
+      workerId,
+      worktreeBase: opts.worktreeBase,
+      branchPrefix: opts.branchPrefix,
+    });
 
-    // Branch name
-    const branchName = `${branchPrefix}/${workerId}`;
-
-    // State directory
-    const stateDir = join(this.workersDir, workerId);
-    mkdirSync(stateDir, { recursive: true });
-
-    // Create git worktree
-    try {
-      execFileSync('git', ['worktree', 'add', '-b', branchName, worktreePath, 'HEAD'], {
-        cwd: this.repoRoot,
-        stdio: 'pipe',
-      });
-    } catch {
-      rmSync(stateDir, { recursive: true, force: true });
-      throw new Error('Failed to create git worktree');
-    }
-
-    // Apply context providers (symlinks, env, files, prompt sections)
-    const { env: contextEnv, prompt: augmentedPrompt, result: contextResult } = applyContext(
+    // 2. Apply context providers (symlinks, files, prompt sections)
+    //    NOTE: env vars from context providers are not forwarded to the in-process SDK session.
+    const { prompt: augmentedPrompt, result: contextResult } = applyContext(
       opts.contextProviders ?? [],
       this.repoRoot,
       worktreePath,
       workerId,
-      opts.prompt
+      opts.prompt,
     );
 
-    // Build copilot command
-    const args: string[] = [];
-    if (opts.allowAll) {
-      args.push('--allow-all');
-    } else {
-      args.push('--allow-all-tools');
-    }
-    if (opts.agent) args.push('--agent', opts.agent);
-    if (opts.model) args.push('--model', opts.model);
-    if (!opts.allowAll && opts.allowAllPaths) {
-      args.push('--allow-all-paths');
-    } else if (!opts.allowAll && opts.addDirs) {
-      for (const dir of opts.addDirs) {
-        args.push('--add-dir', dir);
-      }
-    }
-    if (!opts.allowAll && opts.allowAllUrls) args.push('--allow-all-urls');
-    appendVariadicFlag(args, '--allow-tool', opts.allowTools);
-    appendVariadicFlag(args, '--deny-tool', opts.denyTools);
-    appendVariadicFlag(args, '--available-tools', opts.availableTools);
-    appendVariadicFlag(args, '--excluded-tools', opts.excludedTools);
-    appendVariadicFlag(args, '--allow-url', opts.allowUrls);
-    appendVariadicFlag(args, '--deny-url', opts.denyUrls);
-    if (opts.disallowTempDir) args.push('--disallow-temp-dir');
-    if (opts.noAskUser) args.push('--no-ask-user');
-    if (opts.disableParallelToolsExecution) args.push('--disable-parallel-tools-execution');
-    if (opts.stream !== undefined) {
-      if (opts.stream !== 'on' && opts.stream !== 'off') {
-        throw new Error(`Invalid stream mode: ${opts.stream}`);
-      }
-      args.push('--stream', opts.stream);
-    }
-    if (opts.autopilot) args.push('--autopilot');
-    if (opts.maxAutopilotContinues !== undefined) {
-      if (!Number.isInteger(opts.maxAutopilotContinues) || opts.maxAutopilotContinues < 0) {
-        throw new Error(`Invalid maxAutopilotContinues: ${opts.maxAutopilotContinues}`);
-      }
-      args.push('--max-autopilot-continues', String(opts.maxAutopilotContinues));
-    }
-    args.push('--prompt', augmentedPrompt);
-
-    // Build env for wrapper
-    const wrapperEnv: Record<string, string> = {
-      ...process.env as Record<string, string>,
-      ...contextEnv,
-      WORKER_STATE_DIR: stateDir,
-    };
-    if (opts.autoCommit) {
-      wrapperEnv.WORKER_AUTO_COMMIT = '1';
-      if (typeof opts.autoCommit === 'string') {
-        wrapperEnv.WORKER_COMMIT_MSG = opts.autoCommit;
-      }
-    }
-
-    // Spawn detached copilot process via wrapper script
-    const outputLog = join(stateDir, 'output.log');
-    const wrapperPath = resolveWorkerWrapperPath(dirname(fileURLToPath(import.meta.url)));
-    const child = spawn(process.execPath, [wrapperPath, ...args], {
-      cwd: worktreePath,
-      detached: true,
-      stdio: ['ignore', 'pipe', 'pipe'],
-      env: wrapperEnv,
-    });
-
-    // Redirect stdout+stderr to log file
-    const logStream = createWriteStream(outputLog);
-    child.stdout?.pipe(logStream);
-    child.stderr?.pipe(logStream);
-    child.unref();
-
-    const pid = child.pid!;
-
-    // Write PID file
-    writeFileSync(join(stateDir, 'worker.pid'), String(pid));
-
-    // Write metadata
+    // 3. Initialise persistent state
     const meta: WorkerMeta = {
       worker_id: workerId,
-      pid,
+      pid: 0,
       worktree_path: worktreePath,
       branch_name: branchName,
       prompt: opts.prompt,
@@ -169,149 +98,136 @@ export class WorkerManager {
       status: 'spawning',
       task_id: opts.taskId,
       context_providers: contextResult,
+      base_sha: baseSha,
     };
-    const metaPath = join(stateDir, 'meta.json');
-    writeFileSync(metaPath, JSON.stringify(meta, null, 2));
+    this.stateStore.initWorker(workerId, meta);
 
-    const setMetaStatus = (nextStatus: WorkerMeta['status']): void => {
-      try {
-        const current: WorkerMeta = JSON.parse(readFileSync(metaPath, 'utf-8'));
-        if (current.status !== 'spawning') return;
-        current.status = nextStatus;
-        writeFileSync(metaPath, JSON.stringify(current, null, 2));
-      } catch {
-        // Ignore transient IO/parse races for status updates
-      }
-    };
-    child.once('spawn', () => setMetaStatus('running'));
-    child.once('error', () => setMetaStatus('spawn_failed'));
-    setTimeout(() => {
-      setMetaStatus(isProcessRunning(pid) ? 'running' : 'spawn_failed');
-    }, 100);
+    // 4. Start SDK session (fire-and-forget; errors are captured into state)
+    const sessionOpts: SpawnOptions = { ...opts, prompt: augmentedPrompt };
+    this.sessionRunner.start(workerId, worktreePath, sessionOpts).catch((err: unknown) => {
+      this.stateStore.updateStatus(workerId, 'spawn_failed');
+      this.stateStore.appendEvent(workerId, {
+        type: 'session.error',
+        data: { error: err instanceof Error ? err.message : String(err) },
+        timestamp: new Date().toISOString(),
+      });
+    });
+
+    const eventsLog = join(stateDir, 'events.ndjson');
 
     return {
       workerId,
-      pid,
+      pid: 0,
       copilotPid: 0,
       worktreePath,
       branchName,
       stateDir,
-      outputLog,
+      outputLog: eventsLog,
       status: 'spawning',
+      baseSha,
+      interactive: true,
+      eventsLog,
     };
   }
 
-  /** Get detailed status of a specific worker */
+  /**
+   * Get detailed status for a worker, combining state store and live session info.
+   */
   getStatus(workerId: string): WorkerStatus {
-    const stateDir = join(this.workersDir, workerId);
-    if (!existsSync(stateDir)) {
+    if (!this.stateStore.exists(workerId)) {
       throw new Error(`Worker not found: ${workerId}`);
     }
 
-    const metaPath = join(stateDir, 'meta.json');
-    if (!existsSync(metaPath)) {
-      throw new Error(`Worker metadata not found: ${workerId}`);
-    }
+    const meta = this.stateStore.readMeta(workerId);
+    const stateDir = join(this.workersDir, workerId);
+    const isActive = this.sessionRunner.isActive(workerId);
+    const sessionInfo = this.sessionRunner.getSessionInfo(workerId);
 
-    const meta: WorkerMeta = JSON.parse(readFileSync(metaPath, 'utf-8'));
-    const metaStatus = meta.status ?? 'running';
-
-    // Check PID
-    let pid = 0;
-    let copilotPid = 0;
-    let status: WorkerStatus['status'] = metaStatus === 'spawn_failed' ? 'spawn_failed' : 'unknown';
-    const pidPath = join(stateDir, 'worker.pid');
-    const copilotPidPath = join(stateDir, 'copilot.pid');
-    if (status !== 'spawn_failed' && existsSync(pidPath)) {
-      pid = parseInt(readFileSync(pidPath, 'utf-8').trim(), 10);
-      if (existsSync(copilotPidPath)) {
-        copilotPid = parseInt(readFileSync(copilotPidPath, 'utf-8').trim(), 10);
-      }
-      const wrapperRunning = isProcessRunning(pid);
-      const copilotRunning = copilotPid > 0 && isProcessRunning(copilotPid);
-      
-      if (wrapperRunning || copilotRunning) {
-        status = 'running';
-      } else {
-        // Neither process running, default to unknown (will check exit.json below)
-        status = 'unknown';
+    // Read exit.json once (used for status + hasDirtyWorkingTree + fallback fields)
+    const exitPath = join(stateDir, 'exit.json');
+    let exitData: ExitData | null = null;
+    if (existsSync(exitPath)) {
+      try {
+        exitData = JSON.parse(readFileSync(exitPath, 'utf-8')) as ExitData;
+      } catch {
+        // Malformed exit.json — treat as absent
       }
     }
 
-    // Read exit.json if process is not running
+    // Determine effective status
+    let status: WorkerStatus['status'];
+    if (meta.status === 'spawn_failed') {
+      status = 'spawn_failed';
+    } else if (isActive) {
+      status = meta.status === 'spawning' ? 'spawning' : 'running';
+    } else if (exitData !== null) {
+      status = exitData.exitCode === 0 ? 'completed' : 'failed';
+    } else if (meta.status === 'completed') {
+      status = 'completed';
+    } else if (meta.status === 'failed') {
+      status = 'failed';
+    } else if (meta.status === 'running') {
+      status = 'completed_no_exit';
+    } else {
+      status = 'unknown';
+    }
+
+    // Read WorkerHistory for completed workers (rich commit/exit data)
+    const history = this.stateStore.readHistory(workerId);
+
     let exitCode: number | null = null;
     let completedAt: string | null = null;
     let commits: string[] = [];
     let filesChanged: string[] = [];
-    let hasDirtyWorkingTree = false;
-    let logTail: string[] = [];
+    const hasDirtyWorkingTree = exitData?.hasDirtyWorkingTree ?? false;
+
+    if (history) {
+      exitCode = history.exitCode;
+      completedAt = history.completedAt;
+      commits = history.commits.map(c => c.message);
+      filesChanged = history.filesChanged;
+    } else if (exitData) {
+      exitCode = exitData.exitCode;
+      completedAt = exitData.completedAt;
+      commits = exitData.commits ?? [];
+      filesChanged = exitData.filesChanged ?? [];
+    }
+
+    // Events tail serves as the log equivalent for SDK sessions
+    const events = this.stateStore.readEvents(workerId, { tail: 20 });
+    const logTail = events.map(e => JSON.stringify(e));
+
+    // Error summary from the most recent session.error event
     let errorSummary: string | null = null;
-    const exitPath = join(stateDir, 'exit.json');
-
-    if (status !== 'running' && status !== 'spawn_failed') {
-      if (existsSync(exitPath)) {
-        try {
-          const exitData = JSON.parse(readFileSync(exitPath, 'utf-8'));
-          exitCode = exitData.exitCode ?? null;
-          completedAt = exitData.completedAt ?? null;
-          if (Array.isArray(exitData.commits)) commits = exitData.commits;
-          if (Array.isArray(exitData.filesChanged)) filesChanged = exitData.filesChanged;
-          if (typeof exitData.hasDirtyWorkingTree === 'boolean') hasDirtyWorkingTree = exitData.hasDirtyWorkingTree;
-          
-          // Set status based on exit code
-          if (exitCode === 0) {
-            status = 'completed';
-          } else if (exitCode !== null) {
-            status = 'failed';
-          }
-        } catch {
-          // Invalid exit.json, keep status as 'unknown'
+    if (status === 'failed') {
+      for (let i = events.length - 1; i >= 0; i--) {
+        const evt = events[i];
+        if (evt.type === 'session.error') {
+          errorSummary = evt.data.error;
+          break;
         }
-      } else if (metaStatus === 'running') {
-        status = 'completed_no_exit';
       }
     }
 
-    // Check worktree
-    const worktreeExists = existsSync(meta.worktree_path);
-
-    // Check log and read tail
-    const logPath = join(stateDir, 'output.log');
-    let logSizeBytes = 0;
-    let logLines = 0;
-    if (existsSync(logPath)) {
-      const logStat = statSync(logPath);
-      logSizeBytes = logStat.size;
-      const logContent = readFileSync(logPath, 'utf-8');
-      const allLines = logContent.split('\n');
-      logLines = allLines.length;
-      
-      // Get last 20 non-empty lines
-      const nonEmptyLines = allLines.filter(l => l.trim().length > 0);
-      logTail = nonEmptyLines.slice(-20);
-      
-      // If failed, get error summary (last non-empty line)
-      if (status === 'failed' && logTail.length > 0) {
-        errorSummary = logTail[logTail.length - 1];
-      }
-    }
+    const worktreeExists = Boolean(meta.worktree_path) && existsSync(meta.worktree_path);
+    const eventsLog = join(stateDir, 'events.ndjson');
 
     return {
       workerId,
-      pid,
-      copilotPid,
+      pid: meta.pid,
+      copilotPid: 0,
       worktreePath: meta.worktree_path,
       branchName: meta.branch_name,
       stateDir,
-      outputLog: logPath,
+      outputLog: eventsLog,
       status,
       prompt: meta.prompt,
       agent: meta.agent || null,
       model: meta.model || null,
       startedAt: meta.started_at,
       worktreeExists,
-      logSizeBytes,
-      logLines,
+      logSizeBytes: 0,
+      logLines: events.length,
       exitCode,
       completedAt,
       logTail,
@@ -319,79 +235,66 @@ export class WorkerManager {
       commits,
       filesChanged,
       hasDirtyWorkingTree,
+      eventCount: sessionInfo?.eventCount ?? history?.eventCount ?? events.length,
+      lastToolUsed: sessionInfo?.lastToolUsed ?? null,
+      turnCount: sessionInfo?.turnCount ?? history?.turnCount ?? 0,
+      baseSha: meta.base_sha,
+      sessionId: meta.session_id,
+      interactive: true,
+      eventsLog,
     };
   }
 
-  /** List all workers with basic info. When autoCleanup is true, non-running workers are cleaned up before returning. */
-  listWorkers(opts?: { autoCleanup?: boolean }): Array<{ workerId: string; pid: number; status: WorkerStatus['status']; taskId?: string }> {
-    if (!existsSync(this.workersDir)) return [];
-
-    const entries = readdirSync(this.workersDir, { withFileTypes: true });
+  /**
+   * List all known workers with lightweight status info.
+   * When autoCleanup is true, stale workers are cleaned up asynchronously.
+   */
+  listWorkers(
+    opts?: { autoCleanup?: boolean },
+  ): Array<{ workerId: string; pid: number; status: WorkerStatus['status']; taskId?: string }> {
+    const workerIds = this.stateStore.listWorkerIds();
     const workers: Array<{ workerId: string; pid: number; status: WorkerStatus['status']; taskId?: string }> = [];
 
-    for (const entry of entries) {
-      if (!entry.isDirectory()) continue;
-      const workerId = entry.name;
-      const pidPath = join(this.workersDir, workerId, 'worker.pid');
-      const metaPath = join(this.workersDir, workerId, 'meta.json');
-
-      let pid = 0;
+    for (const workerId of workerIds) {
       let status: WorkerStatus['status'] = 'unknown';
       let taskId: string | undefined;
-      let metaStatus: string | undefined;
 
-      if (existsSync(metaPath)) {
-        try {
-          const meta: WorkerMeta = JSON.parse(readFileSync(metaPath, 'utf-8'));
-          taskId = meta.task_id;
-          metaStatus = meta.status;
-        } catch {
-          // Ignore invalid metadata while listing workers
-        }
-      }
+      try {
+        const meta = this.stateStore.readMeta(workerId);
+        taskId = meta.task_id;
 
-      // Honor spawn_failed from meta before PID checks
-      if (metaStatus === 'spawn_failed') {
-        status = 'spawn_failed';
-      } else if (existsSync(pidPath)) {
-        pid = parseInt(readFileSync(pidPath, 'utf-8').trim(), 10);
-        const isRunning = isProcessRunning(pid);
-        
-        if (isRunning) {
-          status = metaStatus === 'spawning' ? 'spawning' : 'running';
+        if (meta.status === 'spawn_failed') {
+          status = 'spawn_failed';
+        } else if (this.sessionRunner.isActive(workerId)) {
+          status = meta.status === 'spawning' ? 'spawning' : 'running';
         } else {
-          // Process stopped, check for exit.json
           const exitPath = join(this.workersDir, workerId, 'exit.json');
           if (existsSync(exitPath)) {
             try {
-              const exitData = JSON.parse(readFileSync(exitPath, 'utf-8'));
-              const exitCode = exitData.exitCode ?? null;
-              if (exitCode === 0) {
-                status = 'completed';
-              } else if (exitCode !== null) {
-                status = 'failed';
-              }
+              const exitData: ExitData = JSON.parse(readFileSync(exitPath, 'utf-8'));
+              status = exitData.exitCode === 0 ? 'completed' : 'failed';
             } catch {
-              // Invalid exit.json
               status = 'unknown';
             }
-          } else if (metaStatus === 'running') {
+          } else if (meta.status === 'completed') {
+            status = 'completed';
+          } else if (meta.status === 'failed') {
+            status = 'failed';
+          } else if (meta.status === 'running') {
             status = 'completed_no_exit';
           }
         }
+      } catch {
+        // Skip workers with unreadable metadata
       }
 
-      workers.push({ workerId, pid, status, taskId });
+      workers.push({ workerId, pid: 0, status, taskId });
     }
 
     if (opts?.autoCleanup) {
       const stale = workers.filter(w => w.status !== 'running' && w.status !== 'spawning');
       for (const w of stale) {
-        try {
-          this.cleanup(w.workerId, true);
-        } catch {
-          // Skip workers that fail to clean up
-        }
+        this.cleanup(w.workerId, true).catch(() => { /* ignore cleanup errors in autoCleanup */ });
       }
       return workers.filter(w => !stale.some(s => s.workerId === w.workerId));
     }
@@ -399,59 +302,59 @@ export class WorkerManager {
     return workers;
   }
 
-  /** Terminal statuses that awaitCompletion considers "done" */
-  private static TERMINAL_STATUSES = new Set([
-    'completed', 'failed', 'spawn_failed', 'completed_no_exit',
-  ]);
-
   /**
-   * Poll getStatus() until the worker reaches a terminal state.
-   * Returns the final WorkerStatus.
-   *
-   * @throws if timeout is exceeded
-   * @throws if worker is not found
+   * Wait for a worker session to reach a terminal state.
+   * Event-driven via SessionRunner — no Atomics.wait polling.
    */
-  awaitCompletion(workerId: string, opts: import('./types.js').AwaitOptions = {}): WorkerStatus {
-    const pollInterval = opts.pollIntervalMs ?? 3000;
-    const timeout = opts.timeoutMs ?? 0; // 0 = no limit
-    const deadline = timeout > 0 ? Date.now() + timeout : 0;
-
-    while (true) {
-      const status = this.getStatus(workerId);
-
-      if (opts.onProgress) {
-        try { opts.onProgress(status); } catch { /* ignore callback errors */ }
-      }
-
-      if (WorkerManager.TERMINAL_STATUSES.has(status.status)) {
-        return status;
-      }
-
-      // Check timeout
-      if (deadline > 0 && Date.now() + pollInterval > deadline) {
-        throw new Error(
-          `Timed out waiting for worker ${workerId} after ${timeout}ms (last status: ${status.status})`
-        );
-      }
-
-      sleepMs(pollInterval);
-    }
-  }
-
-  /** Validate a worker's actual output: commits, file scope, build result */
-  validateWorker(workerId: string, opts: ValidateWorkerOptions = {}): ValidationResult {
-    const stateDir = join(this.workersDir, workerId);
-    if (!existsSync(stateDir)) {
+  async awaitCompletion(workerId: string, opts: AwaitOptions = {}): Promise<WorkerStatus> {
+    if (!this.stateStore.exists(workerId)) {
       throw new Error(`Worker not found: ${workerId}`);
     }
 
-    const metaPath = join(stateDir, 'meta.json');
-    if (!existsSync(metaPath)) {
-      throw new Error(`Worker metadata not found: ${workerId}`);
+    // Return immediately if already terminal
+    const current = this.getStatus(workerId);
+    if (WorkerManager.TERMINAL_STATUSES.has(current.status)) {
+      return current;
     }
 
-    const meta: WorkerMeta = JSON.parse(readFileSync(metaPath, 'utf-8'));
+    // Optional progress reporting while the session runs
+    let progressTimer: ReturnType<typeof setInterval> | undefined;
+    if (opts.onProgress) {
+      const onProgress = opts.onProgress;
+      progressTimer = setInterval(() => {
+        try { onProgress(this.getStatus(workerId)); } catch { /* ignore callback errors */ }
+      }, opts.pollIntervalMs ?? 3_000);
+    }
+
+    try {
+      await this.sessionRunner.awaitCompletion(workerId, opts.timeoutMs);
+    } finally {
+      if (progressTimer !== undefined) clearInterval(progressTimer);
+    }
+
+    return this.getStatus(workerId);
+  }
+
+  /**
+   * Send a follow-up message to an active worker session.
+   * Returns the assistant's response text, or null if the session is inactive.
+   */
+  async sendMessage(workerId: string, message: string): Promise<string | null> {
+    return this.sessionRunner.sendMessage(workerId, message);
+  }
+
+  /**
+   * Validate a worker's output: commits present, file scope, optional build check.
+   * Uses base_sha for accurate diff base.
+   */
+  validateWorker(workerId: string, opts: ValidateWorkerOptions = {}): ValidationResult {
+    if (!this.stateStore.exists(workerId)) {
+      throw new Error(`Worker not found: ${workerId}`);
+    }
+
+    const meta = this.stateStore.readMeta(workerId);
     const requireCommits = opts.requireCommits !== false;
+    const diffBase = meta.base_sha ?? 'HEAD';
 
     const result: ValidationResult = {
       valid: true,
@@ -465,11 +368,11 @@ export class WorkerManager {
       errors: [],
     };
 
-    // 1. Get commits on worker branch vs HEAD
+    // 1. Commits on worker branch since base
     try {
       const commitLog = execSync(
-        `git log --oneline HEAD..${meta.branch_name}`,
-        { cwd: this.repoRoot, stdio: 'pipe', encoding: 'utf-8' }
+        `git log --oneline ${diffBase}..${meta.branch_name}`,
+        { cwd: this.repoRoot, stdio: 'pipe', encoding: 'utf-8' },
       ).trim();
       if (commitLog.length > 0) {
         const lines = commitLog.split('\n').filter(l => l.trim().length > 0);
@@ -478,8 +381,7 @@ export class WorkerManager {
         result.commitMessages = lines.map(l => l.replace(/^[a-f0-9]+ /, ''));
       }
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      result.errors.push(`Failed to read commits: ${msg}`);
+      result.errors.push(`Failed to read commits: ${err instanceof Error ? err.message : String(err)}`);
       result.valid = false;
     }
 
@@ -488,214 +390,93 @@ export class WorkerManager {
       result.errors.push('No commits found on worker branch');
     }
 
-    // 2. Get changed files
+    // 2. Changed files vs base (three-dot diff finds the merge base)
     try {
       const diffOutput = execSync(
-        `git diff --name-only HEAD...${meta.branch_name}`,
-        { cwd: this.repoRoot, stdio: 'pipe', encoding: 'utf-8' }
+        `git diff --name-only ${diffBase}...${meta.branch_name}`,
+        { cwd: this.repoRoot, stdio: 'pipe', encoding: 'utf-8' },
       ).trim();
       if (diffOutput.length > 0) {
         result.filesChanged = diffOutput.split('\n').filter(l => l.trim().length > 0);
       }
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      result.errors.push(`Failed to read changed files: ${msg}`);
+      result.errors.push(`Failed to read changed files: ${err instanceof Error ? err.message : String(err)}`);
       result.valid = false;
     }
 
-    // 3. Check path scope
-    if (result.filesChanged.length > 0) {
-      for (const file of result.filesChanged) {
-        // Check required prefixes (file must match at least one)
-        if (opts.requiredPathPrefixes && opts.requiredPathPrefixes.length > 0) {
-          const matchesRequired = opts.requiredPathPrefixes.some(prefix => file.startsWith(prefix));
-          if (!matchesRequired) {
-            result.scopeViolations.push(file);
-          }
-        }
-        // Check forbidden prefixes (file must not match any)
-        if (opts.forbiddenPathPrefixes && opts.forbiddenPathPrefixes.length > 0) {
-          const matchesForbidden = opts.forbiddenPathPrefixes.some(prefix => file.startsWith(prefix));
-          if (matchesForbidden && !result.scopeViolations.includes(file)) {
-            result.scopeViolations.push(file);
-          }
+    // 3. Path scope check
+    for (const file of result.filesChanged) {
+      if (opts.requiredPathPrefixes?.length) {
+        if (!opts.requiredPathPrefixes.some(prefix => file.startsWith(prefix))) {
+          result.scopeViolations.push(file);
         }
       }
-      if (result.scopeViolations.length > 0) {
-        result.valid = false;
+      if (opts.forbiddenPathPrefixes?.length) {
+        if (opts.forbiddenPathPrefixes.some(prefix => file.startsWith(prefix)) &&
+            !result.scopeViolations.includes(file)) {
+          result.scopeViolations.push(file);
+        }
       }
     }
+    if (result.scopeViolations.length > 0) result.valid = false;
 
-    // 4. Run build command in worktree if provided
-    if (opts.buildCommand && meta.worktree_path && existsSync(meta.worktree_path)) {
-      try {
-        const buildOutput = execSync(opts.buildCommand, {
-          cwd: meta.worktree_path,
-          stdio: 'pipe',
-          encoding: 'utf-8',
-          timeout: 120000,
-        });
-        result.buildPassed = true;
-        result.buildOutput = buildOutput;
-      } catch (err: unknown) {
+    // 4. Optional build command run inside the worktree
+    if (opts.buildCommand) {
+      if (meta.worktree_path && existsSync(meta.worktree_path)) {
+        try {
+          result.buildOutput = execSync(opts.buildCommand, {
+            cwd: meta.worktree_path,
+            stdio: 'pipe',
+            encoding: 'utf-8',
+            timeout: 120_000,
+          });
+          result.buildPassed = true;
+        } catch (err) {
+          result.buildPassed = false;
+          const e = err as { stdout?: string; stderr?: string; message?: string };
+          result.buildOutput = (e.stdout ?? '') + (e.stderr ?? '') || (e.message ?? 'Build failed');
+          result.valid = false;
+        }
+      } else {
         result.buildPassed = false;
-        const execErr = err as { stdout?: string; stderr?: string; message?: string };
-        result.buildOutput = (execErr.stdout ?? '') + (execErr.stderr ?? '');
-        if (!result.buildOutput) {
-          result.buildOutput = execErr.message ?? 'Build failed';
-        }
+        result.buildOutput = 'Worktree does not exist';
+        result.errors.push('Cannot run build: worktree does not exist');
         result.valid = false;
       }
-    } else if (opts.buildCommand && (!meta.worktree_path || !existsSync(meta.worktree_path))) {
-      result.buildPassed = false;
-      result.buildOutput = 'Worktree does not exist';
-      result.errors.push('Cannot run build: worktree does not exist');
-      result.valid = false;
     }
 
     return result;
   }
 
-  /** Clean up a worker: kill process, remove worktree, delete state */
-  cleanup(workerId: string, force = false): CleanupResult {
-    const stateDir = join(this.workersDir, workerId);
-    if (!existsSync(stateDir)) {
+  /**
+   * Clean up a worker: stop SDK session, remove worktree + branch,
+   * deregister from agents-hub, then delete state.
+   */
+  async cleanup(workerId: string, force = false): Promise<CleanupResult> {
+    if (!this.stateStore.exists(workerId)) {
       throw new Error(`Worker not found: ${workerId}`);
     }
 
-    const metaPath = join(stateDir, 'meta.json');
-    if (!existsSync(metaPath)) {
-      throw new Error(`Worker metadata not found: ${workerId}`);
+    const meta = this.stateStore.readMeta(workerId);
+
+    if (!force && this.sessionRunner.isActive(workerId)) {
+      throw new Error(`Worker ${workerId} is still active; use force=true to force cleanup.`);
     }
 
-    const meta: WorkerMeta = JSON.parse(readFileSync(metaPath, 'utf-8'));
+    // 1. Gracefully stop SDK session (no-op if already stopped)
+    await this.sessionRunner.stop(workerId);
 
-    // Kill process if running
-    const pidPath = join(stateDir, 'worker.pid');
-    const copilotPidPath = join(stateDir, 'copilot.pid');
-    const exitPath = join(stateDir, 'exit.json');
-    if (existsSync(pidPath)) {
-      const pid = parseInt(readFileSync(pidPath, 'utf-8').trim(), 10);
-      let copilotPid = 0;
-      if (existsSync(copilotPidPath)) {
-        copilotPid = parseInt(readFileSync(copilotPidPath, 'utf-8').trim(), 10);
-      }
+    // 2. Remove git worktree + branch
+    const { worktreeRemoved, branchDeleted } = this.worktreeManager.remove(
+      meta.worktree_path,
+      meta.branch_name,
+    );
 
-      // Helper: terminate a single PID with SIGTERM, wait, escalate to group/force
-      const terminatePid = (targetPid: number): void => {
-        if (!isProcessRunning(targetPid)) return;
-
-        const lifecycleStatus = meta.status ?? 'running';
-        if (!force && lifecycleStatus === 'spawning') {
-          throw new Error(`Worker ${workerId} is still spawning; cleanup requires force=true.`);
-        }
-        try {
-          process.kill(targetPid, 'SIGTERM');
-        } catch { /* ignore */ }
-
-        // Wait for graceful shutdown (max 5s)
-        const deadline = Date.now() + 5000;
-        while (Date.now() < deadline && isProcessRunning(targetPid)) {
-          sleepMs(500);
-        }
-
-        // Escalate to process tree TERM for any remaining descendants.
-        if (isProcessRunning(targetPid)) {
-          if (process.platform === 'win32') {
-            try {
-              execSync(`taskkill /PID ${targetPid} /T`, { stdio: 'ignore' });
-            } catch { /* ignore */ }
-          } else {
-            try {
-              process.kill(-targetPid, 'SIGTERM');
-            } catch { /* ignore */ }
-          }
-
-          const groupDeadline = Date.now() + 5000;
-          while (Date.now() < groupDeadline && isProcessRunning(targetPid)) {
-            sleepMs(500);
-          }
-        }
-
-        // Force kill if still running
-        if (isProcessRunning(targetPid)) {
-          if (!force) {
-            throw new Error(`Process ${targetPid} still running. Use force=true to kill.`);
-          }
-          if (process.platform === 'win32') {
-            try {
-              execSync(`taskkill /PID ${targetPid} /T /F`, { stdio: 'ignore' });
-            } catch { /* ignore */ }
-          } else {
-            try {
-              process.kill(-targetPid, 'SIGKILL');
-            } catch { /* ignore */ }
-          }
-
-          const killDeadline = Date.now() + 2000;
-          while (Date.now() < killDeadline && isProcessRunning(targetPid)) {
-            sleepMs(500);
-          }
-        }
-
-        if (isProcessRunning(targetPid)) {
-          throw new Error(`Process ${targetPid} still running after force cleanup.`);
-        }
-      };
-
-      // Terminate wrapper first, then copilot child
-      if (isProcessRunning(pid)) {
-        terminatePid(pid);
-      }
-      if (copilotPid > 0 && isProcessRunning(copilotPid)) {
-        terminatePid(copilotPid);
-      }
-
-      if (force && !isProcessRunning(pid) && !existsSync(exitPath)) {
-        writeSyntheticExitMetadata(exitPath, 'cleanup');
-      }
-    }
-
-    // Remove worktree
-    let worktreeRemoved = false;
-    if (meta.worktree_path && existsSync(meta.worktree_path)) {
-      try {
-        execFileSync('git', ['worktree', 'remove', meta.worktree_path, '--force'], {
-          cwd: this.repoRoot,
-          stdio: 'pipe',
-        });
-        worktreeRemoved = true;
-      } catch {
-        worktreeRemoved = false;
-      }
-    } else {
-      worktreeRemoved = true;
-    }
-
-    // Delete branch
-    let branchDeleted = false;
-    if (meta.branch_name) {
-      try {
-        execFileSync('git', ['branch', '-D', meta.branch_name], {
-          cwd: this.repoRoot,
-          stdio: 'pipe',
-        });
-        branchDeleted = true;
-      } catch {
-        branchDeleted = false;
-      }
-    }
-
-    // Remove state directory
-    rmSync(stateDir, { recursive: true, force: true });
-
-    // Prune worktrees
-    try {
-      execFileSync('git', ['worktree', 'prune'], { cwd: this.repoRoot, stdio: 'pipe' });
-    } catch { /* ignore */ }
-
-    // Best-effort: deregister worker from agents-hub so it doesn't persist as active
+    // 3. Best-effort hub deregistration
     tryDeregisterFromHub(workerId, this.repoRoot);
+
+    // 4. Delete state directory
+    this.stateStore.remove(workerId);
 
     return {
       workerId,
@@ -707,59 +488,13 @@ export class WorkerManager {
   }
 }
 
-function resolveWorkerWrapperPath(moduleDir: string): string {
-  const candidates = [
-    join(moduleDir, 'worker-wrapper.js'),
-    join(moduleDir, '..', 'scripts', 'worker-wrapper.js'),
-  ];
-  for (const candidate of candidates) {
-    if (existsSync(candidate)) return candidate;
-  }
-  throw new Error(`Worker wrapper not found (checked: ${candidates.join(', ')})`);
-}
-
-function appendVariadicFlag(args: string[], flag: string, values?: string[]): void {
-  if (!values || values.length === 0) return;
-  args.push(flag, ...values);
-}
-
-/** Check if a process is running by PID */
-function isProcessRunning(pid: number): boolean {
-  if (!Number.isFinite(pid) || pid <= 0) return false;
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch { /* ignore */ }
-  if (process.platform !== 'win32') {
-    try {
-      process.kill(-pid, 0);
-      return true;
-    } catch { /* ignore */ }
-  }
-  return false;
-}
-
-function sleepMs(ms: number): void {
-  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
-}
-
-function writeSyntheticExitMetadata(exitPath: string, terminatedBy: string): void {
-  const exitData = {
-    exitCode: 137,
-    completedAt: new Date().toISOString(),
-    terminatedBy,
-  };
-  writeFileSync(exitPath, `${JSON.stringify(exitData, null, 2)}\n`);
-}
-
 /**
- * Best-effort deregister a worker from agents-hub.
- * Uses git to resolve the hub DB path and sqlite3 CLI to update the record.
+ * Best-effort deregister a worker from the agents-hub SQLite DB.
+ * Uses the sqlite3 CLI for zero-dependency interaction.
  * Swallows all errors — cleanup must never fail due to hub unavailability.
  */
 function tryDeregisterFromHub(workerId: string, repoRoot: string): void {
-  // sqlite3 CLI is not available on Windows — skip deregistration there.
-  // Workers will remain 'active' until the next hub sync or prune cycle.
+  // sqlite3 CLI is unavailable on Windows; workers remain 'active' until next hub sync.
   if (process.platform === 'win32') return;
   try {
     const gitCommonDir = execSync('git rev-parse --git-common-dir', {
@@ -770,14 +505,13 @@ function tryDeregisterFromHub(workerId: string, repoRoot: string): void {
     const dbPath = resolve(repoRoot, gitCommonDir, 'devpartner', 'hub.db');
     if (!existsSync(dbPath)) return;
 
-    // Use sqlite3 CLI for zero-dependency hub interaction
     const sql = `UPDATE workers SET status='completed', completed_at=datetime('now') WHERE id='${workerId.replace(/'/g, "''")}' AND status='active';`;
     execSync(`sqlite3 "${dbPath}" "${sql}"`, {
       cwd: repoRoot,
       stdio: 'pipe',
-      timeout: 5000,
+      timeout: 5_000,
     });
   } catch {
-    // Best-effort: silently ignore if hub DB or sqlite3 is unavailable
+    // Silently ignore if hub DB or sqlite3 is unavailable
   }
 }

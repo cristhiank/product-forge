@@ -217,12 +217,12 @@ export function runCli(): void {
     .command('cleanup-all')
     .description('Clean up all stopped workers')
     .option('--force', 'Force cleanup of running workers too')
-    .action((opts) => {
+    .action(async (opts) => {
       try {
         const repoRoot = resolve(program.opts().repoRoot);
         const manager = new WorkerManager(repoRoot);
         const sdk = new WorkerSDK(manager);
-        const results = sdk.cleanupAll(opts.force);
+        const results = await sdk.cleanupAll(opts.force);
         output({ cleaned: results, total: results.length }, program.opts().pretty);
       } catch (err) {
         handleError(err);
