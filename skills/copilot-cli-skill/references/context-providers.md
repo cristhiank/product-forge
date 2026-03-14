@@ -60,7 +60,7 @@ All fields in `context` are optional. Only include what the worker needs.
 
 - If no `contextProviders` are passed, spawn works exactly as before
 - Symlinks are created in the worktree; skipped with a warning if source doesn't exist
-- Environment variables are merged into the worker process (`process.env` + provider env)
+- **`env` vars are NOT forwarded to SDK sessions** — the `@github/copilot-sdk` `CopilotClient` runs in-process and does not inherit per-worker env overrides. If you need to pass values to the session, use `prompt_sections` or `files` instead.
 - Files are written into the worktree at the specified relative paths
 - Prompt sections are appended to the worker's prompt
 - Provider results are stored in `meta.json` for debugging

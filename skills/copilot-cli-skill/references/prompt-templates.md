@@ -1,6 +1,6 @@
 # Prompt Templates for Copilot CLI Workers
 
-This document provides prompt templates for common worker scenarios. These templates can be used with `spawn-worker.sh` or directly with the Copilot CLI.
+This document provides prompt templates for common worker scenarios. These templates can be used with `$WORKER exec` or passed directly as prompts to spawned workers.
 
 ---
 
@@ -117,7 +117,7 @@ Style: [Concise, detailed, beginner-friendly, etc.]
 Create documentation for the worker management system.
 
 Scope:
-- Document spawn-worker.sh, cleanup-worker.sh, worker-status.sh
+- Document the worker management SDK API (spawnWorker, awaitWorker, validateWorker, sendMessage)
 - Target audience: developers using the skill
 - Format: README.md
 

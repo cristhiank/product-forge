@@ -1,125 +1,101 @@
 # Copilot CLI Flags Reference
 
-Key flags for autonomous workers, validated against `copilot --help` (CLI `0.0.415`).
+> **Internal implementation detail:** The flags listed here were previously passed directly to the `copilot` CLI process. With the SDK migration, these options map to `CopilotClient` configuration and lifecycle hooks instead of CLI arguments. The mapping table below is retained for reference but the flags are no longer passed via shell.
 
 ## Core Autonomous Flags
 
-### `--allow-all-tools`
-Default baseline for non-interactive workers. Auto-approves tool prompts.
+### `allowAll` / `--allow-all`
+Shortcut for full permission mode (tools + paths + URLs).
 
-```bash
-copilot --allow-all-tools -p "implement feature X"
+```js
+sdk.spawnWorker("run end-to-end migration", { allowAll: true })
 ```
 
-### `--allow-all` / `--yolo`
-Shortcut for full permission mode:
-
-```bash
---allow-all-tools --allow-all-paths --allow-all-urls
-```
-
-```bash
-copilot --allow-all -p "run end-to-end migration"
-```
-
-### `--no-ask-user`
+### `noAskUser` / `--no-ask-user`
 Disables `ask_user` tool so autonomous workers do not block awaiting human input.
 
-```bash
-copilot --allow-all-tools --no-ask-user -p "finish the refactor autonomously"
+```js
+sdk.spawnWorker("finish the refactor autonomously", { allowAll: true, noAskUser: true })
 ```
 
 ## Tool Visibility + Permission Controls
 
-### `--available-tools` / `--excluded-tools`
+### `availableTools` / `excludedTools`
 Control which tools are visible to the model.
 
-```bash
-copilot --available-tools bash view rg -p "inspect and patch"
-copilot --excluded-tools ask_user -p "autonomous run"
+```js
+sdk.spawnWorker("inspect and patch", { availableTools: ["bash", "view", "rg"] })
+sdk.spawnWorker("autonomous run", { excludedTools: ["ask_user"] })
 ```
 
-### `--allow-tool` / `--deny-tool`
-Control approval policy for allowed tools. Deny rules take precedence.
+### `allowTools` / `denyTools`
+Control approval policy. Deny rules take precedence. In the SDK, these are enforced via the `onPreToolUse` hook internally.
 
-```bash
-copilot \
-  --allow-all-tools \
-  --allow-tool 'shell(git:*)' \
-  --deny-tool 'shell(git push)' \
-  -p "prepare commit but do not push"
+```js
+sdk.spawnWorker("prepare commit but do not push", {
+  allowAll: true,
+  allowTools: ["shell(git:*)"],
+  denyTools: ["shell(git push)"]
+})
+```
+
+For more precise control, use `hooks.onPreToolUse` directly:
+
+```js
+sdk.spawnWorker("commit but no push", {
+  hooks: {
+    onPreToolUse: ({ toolName, toolArgs }) => {
+      if (toolName === "shell" && String(toolArgs.command).startsWith("git push"))
+        return { permissionDecision: "deny" };
+      return { permissionDecision: "allow" };
+    }
+  }
+})
 ```
 
 ## URL + Path Controls
 
-### URLs
+```js
+// URL allow/deny
+sdk.spawnWorker("research issue", { allowUrls: ["github.com"], denyUrls: ["malicious-site.com"] })
+sdk.spawnWorker("web research task", { allowAllUrls: true })
 
-```bash
-copilot --allow-url github.com --deny-url https://malicious-site.com -p "research issue"
-copilot --allow-all-urls -p "web research task"
-```
-
-### Paths
-
-```bash
-copilot --add-dir ./src --add-dir ./tests --allow-all-tools -p "update tests"
-copilot --allow-all-paths --allow-all-tools -p "repo-wide refactor"
-copilot --disallow-temp-dir --allow-all-tools -p "work without temp dir"
+// Path controls
+sdk.spawnWorker("update tests", { addDirs: ["./src", "./tests"], allowAll: true })
+sdk.spawnWorker("repo-wide refactor", { allowAllPaths: true, allowAll: true })
+sdk.spawnWorker("work without temp dir", { disallowTempDir: true, allowAll: true })
 ```
 
 ## Autopilot + Execution Behavior
 
-### `--autopilot` + `--max-autopilot-continues`
-
-```bash
-copilot --autopilot --max-autopilot-continues 20 --allow-all-tools -p "fix flaky tests"
-```
-
-### `--disable-parallel-tools-execution`
-For serialized execution when parallel tool execution causes instability.
-
-```bash
-copilot --disable-parallel-tools-execution --allow-all-tools -p "run deterministic workflow"
-```
-
-### `--stream on|off`
-Control streaming output behavior.
-
-```bash
-copilot --stream off --allow-all-tools -p "quiet non-streaming run"
+```js
+sdk.spawnWorker("fix flaky tests", { autopilot: true, maxAutopilotContinues: 20, allowAll: true })
+sdk.spawnWorker("deterministic workflow", { disableParallelToolsExecution: true, allowAll: true })
+sdk.spawnWorker("quiet non-streaming run", { stream: "off", allowAll: true })
 ```
 
 ## Agent + Model Selection
 
-```bash
-copilot --agent Scout --model gpt-5.4 --allow-all-tools -p "explore auth architecture"
+```js
+sdk.spawnWorker("explore auth architecture", { agent: "Scout", model: "gpt-5.4", allowAll: true })
 ```
 
-## Combined Example (Modern Worker)
+## Mapping to `copilot-cli-skill` SpawnOptions
 
-```bash
-copilot \
-  --agent Orchestrator \
-  --model claude-sonnet-4.6 \
-  --add-dir ./src/auth \
-  --add-dir ./tests/auth \
-  --allow-tool write \
-  --deny-tool 'shell(git push)' \
-  --no-ask-user \
-  --autopilot \
-  --max-autopilot-continues 25 \
-  -p "implement magic link auth per plan.md"
-```
+> These options are now mapped to SDK session configuration internally, not CLI flags.
 
-## Mapping to `copilot-cli-skill` Spawn Options
-
-- `allowAll` → `--allow-all`
-- `allowAllPaths` / `addDirs` / `allowAllUrls`
-- `allowTools` / `denyTools`
-- `availableTools` / `excludedTools`
-- `allowUrls` / `denyUrls`
-- `disallowTempDir`
-- `noAskUser`
-- `autopilot` / `maxAutopilotContinues`
-- `disableParallelToolsExecution`
-- `stream`
+| SpawnOption | Former CLI flag |
+|-------------|----------------|
+| `allowAll` | `--allow-all` |
+| `allowAllPaths` / `addDirs` / `allowAllUrls` | `--allow-all-paths` / `--add-dir` / `--allow-all-urls` |
+| `allowTools` / `denyTools` | `--allow-tool` / `--deny-tool` |
+| `availableTools` / `excludedTools` | `--available-tools` / `--excluded-tools` |
+| `allowUrls` / `denyUrls` | `--allow-url` / `--deny-url` |
+| `disallowTempDir` | `--disallow-temp-dir` |
+| `noAskUser` | `--no-ask-user` |
+| `autopilot` / `maxAutopilotContinues` | `--autopilot` / `--max-autopilot-continues` |
+| `disableParallelToolsExecution` | `--disable-parallel-tools-execution` |
+| `stream` | `--stream on\|off` |
+| `hooks` | (SDK-only — no CLI equivalent) |
+| `tools` | (SDK-only — no CLI equivalent) |
+| `errorPolicy` | (SDK-only — no CLI equivalent) |

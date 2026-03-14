@@ -8,7 +8,7 @@ description: >-
 
 # Copilot CLI Skill
 
-Manage autonomous Copilot CLI workers in isolated git worktrees.
+Manage autonomous Copilot SDK workers in isolated git worktrees.
 
 ## First Actions
 
@@ -38,6 +38,12 @@ $WORKER exec 'return sdk.spawnWorker("investigate auth bug #42", {
   noAskUser: true,
   maxAutopilotContinues: 20
 })'
+
+# Send a follow-up message to a running worker
+$WORKER send <worker-id> --message "Also update the tests to cover edge cases"
+
+# Stream live events from a worker (in exec context)
+$WORKER exec 'sdk.streamEvents("<worker-id>", e => console.error(JSON.stringify(e))); await sdk.awaitWorker("<worker-id>")'
 
 # List all workers
 $WORKER exec 'return sdk.listAll()'
@@ -102,7 +108,7 @@ $WORKER exec 'return sdk.spawnWorker("implement B-042", { taskId: "B-042", agent
 
 # Second spawn with same taskId — throws error with existing worker info
 $WORKER exec 'return sdk.spawnWorker("implement B-042", { taskId: "B-042" })'
-# Error: taskId already active: B-042 (workerId=abc123, status=running, pid=1234)
+# Error: taskId already active: B-042 (workerId=abc123, status=running)
 ```
 
 The dedup check considers workers in `running` or `spawning` status as active. Workers in `completed`, `failed`, or `spawn_failed` status don't block new spawns with the same taskId.
@@ -113,43 +119,35 @@ The dedup check considers workers in `running` or `spawning` status as active. W
 
 | Method | Description |
 |--------|-------------|
-| `sdk.spawnWorker(prompt, opts?)` | Spawn new worker. opts: `{ agent?, model?, taskId?, autoCommit?, allowAll?, addDirs?, allowAllPaths?, allowAllUrls?, allowTools?, denyTools?, availableTools?, excludedTools?, allowUrls?, denyUrls?, disallowTempDir?, noAskUser?, disableParallelToolsExecution?, stream?, autopilot?, maxAutopilotContinues?, worktreeBase?, branchPrefix?, contextProviders? }` |
-| `sdk.checkWorker(workerId)` | Get detailed status (pid, status, prompt, exitCode, logTail). ⚠️ logTail is only last 20 lines — for deeper log access, use shell monitoring (see below) |
+| `sdk.spawnWorker(prompt, opts?)` | Spawn new worker. opts: `{ agent?, model?, taskId?, autoCommit?, allowAll?, addDirs?, allowAllPaths?, allowAllUrls?, allowTools?, denyTools?, availableTools?, excludedTools?, allowUrls?, denyUrls?, disallowTempDir?, noAskUser?, disableParallelToolsExecution?, stream?, autopilot?, maxAutopilotContinues?, worktreeBase?, branchPrefix?, contextProviders?, hooks?, tools?, errorPolicy? }` |
+| `sdk.checkWorker(workerId)` | Get detailed status (status, prompt, exitCode, eventCount, turnCount, lastToolUsed, logTail of last 20 events) |
 | `sdk.awaitWorker(workerId, opts?)` | Block until worker reaches terminal state. opts: `{ pollIntervalMs? (default 3000), timeoutMs? (default: no limit), onProgress? }`. Returns final `WorkerStatus`. Throws on timeout. |
-| `sdk.listAll()` | List all workers with basic info (id, pid, status) |
-| `sdk.cleanupWorker(workerId, force?)` | Kill process, remove worktree, clean state |
+| `sdk.sendMessage(workerId, message)` | Send a follow-up message to a running worker; returns the assistant's response text or null. |
+| `sdk.streamEvents(workerId, callback)` | Subscribe to live `WorkerEvent`s from a worker in real time. Returns an unsubscribe function. |
+| `sdk.listAll()` | List all workers with basic info (id, status, taskId) |
+| `sdk.cleanupWorker(workerId, force?)` | Stop SDK session, remove worktree, clean state |
 | `sdk.cleanupAll(force?)` | Clean up all non-running workers (or all if force=true) |
 | `sdk.validateWorker(workerId, opts?)` | Validate worker output: commits, file scope, build. opts: `{ buildCommand?, requiredPathPrefixes?, forbiddenPathPrefixes?, requireCommits? (default true) }`. Returns `ValidationResult`. |
 
 **Worker Status Values:**
 
-- `spawning` — Worker process is starting up (readiness probe in progress)
-- `running` — Worker process is confirmed active
-- `completed` — Worker exited successfully (exit code 0)
-- `completed_no_exit` — Process stopped but no exit metadata found (likely success, wrapper was killed)
-- `failed` — Worker exited with error (exit code non-zero)
-- `spawn_failed` — Worker process failed to start (crashed before producing output)
-- `unknown` — Status cannot be determined (old workers without metadata fall back to this)
+- `spawning` — SDK session is initialising
+- `running` — SDK session is active
+- `completed` — Session exited successfully (exit code 0)
+- `completed_no_exit` — Session stopped but no exit metadata found
+- `failed` — Session exited with error (exit code non-zero)
+- `spawn_failed` — Session failed to start
+- `unknown` — Status cannot be determined
 
-**Additional Status Fields (when process stopped):**
+**Additional Status Fields (when session stopped):**
 
-- `exitCode: number | null` — Process exit code (0 = success, non-zero = failure)
-- `completedAt: string | null` — ISO timestamp when worker completed
-- `logTail: string[]` — Last 20 non-empty lines from output.log
-- `errorSummary: string | null` — Last log line if failed (quick error diagnosis)
-
-### Latest Copilot CLI Feature Support
-
-Worker spawn now supports these modern Copilot CLI controls:
-
-- `allowAll` → `--allow-all` (equivalent to allow-all-tools/paths/urls)
-- `allowTools` / `denyTools` → `--allow-tool` / `--deny-tool`
-- `availableTools` / `excludedTools` → `--available-tools` / `--excluded-tools`
-- `allowUrls` / `denyUrls` → `--allow-url` / `--deny-url`
-- `noAskUser` → `--no-ask-user`
-- `maxAutopilotContinues` → `--max-autopilot-continues`
-- `disableParallelToolsExecution` → `--disable-parallel-tools-execution`
-- `stream` → `--stream on|off`
+- `exitCode: number | null` — Exit code (0 = success, non-zero = failure)
+- `completedAt: string | null` — ISO timestamp when session completed
+- `logTail: string[]` — Last 20 events from `events.ndjson` as JSON strings
+- `errorSummary: string | null` — Last `session.error` event message if failed
+- `eventCount: number` — Total streaming events emitted
+- `turnCount: number` — Number of assistant turns completed
+- `lastToolUsed: string | null` — Name of the most recent tool invoked
 
 ### Low-Level Manager Access
 
@@ -161,7 +159,129 @@ The `manager` object is also in scope:
 | `manager.getStatus(workerId)` | Detailed WorkerStatus |
 | `manager.listWorkers()` | List basic worker info |
 | `manager.cleanup(workerId, force?)` | Clean up single worker |
-| `manager.validateWorker(workerId, opts?)` | Validate worker output (low-level) |
+| `manager.validateWorker(workerId, opts?)` | Validate worker output |
+| `manager.sendMessage(workerId, msg)` | Send follow-up message (low-level) |
+| `manager.onEvent(workerId, callback)` | Subscribe to events (low-level); returns unsubscribe fn |
+
+---
+
+## Hooks & Custom Tools
+
+Workers accept optional `hooks` and `tools` on spawn to intercept SDK lifecycle events and extend the model's toolset.
+
+### Lifecycle Hooks (`hooks`)
+
+```js
+$WORKER exec 'return sdk.spawnWorker("implement auth", {
+  agent: "Executor",
+  hooks: {
+    // Intercept tool calls — allow, deny, or modify args
+    onPreToolUse: ({ toolName, toolArgs }) => {
+      if (toolName === "shell" && String(toolArgs.command).includes("git push")) {
+        return { permissionDecision: "deny" };
+      }
+      return { permissionDecision: "allow" };
+    },
+    // React after a tool completes — inject extra context
+    onPostToolUse: ({ toolName, result }) => {
+      if (toolName === "build" && String(result).includes("ERROR")) {
+        return { additionalContext: "Build failed. Fix all compiler errors before continuing." };
+      }
+    },
+    // Rewrite the initial prompt before submission
+    onPromptSubmitted: ({ prompt }) => ({
+      modifiedPrompt: prompt + "\n\nAlways write tests alongside implementation."
+    }),
+    // Recover from errors
+    onError: ({ error }) => ({ errorHandling: "retry" }),
+  }
+})'
+```
+
+**Hook signatures:** `onPreToolUse({ toolName, toolArgs }) → { permissionDecision: 'allow'|'deny'|'ask', modifiedArgs?, additionalContext? }` · `onPostToolUse({ toolName, result }) → { additionalContext? }` · `onPromptSubmitted({ prompt }) → { modifiedPrompt? }` · `onSessionStart({ source }) → { additionalContext? }` · `onSessionEnd({ reason }) → void` · `onError({ error, context }) → { errorHandling: 'retry'|'skip'|'abort' }`
+
+### Custom Tools (`tools`)
+
+Register tools that the model can call during the session:
+
+```js
+$WORKER exec 'return sdk.spawnWorker("run migration", {
+  tools: [{
+    name: "notify_slack",
+    description: "Post a message to the #deployments Slack channel",
+    parameters: {
+      type: "object",
+      properties: { message: { type: "string" } },
+      required: ["message"]
+    },
+    execute: async ({ message }) => {
+      // call Slack webhook here
+      return { ok: true };
+    }
+  }]
+})'
+```
+
+---
+
+## Event Streaming
+
+Workers emit structured `WorkerEvent`s in real time to `events.ndjson`. Each event has a `type`, `data`, and `timestamp`.
+
+**Event types:**
+
+| type | data |
+|------|------|
+| `assistant.message_delta` | `{ deltaContent: string }` |
+| `tool.execution_start` | `{ toolName: string, toolArgs: object }` |
+| `tool.execution_complete` | `{ toolName: string, result: unknown }` |
+| `session.idle` | `{}` |
+| `session.error` | `{ error: string }` |
+| `status.change` | `{ from: string, to: string }` |
+
+### Streaming in Exec Context
+
+```js
+// Print every tool call as it happens, then wait for completion
+$WORKER exec '
+  const unsub = sdk.streamEvents("<worker-id>", evt => {
+    if (evt.type === "tool.execution_start") {
+      process.stderr.write("→ tool: " + evt.data.toolName + "\n");
+    }
+  });
+  const result = await sdk.awaitWorker("<worker-id>");
+  unsub();
+  return result;
+'
+```
+
+### Reading the Event Log
+
+Events are persisted to `.copilot-workers/<id>/events.ndjson`:
+
+```bash
+# Tail live events (real-time, no buffering)
+tail -f .copilot-workers/<worker-id>/events.ndjson
+
+# Filter for tool calls only
+grep '"tool.execution_start"' .copilot-workers/<worker-id>/events.ndjson | tail -20
+
+# Count events as a rough progress indicator
+wc -l .copilot-workers/<worker-id>/events.ndjson
+```
+
+### `onEvent` Callback on Spawn
+
+Pass `onEvent` directly to `spawnWorker` for lightweight per-event handling without a separate subscription:
+
+```js
+$WORKER exec 'return sdk.spawnWorker("implement feature", {
+  onEvent: evt => {
+    if (evt.type === "session.error")
+      process.stderr.write("worker error: " + evt.data.error + "\n");
+  }
+})'
+```
 
 ---
 
@@ -173,32 +293,32 @@ The `manager` object is also in scope:
 Main Repo (working on feature-x)
     │
     ├── .copilot-workers/
-    │   ├── worker-1/
-    │   │   ├── meta.json       # Worker metadata
-    │   │   ├── worker.pid      # Process ID
-    │   │   ├── exit.json       # Exit code + timestamp (when completed)
-    │   │   └── output.log      # Copilot output
-    │   └── worker-2/
-    │       └── ...
+    │   ├── <worker-id>/
+    │   │   ├── meta.json        # Worker metadata (+ base_sha, session_id)
+    │   │   ├── events.ndjson    # Streaming events (real-time)
+    │   │   ├── history.json     # Retrospective data (post-completion)
+    │   │   └── exit.json        # Exit code + timestamps
+    │   └── ...
     │
     └── ../worktrees/
-        ├── worker-1/           # Isolated git worktree
-        │   └── (full repo checkout on branch worker/worker-1)
-        └── worker-2/
-            └── ...
+        ├── <worker-id>/         # Isolated git worktree
+        │   └── (full repo checkout on branch worker/<id>)
+        └── ...
 ```
 
 ### Workflow
 
-1. **Spawn** creates a new git worktree and branch
-2. Worker runs `copilot` via wrapper script in that worktree
-3. Process runs detached (survives terminal close)
-4. Output streams to `output.log` for monitoring
-5. On exit, wrapper script captures exit code and timestamp in `exit.json`
-6. If `autoCommit` is enabled and exit code is 0, wrapper auto-commits uncommitted changes
-7. **Cleanup** terminates process, removes worktree, deletes branch
+1. **Spawn** creates a new git worktree and branch; records `base_sha` at creation time
+2. **SessionRunner** starts a `CopilotClient` SDK session in-process for that worktree
+3. Events stream in real time to `events.ndjson` via `StateStore.appendEvent()`
+4. On completion, `history.json` is written with full retrospective data
+5. On exit, `exit.json` is written with exit code and timestamps
+6. If `autoCommit` is enabled and exit code is 0, uncommitted changes are auto-committed
+7. **Cleanup** stops the SDK session, removes worktree and branch, deletes state
 
-**Auto-Commit:** When spawned with `autoCommit: true` (or a custom commit message string), the wrapper automatically runs `git add -A && git commit` on successful exit. This ensures worker output is always committed before cleanup. Use this to avoid the common problem of losing uncommitted changes during worktree removal.
+**Sessions are in-process:** They run inside the manager process and die with it. There are no detached OS processes or PID files.
+
+**Auto-Commit:** When spawned with `autoCommit: true` (or a custom commit message string), the SDK session automatically runs `git add -A && git commit` on successful exit. This ensures worker output is always committed before cleanup. Use this to avoid the common problem of losing uncommitted changes during worktree removal.
 
 ```bash
 # Enable auto-commit with default message
@@ -208,16 +328,7 @@ $WORKER exec 'return sdk.spawnWorker("implement feature", { autoCommit: true })'
 $WORKER exec 'return sdk.spawnWorker("implement feature", { autoCommit: "feat: implement B-042 magic link auth" })'
 ```
 
-**Exit Handling:** When a worker exits, the wrapper script writes `exit.json`:
-
-```json
-{
-  "exitCode": 0,
-  "completedAt": "2026-02-22T05:41:00Z"
-}
-```
-
-This enables callers to distinguish successful completion (exit 0) from failures (exit non-zero). Workers without `exit.json` fall back to `unknown` status for backward compatibility.
+**Exit Handling:** When a worker exits, `exit.json` is written with the exit code and timestamps. This enables callers to distinguish successful completion (exit 0) from failures (exit non-zero). Workers without `exit.json` fall back to `unknown` status for backward compatibility.
 
 ---
 
@@ -260,289 +371,173 @@ $WORKER exec --agent Orchestrator --autopilot \
   'return sdk.spawnWorker("write integration tests for API routes", { addDirs: ["./src/routes", "./tests/integration"] })'
 ```
 
-### Multi-Model Comparison
-
-```bash
-$WORKER exec 'return [
-  sdk.spawnWorker("implement auth refactor", { agent: "Orchestrator", model: "claude-opus-4.6" }),
-  sdk.spawnWorker("implement auth refactor", { agent: "Orchestrator", model: "gpt-5.4" }),
-  sdk.spawnWorker("implement auth refactor", { agent: "Orchestrator", model: "gemini-3-pro-preview" })
-]'
-```
-
 ### Spawn → Await → Validate → Merge (Canonical Lifecycle)
 
-This is the recommended pattern for every worker. Use it instead of manual polling.
-
 ```bash
-# 1. Spawn with taskId for dedup + autoCommit to preserve changes
+# 1. Spawn
 $WORKER exec --agent Orchestrator --autopilot \
   'return sdk.spawnWorker("implement B-042 magic link auth", {
     taskId: "B-042", autoCommit: true, addDirs: ["src/auth/", "tests/auth/"]
   })'
 
-# 2. Wait for completion (blocks until terminal state — replaces manual polling)
-$WORKER exec 'return sdk.awaitWorker("<worker-id>", { pollIntervalMs: 5000 })'
+# 2. Await (event-driven)
+$WORKER exec 'return sdk.awaitWorker("<worker-id>")'
 
-# 3. Validate output before merging (catches scope leaks, verifies build)
+# 3. Validate
 $WORKER exec 'return sdk.validateWorker("<worker-id>", {
-  requiredPathPrefixes: ["src/auth/", "tests/auth/"],
-  buildCommand: "npm run build"
+  requiredPathPrefixes: ["src/auth/", "tests/auth/"], buildCommand: "npm run build"
 })'
 
-# 4. Merge the worker branch
-git merge worker/<worker-id> --no-ff -m "feat: implement B-042 magic link auth"
-
-# 5. Clean up (removes worktree + branch)
-$WORKER exec 'return sdk.cleanupWorker("<worker-id>")'
-```
-
-### Merging Worker Output
-
-After a worker completes, merge its branch and clean up:
-
-```bash
-# Merge with --no-ff to preserve branch history
-git merge worker/<worker-id> --no-ff -m "merge: <description>"
-
-# If conflicts, resolve manually then:
-git add -A && git commit --no-edit
-
-# ⚠️ Always run build/tests after EACH merge, not after all merges.
-# This catches which specific merge introduced a conflict.
-
-# Clean up after successful merge
+# 4. Merge + clean up
+git merge worker/<worker-id> --no-ff -m "feat: B-042 magic link auth"
 $WORKER exec 'return sdk.cleanupWorker("<worker-id>")'
 ```
 
 ### Batch Orchestration Pattern
 
-For parallel workers in a batch:
-
 ```bash
-# Phase 1: Spawn all workers
+# Spawn workers
 for task in B-042 B-043 B-044; do
-  $WORKER exec "return sdk.spawnWorker('implement $task', {
-    taskId: '$task', agent: 'Orchestrator', autoCommit: true
-  })"
+  $WORKER exec "return sdk.spawnWorker('implement $task', { taskId: '$task', agent: 'Orchestrator', autoCommit: true })"
 done
 
-# Phase 2: Await all
-$WORKER exec 'return Promise.all([
-  sdk.awaitWorker("worker-id-1"),
-  sdk.awaitWorker("worker-id-2"),
-  sdk.awaitWorker("worker-id-3")
-])'
-
-# Phase 3: Validate each before merging
-for id in worker-id-1 worker-id-2 worker-id-3; do
+# Await all, then validate + merge each in dependency order
+$WORKER exec 'return Promise.all([sdk.awaitWorker("id-1"), sdk.awaitWorker("id-2"), sdk.awaitWorker("id-3")])'
+for id in id-1 id-2 id-3; do
   $WORKER exec "return sdk.validateWorker('$id')"
-done
-
-# Phase 4: Merge in dependency order + clean up
-for id in worker-id-1 worker-id-2 worker-id-3; do
   git merge "worker/$id" --no-ff -m "merge: $id"
-  # Build check after each merge
   $WORKER exec "return sdk.cleanupWorker('$id')"
 done
 ```
 
-**Grouping heuristic:** Group items by file ownership to minimize merge conflicts. Items touching different directories can run in parallel safely. Items touching the same file should be in different batches (sequential).
-
-### Monitor & Cleanup
-
-```bash
-# List all workers (SDK — quick overview)
-$WORKER exec 'return sdk.listAll()'
-
-# Clean up all stopped
-$WORKER exec 'return sdk.cleanupAll()'
-```
+**Grouping heuristic:** Items touching different directories can run in parallel safely.
 
 ---
 
-## Monitoring Workers (Shell — Preferred)
+## Monitoring Workers
 
-For monitoring worker progress, **use shell tools directly** instead of the SDK. Shell gives you more context, real-time streaming, and flexible filtering. The SDK's `checkWorker()` only returns the last 20 log lines — often not enough to understand what a worker is doing.
+### Decision Matrix
 
-> **⚠️ output.log buffering caveat:** Copilot CLI heavily buffers `output.log` — file size can stay static for minutes even while the worker is actively making changes. **Git-based monitoring is far more reliable** for checking actual progress, because commits and file changes are written immediately to the worktree.
+| Operation | SDK | Shell |
+|-----------|-----|-------|
+| Spawn / cleanup | ✅ `sdk.spawnWorker()`, `sdk.cleanupWorker()` | ❌ |
+| Quick status | ✅ `sdk.checkWorker(id)` | ✅ `cat .copilot-workers/<id>/exit.json` |
+| Real-time events | ✅ `sdk.streamEvents(id, cb)` | ✅ `tail -f events.ndjson` |
+| Git progress | ❌ | ✅ `git -C <worktree> log --oneline -5` |
+| Send follow-up | ✅ `sdk.sendMessage(id, msg)` | ✅ `$WORKER send <id> --message "..."` |
+| Validate output | ✅ `sdk.validateWorker(id, opts)` | ❌ |
 
-### SDK vs Shell Decision Matrix
+### Event-Based Monitoring
 
-| Operation | Use SDK | Use Shell |
-|-----------|---------|-----------|
-| Spawn a worker | ✅ `sdk.spawnWorker()` | ❌ |
-| List workers | ✅ `sdk.listAll()` | ❌ |
-| Quick status (running/completed/failed) | ✅ `sdk.checkWorker(id)` | ✅ `cat .copilot-workers/<id>/exit.json` |
-| Check actual progress | ❌ | ✅ `git -C <worktree> log --oneline -5` |
-| See what files changed | ❌ | ✅ `git -C <worktree> diff --stat` |
-| Read worker logs (buffered) | ❌ (20 lines only) | ⚠️ `tail -100 output.log` (buffered — may lag) |
-| Search logs for errors | ❌ (not supported) | ⚠️ `grep -i 'error\|fail' output.log` (buffered) |
-| Real-time log streaming | ❌ (not possible) | ⚠️ `tail -f output.log` (buffered — may appear stuck) |
-| Clean up workers | ✅ `sdk.cleanupWorker(id)` | ❌ |
-
-### Shell Monitoring Patterns
-
-#### Git-Based Progress Check (Preferred)
-
-Git operations reflect actual worker progress immediately — no buffering delays. **Always try git-based checks first** before falling back to output.log.
-
-**See what the worker has done** — commits are the most reliable progress signal:
 ```bash
-# Recent commits in the worker's worktree (immediate, no buffering)
-git -C .copilot-workers/<id>/worktree log --oneline -10
+# Stream live events until completion
+$WORKER exec '
+  sdk.streamEvents("<worker-id>", evt => {
+    if (["tool.execution_start","session.error"].includes(evt.type))
+      process.stderr.write(JSON.stringify(evt) + "\n");
+  });
+  return sdk.awaitWorker("<worker-id>");
+'
 
-# Commits with timestamps (see pacing)
-git -C .copilot-workers/<id>/worktree log --oneline --format="%h %ar %s" -10
+# Tail real-time NDJSON log
+tail -f .copilot-workers/<worker-id>/events.ndjson
+grep '"session.error"' .copilot-workers/<worker-id>/events.ndjson
 ```
 
-**See what files were changed** — understand scope of work:
+### Git-Based Progress Check
+
 ```bash
-# Files changed (committed)
-git -C .copilot-workers/<id>/worktree diff --stat HEAD~3
-
-# Files currently being edited (uncommitted changes)
-git -C .copilot-workers/<id>/worktree diff --stat
-
-# Full diff of recent changes
-git -C .copilot-workers/<id>/worktree diff HEAD~1
+git -C ../worktrees/<worker-id> log --oneline -10
+git -C ../worktrees/<worker-id> diff --stat
 ```
 
-**Multi-worker git scan** — check all workers' progress at once:
+### Sending Follow-up Messages
+
 ```bash
-# Quick progress check across all workers
-for d in .copilot-workers/*/; do
-  id=$(basename "$d")
-  wt="$d/worktree"
-  [ -d "$wt/.git" ] || [ -f "$wt/.git" ] || continue
-  commits=$(git -C "$wt" rev-list --count HEAD 2>/dev/null || echo 0)
-  last=$(git -C "$wt" log --oneline -1 2>/dev/null || echo "no commits")
-  echo "$id: $commits commits | last: $last"
-done
+$WORKER send <worker-id> --message "Also add a regression test for the null-user edge case"
+# Or: sdk.sendMessage("<worker-id>", "...")
 ```
-
-#### Quick Status Check
-
-Is it running, done, or failed?
-```bash
-# Check if process is alive
-cat .copilot-workers/<id>/worker.pid | xargs ps -p 2>/dev/null && echo "RUNNING" || echo "STOPPED"
-
-# Check exit status (if stopped)
-cat .copilot-workers/<id>/exit.json 2>/dev/null || echo "Still running (no exit.json)"
-```
-
-#### Log-Based Monitoring (Secondary — Subject to Buffering)
-
-> **Note:** `output.log` is heavily buffered by Copilot CLI. The file may not update for minutes at a time, even while the worker is actively running. Use git-based monitoring (above) to verify actual progress. Logs are still useful for error searching and debugging after the worker completes.
-
-**Read recent log output** — more context than SDK's 20 lines:
-```bash
-# Last 100 lines (may be stale due to buffering)
-tail -100 .copilot-workers/<id>/output.log
-
-# Last 200 lines with line numbers
-tail -200 .copilot-workers/<id>/output.log | cat -n
-```
-
-**Search for errors or patterns:**
-```bash
-# Find errors (best used after worker completes, when log is fully flushed)
-grep -i 'error\|failed\|exception\|blocked\|stuck' .copilot-workers/<id>/output.log
-
-# Find tool calls and results
-grep -i 'tool\|function\|calling' .copilot-workers/<id>/output.log | tail -20
-
-# Count total lines (rough progress indicator — may lag due to buffering)
-wc -l .copilot-workers/<id>/output.log
-```
-
-**Real-time streaming** (async bash mode — for active monitoring):
-```bash
-# Stream live output (use async bash + read_bash to check periodically)
-# ⚠️ May appear stuck for minutes due to buffering — check git log to confirm actual progress
-tail -f .copilot-workers/<id>/output.log
-```
-
-### When to Use Each
-
-- **Spawning/Cleanup** → Always SDK (`sdk.spawnWorker()`, `sdk.cleanupWorker()`). These manage worktrees, branches, and PIDs — don't replicate that logic.
-- **"Is it done?"** → Shell is faster: `cat .copilot-workers/<id>/exit.json`. No Node process overhead.
-- **"What is it doing?"** → Git (primary): `git -C <worktree> diff --stat` to see current changes, `git log --oneline -5` for recent commits. Log (secondary): `tail -100 output.log` — but beware buffering delays.
-- **"Is it stuck?"** → Git: check if new commits appear over time (`git log --oneline -1`, wait, repeat). Log: `wc -l output.log` comparisons may be misleading due to buffering.
-- **"I need real-time updates"** → Git: poll `git log --oneline -1` every 30s for reliable progress. Log: `tail -f output.log` via async bash — but output may appear frozen due to buffering even when the worker is active.
-- **"Did it do the right thing?"** → SDK: `sdk.validateWorker(id, opts)`. Checks commits, file scope, and build.
 
 ---
 
 ## Validating Worker Output
 
-After a worker completes, use `validateWorker()` to verify it actually did what it was supposed to — check commits exist, files are in the right scope, and the build passes. This catches "silent scope leaks" where a worker succeeds at the wrong thing.
+`validateWorker()` diffs from `base_sha` (the SHA recorded at spawn time), ensuring the scope check is accurate even if the main branch has advanced.
 
 ```bash
-# Basic validation — just check for commits
+# Basic — check commits exist
 $WORKER exec 'return sdk.validateWorker("<worker-id>")'
 
-# Validate scope — files must be under src/auth/
+# Scope check + build
 $WORKER exec 'return sdk.validateWorker("<worker-id>", {
-  requiredPathPrefixes: ["src/auth/", "tests/auth/"]
+  requiredPathPrefixes: ["src/auth/", "tests/auth/"],
+  buildCommand: "npm run build"
 })'
 
-# Validate scope with forbidden paths
+# Forbidden paths
 $WORKER exec 'return sdk.validateWorker("<worker-id>", {
   requiredPathPrefixes: ["verticals/pet_boarding/"],
   forbiddenPathPrefixes: ["verticals-forms-api/"]
 })'
-
-# Full validation with build
-$WORKER exec 'return sdk.validateWorker("<worker-id>", {
-  requiredPathPrefixes: ["src/"],
-  buildCommand: "npm run build"
-})'
 ```
 
-**ValidationResult fields:**
+**ValidationResult:** `valid` · `hasCommits` · `commitCount` · `commitMessages` · `filesChanged` (since `base_sha`) · `scopeViolations` · `buildPassed` · `buildOutput` · `errors`
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `valid` | boolean | Overall pass/fail |
-| `hasCommits` | boolean | Whether the branch has commits beyond HEAD |
-| `commitCount` | number | Number of commits on the branch |
-| `commitMessages` | string[] | Commit messages |
-| `filesChanged` | string[] | Files changed on the branch |
-| `scopeViolations` | string[] | Files outside required or inside forbidden prefixes |
-| `buildPassed` | boolean \| null | Build result (null if no buildCommand) |
-| `buildOutput` | string | Build stdout+stderr |
-| `errors` | string[] | Error messages encountered |
+**CLI:** `$WORKER validate <id> --required-path-prefix src/ --build-command "npm run build"`
 
-**CLI usage:**
+---
+
+## Worker History & Retrospectives
+
+After a worker completes, `history.json` is written to `.copilot-workers/<id>/history.json` with a full retrospective for analysis and audit.
+
+**Key fields:** `workerId`, `taskId`, `prompt`, `startedAt`, `completedAt`, `exitCode`, `baseSha`, `turnCount`, `toolCalls` (per-tool counts + last args), `commits` (SHA + message + fileCount), `filesChanged`, `eventCount`, `durationMs`, `errorCount`, `lastError`.
 
 ```bash
-# Validate with CLI
-$WORKER validate <worker-id> --required-path-prefix src/auth/ --required-path-prefix tests/auth/
-$WORKER validate <worker-id> --build-command "npm run build" --forbidden-path-prefix node_modules/
-$WORKER validate <worker-id> --no-require-commits
+# Read history for a completed worker
+cat .copilot-workers/<worker-id>/history.json | jq '{turnCount, durationMs, errorCount, toolCalls}'
+
+# Compare two workers side by side
+jq -s 'map({workerId, durationMs, turnCount, errorCount})' \
+  .copilot-workers/*/history.json
 ```
 
 ---
 
 ## Error Handling
 
+### SDK Error Policies
+
+Control automatic recovery behavior per session:
+
+```js
+$WORKER exec 'return sdk.spawnWorker("run migration", {
+  errorPolicy: {
+    onRateLimit: "retry",           // retry on HTTP 429
+    onContextOverflow: "compact",   // compact context instead of aborting
+    onToolError: "skip",            // skip failing tools
+    maxRetries: 3
+  }
+})'
+```
+
+### Common Errors
+
 ```bash
-# Spawn failures return JSON error
-$WORKER exec 'return sdk.spawnWorker("task")' 
-# If git worktree creation fails → {"error": "Failed to create worktree: ..."}
+# Spawn failure
+# → {"error": "Failed to create worktree: ..."}
 
-# Check worker exit status
-result=$($WORKER exec 'return sdk.checkWorker("<id>")')
-# status: "completed" (exit 0) | "failed" (exit non-zero) | "running" | "unknown"
-# exitCode: 0 (success) or non-zero (failure)
-# errorSummary: last log line when failed — quick error diagnosis
+# Worker failed — inspect last error
+$WORKER exec 'return sdk.checkWorker("<id>")'  # check errorSummary
+grep '"session.error"' .copilot-workers/<id>/events.ndjson
 
-# Common errors:
-# - "Worktree already exists" → Clean up first: sdk.cleanupWorker(id)
-# - Worker "failed" with no errorSummary → Check full log: tail -50 .copilot-workers/<id>/output.log
-# - Worker "unknown" → Old worker without exit.json; check if process alive via worker.pid
+# taskId conflict — clean up existing worker first
+# → {"error": "taskId already active: B-042 (workerId=..., status=running)"}
+$WORKER exec 'return sdk.cleanupWorker("<existing-id>")'
+
+# Worker stuck — compare event counts over time; force cleanup if needed
+wc -l .copilot-workers/<id>/events.ndjson
+$WORKER exec 'return sdk.cleanupWorker("<id>", true)'
 ```
 
 ---
@@ -552,42 +547,51 @@ result=$($WORKER exec 'return sdk.checkWorker("<id>")')
 ### ✅ Do
 
 - **Limit access** with `addDirs` to relevant directories
-- **Monitor output logs** with shell commands (`tail`, `grep`) — see Monitoring Workers section
-- **Use `sdk.checkWorker()`** only for quick status; use shell for deeper log inspection
+- **Use hooks** (`onPreToolUse`) to enforce tool restrictions programmatically
+- **Use `sdk.streamEvents()`** or `tail -f events.ndjson` for live progress
 - **Clean up completed workers** to avoid worktree clutter
 - **Use specific prompts** with clear success criteria
 - **Choose appropriate agents** — use `--agent` to route workers to the right agent for the task
+- **Review `history.json`** after completion for retrospective analysis
 
 ### ⚠️ Don't
 
 - **Avoid `allowAllPaths: true`** unless necessary
-- **Don't spawn too many workers** — each consumes system resources
+- **Don't spawn too many workers** — each runs an in-process SDK session (CPU/memory)
 - **Don't forget to clean up** — orphaned worktrees waste disk space
-- **Don't use for interactive tasks** — workers run autonomously
+- **Don't use for interactive tasks** — workers run autonomously; use `sendMessage` for mid-session guidance
 
 ---
 
 ## Troubleshooting
 
-### Worker shows "stopped" but worktree exists
+### Worker shows "failed" or "spawn_failed"
 
-The process crashed or was killed. Check `output.log`, then clean up:
 ```bash
+# See the last error event
+grep '"session.error"' .copilot-workers/<worker-id>/events.ndjson | tail -3
+
+# Force cleanup and respawn
 $WORKER exec 'return sdk.cleanupWorker("<worker-id>", true)'
 ```
 
 ### Worker not making progress
 
 ```bash
-tail -f .copilot-workers/<worker-id>/output.log
-```
+# Check event count over time
+wc -l .copilot-workers/<worker-id>/events.ndjson
 
-If stuck, clean up and respawn with a clearer prompt.
+# Send a nudge
+$WORKER send <worker-id> --message "Are you stuck? Summarise your current state."
+
+# Or stream events live to see what's happening
+tail -f .copilot-workers/<worker-id>/events.ndjson
+```
 
 ---
 
 ## References
 
-- **CLI Flags:** `references/cli-flags.md` — Copilot CLI flag documentation
+- **CLI Flags:** `references/cli-flags.md` — SpawnOptions → SDK config mapping
 - **Prompt Templates:** `references/prompt-templates.md` — Reusable prompt patterns
 - **Context Providers:** `references/context-providers.md` — Full schema, template variables, and usage examples
