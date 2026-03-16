@@ -81,6 +81,7 @@ Pass complexity to the subagent through the Mission Brief `<complexity>` and `<r
 | Verification (plan or result) | Dispatch `forge-verify-gpt` |
 | Memory extraction | Dispatch `forge-memory-gpt` on explicit request |
 | Product work | Dispatch `forge-product-gpt` |
+| Backlog: create/list/manage epics, stories, tasks | Invoke `backlog` skill — **NEVER** create work items as markdown files |
 | Missing scope or conflicting requirements | Stay in `BLOCKED` |
 
 Use `general-purpose` for any dispatch that needs a Forge-GPT mode skill. The built-in `explore` agent cannot load skills.

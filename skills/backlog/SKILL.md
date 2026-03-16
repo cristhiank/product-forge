@@ -296,6 +296,8 @@ $BACKLOG archive <id>[,id2,...]
 echo "New content" | $BACKLOG update-body <id> [--message "edit note"]
 ```
 
+> **QUALITY GATE**: After `create`, the generated file includes `## Goal`, `## Done When`, and `## Acceptance Criteria` sections with placeholders. You **MUST** fill these in with real content — use `update-body` if needed. A one-line title with placeholder sections is useless when the item is later picked up for implementation. For epics, include the overall objective and success criteria. For stories, include scope boundaries, interface contracts, and exclusions.
+
 ### Code Execution (multi-step queries)
 
 Use `exec` for JavaScript composition — combine multiple API calls in a single command:

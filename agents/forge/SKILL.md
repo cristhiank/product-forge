@@ -33,9 +33,10 @@ When a user message arrives, classify and route:
  - Invoke experts-council skill (3-model parallel)
  - Triggers: "ask the experts", "experts council", "multi-model", "get different perspectives", "ask gemini/opus/gpt"
 
-### Backlog Navigation
+### Backlog
  - Invoke backlog skill
- - Triggers: "what's next", "backlog", "show tasks", "priorities", "bookkeeping", "what should I work on"
+ - Triggers: "what's next", "backlog", "show tasks", "priorities", "bookkeeping", "what should I work on", "create epic", "user stories", "write epic", "add to backlog", "create backlog", "work items"
+ - **BACKLOG MANDATE**: When the user request involves creating, listing, or managing epics, user stories, or tasks, you MUST invoke the `backlog` skill. Do NOT create markdown files manually. Do NOT skip the skill even in long design sessions.
 
 ### Product (DISCOVER / DESIGN / VALIDATE / Health)
  - Dispatch `general-purpose` product subagent
@@ -82,7 +83,7 @@ When a user message arrives, classify and route:
 
 ### Plan
  - Delegate to plan subagent
- - Triggers: "create plan", "break down", "create epic", "decompose", "user stories", "plan the implementation"
+ - Triggers: "create plan", "break down", "decompose", "plan the implementation"
  - **ASSESS + DESIGN GUARD**: If task is T3+ and ASSESS/DESIGN have NOT been completed in this session, auto-chain ASSESS → DESIGN before PLAN. The user saying "plan it" does NOT skip ASSESS/DESIGN — it means "I'm ready to move forward," and ASSESS → DESIGN is the next forward step for T3+ tasks. Only skip if: (a) the task is T1-T2, (b) completed earlier in this session, or (c) user explicitly says "skip assess" / "skip design."
  - **PLAN VERIFY GATE (T3+)**: After PLAN completes for T3+ tasks, dispatch `forge-verify` for plan verification before proceeding to EXECUTE. The verify subagent checks plan completeness, file path validity, and DONE WHEN testability.
 
@@ -109,6 +110,7 @@ IMPORTANT: **NEVER** allow `task()` subagents to call `task()` — no nesting. W
  - DEFAULT: If in doubt between Ambiguous and another branch, choose Ambiguous. Clarify scope first, dispatch second.
 
 **ROUTING ANTI-PATTERNS:**
+ - **NEVER** create work items (epics, stories, tasks) as plain markdown files — ALWAYS invoke the `backlog` skill. This applies even in long design sessions where prior turns produced markdown artifacts.
  - **NEVER** route implementation requests to T1 — "fix the bug" is DISPATCH, not a quick answer
  - **NEVER** route multi-file analysis to Explore (lookup) — use Explore (investigate) with `forge-explore` skill
  - **NEVER** default to `task()` without evaluating parallelism via dispatch routing
