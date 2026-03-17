@@ -1,0 +1,29 @@
+{
+  "name": "forge-harness",
+  "version": "1.0.0",
+  "description": "Forge agentic flywheel — metrics, GC scanning, changelog management via exec API",
+  "type": "module",
+  "main": "scripts/index.js",
+  "bin": {
+    "forge-harness": "./scripts/index.js"
+  },
+  "scripts": {
+    "build": "ncc build src/cli.ts -o scripts --minify --no-source-map-register && node -e \"let f=require('fs'),p='scripts/index.js',c=f.readFileSync(p,'utf8');if(!c.startsWith('#!/'))f.writeFileSync(p,'#!/usr/bin/env node\\n'+c)\"",
+    "dev": "tsc --watch",
+    "test": "vitest run",
+    "clean": "rm -rf scripts dist"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.7.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.12",
+    "@types/node": "^22.10.5",
+    "@vercel/ncc": "^0.38.4",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}

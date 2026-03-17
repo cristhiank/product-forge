@@ -37,7 +37,10 @@ $WORKER exec --agent Forge --model claude-opus-4.6 --autopilot 'return sdk.spawn
 Invoke the \`forge-execute\` skill as your first action.
 Also invoke the \`backend-architecture\` skill.
 
-## Mission
+## Desired Outcome (Why)
+[What success looks like from the user's perspective]
+
+## Mission (How)
 [Clear objective for this group]
 
 ## Context

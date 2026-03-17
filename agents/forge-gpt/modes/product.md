@@ -137,3 +137,7 @@ When complexity is T2+, include visual aids:
 Lead discovery output with the user journey flow.
 
 Reference: `docs/specs/visual-vocabulary.md`
+
+## Changelog
+
+- 2026-03-14: Initial changelog. Added as part of agentic flywheel initiative (Fowler "Humans & Agents" analysis).

@@ -66,6 +66,7 @@ EXPLORE ──→ IDEATE ──→ ASSESS ──→ DESIGN ──→ PLAN ──
 | VERIFY | Independently validate plans or results | VERIFIER subagent | Verdict: approved / revision_required / blocked |
 | EXECUTE | Implement the plan | EXECUTOR subagent or workers | Code changes with evidence |
 | ITERATE | Decide what's next | Coordinator (inline) | Next action or completion |
+| RETROSPECTIVE | Analyze failures, propose harness patches | Verify verdict + failed run context | Root cause classification + harness patch proposals | Optional — after VERIFY failure (T3+), user rejection, or explicit request |
 
 ---
 
@@ -90,6 +91,15 @@ EXPLORE ──→ IDEATE ──→ ASSESS ──→ DESIGN ──→ PLAN ──
 | VERIFY (result) | Blocked | Back to user |
 | Any | "What's next?" | Check backlog → present options |
 | Any | Ad-hoc request | Classify and route (may skip phases) |
+
+### RETROSPECTIVE Transitions
+
+| From | To | Condition |
+|------|----|-----------|
+| VERIFY (revision_required) | RETROSPECTIVE | T3+ task, auto-suggested |
+| User rejection | RETROSPECTIVE | User says "what went wrong", "improve the harness" |
+| Explicit request | RETROSPECTIVE | User says "retrospective" at any point |
+| RETROSPECTIVE (done) | User decision | Present patches → user approves/rejects → apply or discard |
 
 ---
 
@@ -170,3 +180,41 @@ Key property: contracts frozen after DESIGN become the specification for PLAN an
 | EXECUTE | VERIFY (result) | Skip for T1 |
 | VERIFY (result, clean) | ITERATE / COMPLETE | — |
 | VERIFY (result, findings) | PLAN (new items) → EXECUTE | Report if informational only |
+
+---
+
+## Utility Phases
+
+Utility phases operate outside the main lifecycle. They do not participate in the explore → ... → verify progression.
+
+### GC (Codebase Health)
+
+**Purpose:** Scan codebase for entropy and decay. Produce prioritized findings and propose backlog items.
+
+**Trigger:** Explicit user request ("run gc", "scan for debt") or periodic suggestion (every 10+ runs).
+
+**Output:** Codebase health report with findings ordered by severity, plus proposed backlog items.
+
+**Not part of main lifecycle:** GC runs independently and does not transition to or from implementation phases.
+
+---
+
+## Agentic Flywheel
+
+The Forge lifecycle includes a self-improvement loop where session outcomes feed back into the harness:
+
+```
+EXECUTE → VERIFY → (failure) → RETROSPECTIVE → harness patches
+                                                      ↓
+                                              Mode files improve
+                                                      ↓
+                                              Future runs produce better results
+```
+
+**Components:**
+1. **Metrics collection** — forge-harness tracks dispatch, verify results, retries, user satisfaction
+2. **Retrospective analysis** — On failure, identifies root cause and proposes targeted harness patches
+3. **Memory evolution** — Memory mode proposes harness improvements based on extracted learnings
+4. **GC scanning** — Periodic codebase health checks fight entropy
+
+**Reference:** [Humans and Agents](https://martinfowler.com/articles/exploring-gen-ai/humans-and-agents.html) — Martin Fowler. The "on the loop" posture: humans build and maintain the harness, agents run the how loop.

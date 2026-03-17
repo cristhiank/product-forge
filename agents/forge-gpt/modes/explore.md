@@ -158,3 +158,7 @@ When complexity is T2+, include visual aids from the visual vocabulary (`docs/sp
 - **Layer overview** — Layer Stack (②) when the system has clear architectural layers
 
 Place diagrams after findings, before the tier classification.
+
+## Changelog
+
+- 2026-03-14: Initial changelog. Added as part of agentic flywheel initiative (Fowler "Humans & Agents" analysis).

@@ -157,7 +157,7 @@ Copy-PluginFile "$ScriptDir\plugin-shared.json" "$DistShared\plugin.json" "plugi
 Copy-PluginFile "$ScriptDir\.mcp.json" "$DistShared\.mcp.json" ".mcp.json" | Out-Null
 
 Write-Host "⚙️  Shared forge modes..."
-foreach ($mode in @('explore','ideate','design','plan','memory','product','assess')) {
+foreach ($mode in @('explore','ideate','design','plan','memory','product','assess','retrospective','gc','review')) {
     Copy-PluginFile "$ScriptDir\agents\forge\modes\$mode.md" "$DistShared\skills\forge-$mode\SKILL.md" "skills/forge-$mode/SKILL.md" | Out-Null
 }
 
@@ -210,7 +210,7 @@ if (Test-Path $tmplPath) {
 }
 
 Write-Host "🔧 Infrastructure skills..."
-foreach ($skill in @('experts-council','backlog','agents-hub','copilot-cli-skill')) {
+foreach ($skill in @('experts-council','backlog','agents-hub','copilot-cli-skill','forge-harness')) {
     $srcDir = "$ScriptDir\skills\$skill"
     $dstDir = "$DistShared\skills\$skill"
     if (-not (Test-Path $srcDir -PathType Container)) {
@@ -325,7 +325,7 @@ Write-Host "📜 GPT coordinator skill..."
 Copy-PluginFile "$ScriptDir\agents\forge-gpt\SKILL.md" "$DistGpt\skills\forge-gpt\SKILL.md" "skills/forge-gpt/SKILL.md" | Out-Null
 
 Write-Host "⚙️  GPT modes..."
-foreach ($mode in @('execute','verify','explore','ideate','design','plan','memory','product','assess')) {
+foreach ($mode in @('execute','verify','explore','ideate','design','plan','memory','product','assess','retrospective','gc','review')) {
     Copy-PluginFile "$ScriptDir\agents\forge-gpt\modes\$mode.md" "$DistGpt\skills\forge-$mode-gpt\SKILL.md" "skills/forge-$mode-gpt/SKILL.md" | Out-Null
 }
 

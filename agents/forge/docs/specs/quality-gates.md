@@ -350,3 +350,26 @@ After T3+ tasks complete, the ARCHIVIST adds a seventh extraction trigger:
  - What decisions were made that should be remembered for context?
 
 This trigger produces memories that are forward-looking — not recording what happened, but encoding what was learned for future tasks.
+
+---
+
+## Flywheel Quality Signals
+
+The forge-harness toolkit collects metrics that serve as automated quality signals:
+
+| Signal | Source | Interpretation |
+|--------|--------|---------------|
+| `verify_result` pass rate | forge-harness metrics | Declining rate signals harness degradation |
+| `retry_count` trending up | forge-harness metrics | Indicates recurring issues in a specific mode |
+| `scope_drift` incidents | forge-harness metrics | Points to inadequate planning or execution constraints |
+| `correction_count` | forge-harness metrics | High correction rate may indicate unclear instructions |
+| `user_signal` negative trend | forge-harness metrics | User dissatisfaction signals broader harness issues |
+| GC findings accumulating | forge-harness gc | Growing debt without cleanup signals entropy |
+
+### Periodic GC Suggestion
+
+After 10+ successful runs since last GC scan, the coordinator should suggest a codebase health check. This is non-blocking — the user decides whether to run it.
+
+### Retrospective as Quality Gate
+
+For T3+ tasks where VERIFY returns `revision_required`, the coordinator should suggest a retrospective before retrying. This shifts the response from "retry harder" to "fix the system that produced the failure."

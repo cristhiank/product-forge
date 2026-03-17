@@ -202,3 +202,7 @@ Reference: `docs/specs/visual-vocabulary.md`
  - MUST NOT generate more than 3 approaches
  - MUST NOT search the codebase
  - MUST NOT skip design questions
+
+## Changelog
+
+- 2026-03-14: Initial changelog. Added as part of agentic flywheel initiative (Fowler "Humans & Agents" analysis).

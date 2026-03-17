@@ -201,3 +201,7 @@ Include footers when applicable:
  - `DEVIATIONS:` — any departure from the Mission Brief
  - `UNKNOWNS:` — things that could not be determined
  - `REMAINING RISKS:` — strategic risks the assessment surfaced
+
+## Changelog
+
+- 2026-03-14: Initial changelog. Added as part of agentic flywheel initiative (Fowler "Humans & Agents" analysis).

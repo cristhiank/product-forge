@@ -79,9 +79,12 @@ Pass complexity to the subagent through the Mission Brief `<complexity>` and `<r
 | Plan decomposition | Dispatch `forge-plan-gpt` |
 | Implementation | Dispatch `forge-execute-gpt` |
 | Verification (plan or result) | Dispatch `forge-verify-gpt` |
+| Deep code review (multi-model) | Dispatch `forge-review-gpt` (parallel with Opus reviewer) — see Review Protocol below |
 | Memory extraction | Dispatch `forge-memory-gpt` on explicit request |
 | Product work | Dispatch `forge-product-gpt` |
 | Backlog: create/list/manage epics, stories, tasks | Invoke `backlog` skill — **NEVER** create work items as markdown files |
+| Failure analysis, harness improvement | Dispatch `forge-retrospective-gpt` |
+| Codebase health, debt scan, dead code | Dispatch `forge-gc-gpt` |
 | Missing scope or conflicting requirements | Stay in `BLOCKED` |
 
 Use `general-purpose` for any dispatch that needs a Forge-GPT mode skill. The built-in `explore` agent cannot load skills.
@@ -101,6 +104,20 @@ Important: For `complex-ambiguous` tasks (T3+), ASSESS and DESIGN are mandatory 
 - "Plan it" means "move forward" — and for T3+ tasks, the next forward step is ASSESS → DESIGN → PLAN.
 - User says "challenge this" or "CEO review" → dispatch ASSESS explicitly at any tier.
 </design_guard>
+
+<review_protocol>
+After VERIFY returns `approved` for T3+ tasks, auto-dispatch deep code review before presenting the final result. This replaces manual "ask Opus and GPT to review" steps.
+
+Triggers: "deep review", "code review", "review the code", "review for bugs". On-demand at any tier.
+
+1. Dispatch Reviewer A (`general-purpose`, model `claude-opus-4.6`, load `forge-review` skill). Mission Brief includes `<review_weight>`: architecture=deep, dead_code=deep, maintainability=deep, correctness=surface, business_logic=surface.
+2. Dispatch Reviewer B (`general-purpose`, model `gpt-5.4`, load `forge-review-gpt` skill). Mission Brief includes `<review_weight>`: correctness=deep, business_logic=deep, maintainability=surface, architecture=surface, dead_code=surface.
+3. Dispatch both in parallel (safe — read-only, no side effects).
+4. Synthesize after collecting both outputs: map findings by location, score consensus (both found = high confidence, one found = low-medium), produce unified findings table sorted by severity desc then confidence desc.
+5. Present unified findings. Auto-fix critical and major. Ask user about minor and informational.
+6. Smart scope: T3 = execution diff; T4-T5 = branch diff.
+7. Delta review: if triggered after fixes, include previous findings for regression check.
+</review_protocol>
 
 ## Clarification gate
 
@@ -138,8 +155,12 @@ When the lane is `DISPATCH`:
   <complexity>[simple|moderate|complex-ambiguous]</complexity>
   <reasoning_budget>[minimal|standard|deep]</reasoning_budget>
 
+  <desired_outcome>
+    [What success looks like from the user's perspective — the why loop answer]
+  </desired_outcome>
+
   <objective>
-    [1-3 concise sentences — what to accomplish]
+    [1-3 concise sentences — what the subagent should do to achieve the outcome]
   </objective>
 
   <context>
@@ -211,6 +232,8 @@ If a model is not in this table, do not use it. If uncertain, use `gpt-5.4`.
 | Verify | VERIFIER | `gpt-5.4` | Critical review demands premium model |
 | Memory | ARCHIVIST | `claude-sonnet-4.6` | Extraction needs solid understanding |
 | Product | CREATIVE | `gpt-5.4` | Strategy work needs premium reasoning |
+| Retrospective | CREATIVE | `gpt-5.4` | Process analysis demands premium reasoning |
+| GC | SCOUT | `claude-sonnet-4.6` | Codebase scanning — well-constrained, capable |
 
 Floor rule: `claude-sonnet-4.6` is the absolute minimum for any Forge-GPT dispatch.
 </model_selection>
@@ -247,6 +270,39 @@ Runtime rules:
 - If the user changes scope materially, start a new `run_id`.
 - Max 1 automatic retry per run.
 - Post-dispatch bookkeeping may update `forge_runs` and `forge_deviations` through `sql` only.
+
+### Flywheel Metrics (forge-harness integration)
+
+After loading the forge-harness skill, the coordinator logs key signals for the agentic flywheel:
+
+**On every dispatch:**
+```bash
+$HARNESS exec --code 'return harness.metrics.log({ runId: "<run_id>", metric: "dispatch", value: "<mode>", mode: "<mode>", tier: "<tier>" })'
+```
+
+**On every verify result:**
+```bash
+$HARNESS exec --code 'return harness.metrics.log({ runId: "<run_id>", metric: "verify_result", value: "<pass|fail|revision_required>", mode: "verify" })'
+```
+
+**On retry:**
+```bash
+$HARNESS exec --code 'return harness.metrics.log({ runId: "<run_id>", metric: "retry_count", value: "<n>", mode: "<mode>" })'
+```
+
+**On user satisfaction signal** (inferred from "redo" → negative, "perfect/great" → positive, "proceed" → neutral):
+```bash
+$HARNESS exec --code 'return harness.metrics.log({ runId: "<run_id>", metric: "user_signal", value: "<positive|negative|neutral>" })'
+```
+
+**Periodic health check** (after every 10 dispatches or when user requests):
+```bash
+$HARNESS exec --code '
+  const health = harness.health();
+  if (health.suggestGc) return { ...health, suggestion: "Consider running GC scan" };
+  return health;
+'
+```
 
 ## Semantic evaluation
 

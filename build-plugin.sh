@@ -135,7 +135,7 @@ copy_file \
 # --- Step 4: Mode skills ---
 echo ""
 echo "⚙️  Mode skills..."
-MODES=("explore" "ideate" "design" "plan" "execute" "verify" "memory" "product" "assess")
+MODES=("explore" "ideate" "design" "plan" "execute" "verify" "memory" "product" "assess" "retrospective" "gc" "review")
 for mode in "${MODES[@]}"; do
   copy_file \
     "$SCRIPT_DIR/agents/forge/modes/${mode}.md" \
@@ -223,7 +223,7 @@ copy_file \
 # --- Step 6: Infrastructure skills ---
 echo ""
 echo "🔧 Infrastructure skills..."
-INFRA_SKILLS=("experts-council" "backlog" "agents-hub" "copilot-cli-skill")
+INFRA_SKILLS=("experts-council" "backlog" "agents-hub" "copilot-cli-skill" "forge-harness")
 for skill in "${INFRA_SKILLS[@]}"; do
   src_dir="$SCRIPT_DIR/skills/$skill"
   dst_dir="$DIST/skills/$skill"

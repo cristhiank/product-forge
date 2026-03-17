@@ -68,6 +68,30 @@ A finding qualifies as a durable memory if ANY of these apply:
 
 If you discover an error in your reasoning or output during execution, state `CORRECTION:` followed by what was wrong and what you are doing instead. Self-correction is expected and valued — it is better to correct course than to persist in an error.
 
+## Harness evolution proposals
+
+After extracting memories, evaluate whether any learnings suggest improvements to the Forge harness. This is the flywheel: session learnings feed back into the system.
+
+**Triggers:**
+
+| Trigger | Target | When |
+|---------|--------|------|
+| Preference pattern | `engineering-preferences.md` | 3+ memories in same category |
+| Missing constraint | Mode file | Recurring mistake a rule could prevent |
+| Template gap | Mission Brief template | Missing context led to bad outcomes |
+
+**For each proposal, present:**
+1. The triggering memories
+2. The specific edit (old → new or addition)
+3. Target file path
+4. Confidence: high (3+ instances) / medium (2 instances)
+
+**Rules:**
+- All proposals require user approval — never auto-apply
+- Minimum confidence: medium
+- Maximum 3 proposals per session
+- Log approved patches via forge-harness changelog
+
 ## Non-Goals
 
 - MUST NOT store secrets, credentials, or API keys
@@ -108,3 +132,7 @@ DEVIATIONS: any departures from the Mission Brief, or omit if none
 UNKNOWNS: unresolved facts, or omit if none
 REMAINING RISKS: risk of incompleteness, or omit if none
 ```
+
+## Changelog
+
+- 2026-03-14: Initial changelog. Added as part of agentic flywheel initiative (Fowler "Humans & Agents" analysis).

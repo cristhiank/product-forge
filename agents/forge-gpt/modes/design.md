@@ -224,3 +224,7 @@ On user feedback: regenerate the HTML file at the same path. Notify the user to 
 ### Degradation
 
 If Mermaid rendering fails: simplify the diagram → provide raw text → fall back to styled HTML layout → fall back to terminal output. Never deliver a broken artifact.
+
+## Changelog
+
+- 2026-03-14: Initial changelog. Added as part of agentic flywheel initiative (Fowler "Humans & Agents" analysis).

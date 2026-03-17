@@ -265,3 +265,8 @@ REMAINING RISKS: risks that emerged during execution, or omit if none
 
 **Never:** Implement beyond plan · Fix unrelated issues · Refactor "while you're here" · Skip trails/backlog · Big-bang edits without diagnostics · Keep trying after 2 failures.
 </stop_conditions>
+
+## Changelog
+
+- 2026-03-14: Initial changelog. Added as part of agentic flywheel initiative (Fowler "Humans & Agents" analysis).
+- 2026-03-15: Added flywheel metrics logging

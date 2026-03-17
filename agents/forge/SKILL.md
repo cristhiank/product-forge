@@ -98,11 +98,49 @@ IMPORTANT: **NEVER** allow `task()` subagents to call `task()` — no nesting. W
 
 ### Verify
  - Delegate to verify subagent (or experts-council for delta review)
- - Triggers: "review", "check", "verify", "validate", "audit", "review again" (→ delta review via experts-council)
+ - Triggers: "check", "verify", "validate", "audit", "review again" (→ delta review via experts-council)
+
+### Review (Deep Code Review)
+ - Multi-model deep code review — 2 parallel reviewers + synthesis
+ - Triggers: "deep review", "code review", "review the code", "review for bugs"
+ - **AUTO-CHAIN (T3+)**: After VERIFY returns `approved` for T3+ tasks, auto-dispatch REVIEW before presenting the final result to the user. This replaces the manual "ask Opus and GPT to review" step.
+ - **On-demand**: User can trigger "deep review" at any tier — T1-T2 included.
+ - **REVIEW PROTOCOL**:
+   1. Dispatch **Reviewer A** (`general-purpose`, model `claude-opus-4.6`, load `forge-review` skill):
+      - Mission Brief includes `<review_weight>`: architecture=deep, dead_code=deep, maintainability=deep, correctness=surface, business_logic=surface
+   2. Dispatch **Reviewer B** (`general-purpose`, model `gpt-5.4`, load `forge-review-gpt` skill):
+      - Mission Brief includes `<review_weight>`: correctness=deep, business_logic=deep, maintainability=surface, architecture=surface, dead_code=surface
+   3. Both dispatched **in parallel** (safe — read-only, no side effects)
+   4. **Synthesis** (you are Opus — do this inline after collecting both outputs):
+      - Map findings by location: same file:line range = potential match
+      - **Consensus** (both found it) → confidence: high
+      - **Disputed** (one flagged, other didn't, or different severity) → confidence: medium
+      - **Unique** (only one reviewer found it) → confidence: low-medium
+      - Produce unified findings table sorted by: severity desc, confidence desc
+      - For each finding, note which reviewer(s) flagged it
+   5. **Present to user**: Show unified findings table with confidence scores
+   6. **Auto-fix**: Critical and major findings → auto-dispatch fix. Minor and informational → present to user, ask what to fix.
+ - **Smart scope**: T3 = execution diff (files from current task); T4-T5 = branch diff (all changes since main)
+ - **Delta review**: If user says "deep review" after fixes were applied, include previous review findings in the Mission Brief — reviewers will run the Delta Review protocol (assess fixed/not-fixed/new)
 
 ### Memory
  - Delegate to memory subagent (user request only)
  - Triggers: "extract memories", "save learnings", "memory mine"
+
+### Retrospective
+ - Delegate to forge-retrospective subagent
+ - Triggers: "retrospective", "what went wrong", "improve the harness", "fix the process", "why did this fail"
+ - Auto-suggest: after VERIFY returns `revision_required` for T3+ tasks
+ - Auto-suggest: after user says "that's not what I wanted", "redo", or rejects output
+
+### GC (Codebase Health)
+ - Delegate to forge-gc subagent
+ - Triggers: "run gc", "scan for debt", "check codebase health", "find dead code", "check docs"
+ - Periodic suggestion: after 10+ successful runs since last GC scan (check via forge-harness)
+
+### Harness Evolution (part of Memory mode)
+ - Handled within forge-memory — no separate dispatch needed
+ - After memory extraction, the memory subagent may also propose harness patches
 
 ### Ambiguous
  - Ask user 1-3 focused clarifying questions before routing
@@ -111,6 +149,8 @@ IMPORTANT: **NEVER** allow `task()` subagents to call `task()` — no nesting. W
 
 **ROUTING ANTI-PATTERNS:**
  - **NEVER** create work items (epics, stories, tasks) as plain markdown files — ALWAYS invoke the `backlog` skill. This applies even in long design sessions where prior turns produced markdown artifacts.
+ - **NEVER** skip REVIEW for T3+ tasks after VERIFY approves — the deep multi-model review catches cross-cutting issues that single-agent verify misses
+ - **NEVER** route "deep review" or "code review" to the verify mode — verify checks plan conformance; review checks code quality across dimensions
  - **NEVER** route implementation requests to T1 — "fix the bug" is DISPATCH, not a quick answer
  - **NEVER** route multi-file analysis to Explore (lookup) — use Explore (investigate) with `forge-explore` skill
  - **NEVER** default to `task()` without evaluating parallelism via dispatch routing
@@ -382,7 +422,10 @@ IMPORTANT: Before dispatching, classify the task complexity. This determines rea
 IMPORTANT: Every `task` call MUST package context as a structured Mission Brief. Building a Mission Brief IS the coordinator's real work.
 
 ```markdown
-## Mission
+## Desired Outcome (Why)
+[What success looks like from the user's perspective — the why loop answer]
+
+## Mission (How)
 [clear objective — what to accomplish]
 Complexity: [simple | moderate | complex-ambiguous]
 Reasoning budget: [≤50 words | 50-150 words | architecture review]
@@ -439,6 +482,8 @@ IMPORTANT: **NEVER** use `claude-haiku-4.5`, `claude-sonnet-4.5`, `claude-sonnet
 | Verify | VERIFIER | `claude-opus-4.6` | Critical review demands premium model |
 | Memory | ARCHIVIST | `claude-sonnet-4.6` | Extraction still needs solid understanding |
 | Product | CREATIVE | `claude-opus-4.6` | Strategy work needs premium reasoning |
+| Retrospective | CREATIVE | `claude-opus-4.6` | Process analysis demands premium judgment |
+| GC | SCOUT | `claude-sonnet-4.6` | Codebase scanning — well-constrained, capable |
 
 **Floor rule:** `claude-sonnet-4.6` is the absolute minimum for any Forge dispatch. No exceptions.
 
@@ -499,6 +544,8 @@ The built-in `explore` agent (agent_type: "explore") is fast but limited — gre
 |------|-----------|-------|---------|
 | "Where is X?" / "Find symbol Y" / file lookup | `explore` | None | No — free text answer |
 | Investigate, understand, classify, trace deps, external search | `general-purpose` | `forge-explore` | Yes — structured findings |
+| Retrospective analysis | `general-purpose` | `forge-retrospective` | Yes |
+| GC / codebase health | `general-purpose` | `forge-gc` | Yes |
 
 If the Mission Brief says `Invoke the \`forge-explore\` skill`, use agent_type `general-purpose`. The built-in explore agent cannot load skills.
 ---
@@ -609,6 +656,39 @@ CREATE TABLE IF NOT EXISTS forge_deviations (
  - Retries reuse `run_id` and increment `attempt_count`
  - If the user changes scope materially, start a new `run_id`
  - Max 1 automatic retry per run
+
+### Flywheel Metrics (forge-harness integration)
+
+After loading the forge-harness skill, the coordinator logs key signals for the agentic flywheel:
+
+**On every dispatch:**
+```bash
+$HARNESS exec --code 'return harness.metrics.log({ runId: "<run_id>", metric: "dispatch", value: "<mode>", mode: "<mode>", tier: "<tier>" })'
+```
+
+**On every verify result:**
+```bash
+$HARNESS exec --code 'return harness.metrics.log({ runId: "<run_id>", metric: "verify_result", value: "<pass|fail|revision_required>", mode: "verify" })'
+```
+
+**On retry:**
+```bash
+$HARNESS exec --code 'return harness.metrics.log({ runId: "<run_id>", metric: "retry_count", value: "<n>", mode: "<mode>" })'
+```
+
+**On user satisfaction signal** (inferred from "redo" → negative, "perfect/great" → positive, "proceed" → neutral):
+```bash
+$HARNESS exec --code 'return harness.metrics.log({ runId: "<run_id>", metric: "user_signal", value: "<positive|negative|neutral>" })'
+```
+
+**Periodic health check** (after every 10 dispatches or when user requests):
+```bash
+$HARNESS exec --code '
+  const health = harness.health();
+  if (health.suggestGc) return { ...health, suggestion: "Consider running GC scan" };
+  return health;
+'
+```
 ---
 
 ## Scope Drift Checkpoint

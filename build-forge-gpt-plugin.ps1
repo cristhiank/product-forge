@@ -191,7 +191,7 @@ Copy-PluginFile `
 # --- Step 4: GPT mode skills (all 8 from forge-gpt) ---
 Write-Host ""
 Write-Host "⚙️  GPT mode skills..."
-foreach ($mode in @('execute','verify','explore','ideate','design','plan','memory','product','assess')) {
+foreach ($mode in @('execute','verify','explore','ideate','design','plan','memory','product','assess','retrospective','gc','review')) {
     Copy-PluginFile `
         "$ScriptDir\agents\forge-gpt\modes\$mode.md" `
         "$Dist\skills\forge-$mode-gpt\SKILL.md" `
@@ -264,7 +264,7 @@ Copy-PluginFile `
 # --- Step 10: Infrastructure skills ---
 Write-Host ""
 Write-Host "🔧 Infrastructure skills..."
-$infraSkills = @('experts-council', 'backlog', 'agents-hub', 'copilot-cli-skill')
+$infraSkills = @('experts-council', 'backlog', 'agents-hub', 'copilot-cli-skill', 'forge-harness')
 foreach ($skill in $infraSkills) {
     $srcDir = "$ScriptDir\skills\$skill"
     $dstDir = "$Dist\skills\$skill"

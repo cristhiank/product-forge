@@ -346,3 +346,7 @@ Reference: `docs/specs/visual-vocabulary.md`
  - SHOULD use CORRECTION: protocol when discovering errors mid-execution (see engineering-preferences.md)
 
 Also load `shared/engineering-preferences.md` from the forge skill directory for coding convention reference.
+
+## Changelog
+
+- 2026-03-14: Initial changelog. Added as part of agentic flywheel initiative (Fowler "Humans & Agents" analysis).

@@ -452,3 +452,7 @@ These skills are bundled with the forge plugin and loaded by the coordinator int
 Invoke the `forge-product` skill as your first action.
 Also invoke the `{skill}` skill for {reason}.
 ```
+
+## Changelog
+
+- 2026-03-14: Initial changelog. Added as part of agentic flywheel initiative (Fowler "Humans & Agents" analysis).

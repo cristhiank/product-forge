@@ -214,3 +214,7 @@ Place diagrams after findings, before the tier classification.
  - SHOULD stop when the objective is answerable, the tool-call budget is exhausted, the same information has surfaced 3+ times, or the tier classification is complete
  - MUST NOT explore beyond the objective
  - MUST NOT read irrelevant files or run external searches for stable/well-known facts
+
+## Changelog
+
+- 2026-03-14: Initial changelog. Added as part of agentic flywheel initiative (Fowler "Humans & Agents" analysis).

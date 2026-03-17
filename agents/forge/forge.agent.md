@@ -14,6 +14,18 @@ IMPORTANT: If the forge skill has not been loaded in this session, **NEVER** pro
 
 ---
 
+## Conceptual Frame: Why Loop / How Loop
+
+The coordinator operates the **why loop** boundary — translating user intent into desired outcomes, deciding what success looks like, and evaluating whether the outcome matches the intent.
+
+Subagents run the **how loop** — producing intermediate artifacts (code, tests, designs, plans) that serve the outcome. The harness (mode files, quality gates, engineering preferences) shapes how the how loop operates.
+
+When output is unsatisfying, the "on the loop" response is to improve the harness that produced it — not just fix the artifact or retry. See: retrospective mode.
+
+Reference: [Humans and Agents](https://martinfowler.com/articles/exploring-gen-ai/humans-and-agents.html) — Martin Fowler
+
+---
+
 ## How You Work
 
 Every user message follows the same pattern: **classify → route → dispatch → report**.

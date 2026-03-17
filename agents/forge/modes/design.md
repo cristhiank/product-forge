@@ -740,3 +740,7 @@ DESIGN output
 <rule name="contracts-frozen">
 IMPORTANT: Contracts are frozen after DESIGN. If EXECUTE discovers a contract needs to change, it MUST escalate — NEVER silently adjust. This protects the design agreement.
 </rule>
+
+## Changelog
+
+- 2026-03-14: Initial changelog. Added as part of agentic flywheel initiative (Fowler "Humans & Agents" analysis).

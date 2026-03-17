@@ -149,3 +149,8 @@ Next: Ready for verification review.
 
 [done]
 ```
+
+## Changelog
+
+- 2026-03-14: Initial changelog. Added as part of agentic flywheel initiative (Fowler "Humans & Agents" analysis).
+- 2026-03-15: Added flywheel metrics logging

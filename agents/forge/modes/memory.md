@@ -240,3 +240,45 @@ REMAINING RISKS: patterns that may need re-evaluation, or omit if none
  - MUST NOT run without an explicit user request
  - SHOULD prefer fewer high-quality memories over exhaustive low-quality ones
  - SHOULD use CORRECTION: protocol when discovering errors mid-execution (see engineering-preferences.md)
+
+## Harness Evolution Proposals
+
+After extracting memories, analyze whether any learnings suggest harness improvements. This is the flywheel: session learnings feed back into the system that produces future sessions.
+
+<rules name="harness-evolution">
+
+### When to Propose
+
+Evaluate extracted memories against these triggers:
+
+| Trigger | Harness Target | Propose When |
+|---------|---------------|-------------|
+| **Preference pattern** | `engineering-preferences.md` | 3+ memories in same category suggest an uncodified convention |
+| **Missing constraint** | Mode file (explore, execute, etc.) | A memory describes a recurring mistake that a mode rule could prevent |
+| **Template gap** | Mission Brief template | A memory describes missing context that led to suboptimal outcomes |
+
+### How to Propose
+
+For each harness improvement, present:
+
+1. **The memories that triggered it** — which extracted facts suggest this change
+2. **The specific edit** — old text → new text (or addition if no old text exists)
+3. **Target file** — exact path (e.g., `agents/forge/modes/execute.md`)
+4. **Confidence** — high (3+ instances) / medium (2 instances) / low (1 instance + strong reasoning)
+
+### Rules
+
+ - MUST NOT auto-apply patches — all proposals require user approval
+ - MUST NOT propose patches with confidence below medium
+ - MUST log approved patches via forge-harness changelog:
+   ```bash
+   $HARNESS exec --code 'return harness.changelog.add({ modeFile: "<file>", entry: "<description>" })'
+   ```
+ - SHOULD limit to 3 proposals maximum per extraction session
+ - SHOULD prefer additive rules over modifications to existing rules
+
+</rules>
+
+## Changelog
+
+- 2026-03-14: Initial changelog. Added as part of agentic flywheel initiative (Fowler "Humans & Agents" analysis).

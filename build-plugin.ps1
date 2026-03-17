@@ -140,7 +140,7 @@ Copy-PluginFile `
 # --- Step 4: Mode skills ---
 Write-Host ""
 Write-Host "⚙️  Mode skills..."
-$modes = @("explore", "ideate", "design", "plan", "execute", "verify", "memory", "product", "assess")
+$modes = @("explore", "ideate", "design", "plan", "execute", "verify", "memory", "product", "assess", "retrospective", "gc", "review")
 foreach ($mode in $modes) {
     Copy-PluginFile `
         "$ScriptDir\agents\forge\modes\$mode.md" `
@@ -230,7 +230,7 @@ Copy-PluginFile `
 # --- Step 6: Infrastructure skills ---
 Write-Host ""
 Write-Host "🔧 Infrastructure skills..."
-$infraSkills = @("experts-council", "backlog", "agents-hub", "copilot-cli-skill")
+$infraSkills = @("experts-council", "backlog", "agents-hub", "copilot-cli-skill", "forge-harness")
 foreach ($skill in $infraSkills) {
     $srcDir = "$ScriptDir\skills\$skill"
     $dstDir = "$Dist\skills\$skill"

@@ -287,3 +287,7 @@ Reference: `docs/specs/visual-vocabulary.md`
  - MUST NOT start implementation
  - MUST NOT re-explore the codebase — use provided context
  - MUST NOT omit DONE WHEN, "What already exists", or "NOT in scope" sections
+
+## Changelog
+
+- 2026-03-14: Initial changelog. Added as part of agentic flywheel initiative (Fowler "Humans & Agents" analysis).
