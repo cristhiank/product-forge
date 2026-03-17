@@ -47,6 +47,34 @@ For each page or flow, assess against these dimensions:
 | **Accessibility** | Keyboard navigable? Screen reader friendly? Touch targets adequate? |
 | **Information density** | Appropriate for the user persona (professional dense vs consumer spacious)? |
 | **Progressive disclosure** | Complex forms/settings broken into digestible sections? |
+| **Interaction polish** | Button press feedback? Proper easing? No `transition: all`? Hover gated for touch? |
+| **Form patterns** | FieldRow for settings? FormGrid for data entry? No unstyled vertical stacks? |
+
+### Animation & Interaction Checks
+
+During evaluation, specifically check for these common issues:
+
+| Issue | Check | Fix |
+|-------|-------|-----|
+| `transition: all` | grep for `transition: all` or `transition:all` | Specify exact properties |
+| Missing `:active` on buttons | Inspect button elements for `:active` rule | Add `scale(0.97)` feedback |
+| Hover on touch devices | Check for hover styles without `@media (hover: hover)` | Gate behind media query |
+| Animations >300ms | Check transition/animation durations | Reduce UI animations to 150–250ms |
+| `ease-in` on UI elements | Check easing functions | Switch to `ease-out` or custom curve |
+| Hard-coded animation values | grep for inline `300ms`, `ease`, without tokens | Use motion tokens |
+| No `prefers-reduced-motion` | Check for reduced-motion media query | Add reduced-motion fallback |
+
+### Review Output Format
+
+When presenting UI review findings, always use a Before/After/Why table:
+
+| Before | After | Why |
+|--------|-------|-----|
+| `padding: 24px` | `padding: var(--card-padding)` | Use design tokens, not hard-coded values |
+| No loading state on page | Skeleton matching final content | Users need visual feedback during data fetch |
+| Plain vertical form, 8 fields | FormGrid with 2-col responsive grid | Vertical stacks lack visual structure |
+
+Never present findings as a list of "Before:" / "After:" on separate lines — always use a markdown table.
 
 ## Phase 3: Classify Findings
 

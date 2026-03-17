@@ -126,3 +126,62 @@ Use these when choosing between competing valid approaches. Each framework gives
 - Brand requires unique iconography not available in libraries
 - Very few icons needed (logo, brand mark)
 - Wrap in a project-owned component regardless
+
+## Notification Strategy: Toast vs Banner vs Dialog
+
+**Toast when:**
+- Transient feedback after CRUD operations (created, updated, deleted)
+- Non-blocking — user doesn't need to act
+- Auto-dismiss after 5–6 seconds
+- Position: top-right corner (doesn't block content)
+
+**Banner (inline) when:**
+- Persistent error that blocks functionality (API down, auth expired)
+- Placed immediately after page header, not floating
+- Includes retry action
+- Uses `role="alert"` for accessibility
+
+**Dialog when:**
+- Destructive action requiring explicit confirmation (delete, deactivate)
+- Uses `role="alertdialog"` for accessibility
+- Default button: Cancel (non-destructive), destructive button: explicit red
+- Clear, non-technical description of consequence
+
+**Never use toast for:** persistent errors (use banner), confirmations (use dialog), errors requiring action (use banner with retry).
+
+## Save Strategy: Batch vs Per-Field vs Auto-Save
+
+**Batch save (sticky footer) when:**
+- Settings or configuration pages with multiple fields
+- User edits several fields before committing
+- Dirty state tracked at section/tab level (not per-field)
+- Visual signal: sticky footer slides up showing dirty count + Discard + Save
+
+**Per-field save when:**
+- Individual toggle switches with immediate effect (enable/disable feature)
+- Fields that affect other fields in real-time
+- Only when each field is independently meaningful
+
+**Auto-save when:**
+- Document or content editing (rich text, notes)
+- Real-time collaboration contexts
+- Debounced (500ms+), with visual "Saved" indicator
+
+**Default for admin/settings:** Batch save with sticky footer. Per-field save is a UX anti-pattern for settings pages — multiple toasts for individual saves overwhelm the user.
+
+## Form Layout: FieldRow vs FormGrid
+
+**FieldRow (label LEFT, control RIGHT) when:**
+- Settings/configuration pages
+- Fields are mostly booleans (switches), selects, and short text
+- Compact density needed — each field takes one horizontal line
+- Label width: fixed 140–200px, control fills remaining space
+- Spacing between rows: 0.5rem (compact) or 1rem (standard)
+
+**FormGrid (label ABOVE, responsive grid) when:**
+- Data entry forms (create/edit entities)
+- Fields are mostly text inputs, textareas, date pickers
+- Need 2–3 columns on desktop, 1 column on mobile
+- Grid: `grid-cols-1 md:grid-cols-2 lg:grid-cols-3`, gap: 1.5rem
+
+**Warning sign:** 4+ text fields rendered as a plain vertical stack with no visual structure is always wrong. Apply FormGrid. 6+ boolean/select fields stacked vertically without structure is wrong. Apply FieldRow.

@@ -82,6 +82,8 @@ Prefer:
 
 9. **Streaming is progressive refinement** — Streaming data renders within stable containers. Layout must not thrash. Updates animate inside their frames.
 
+10. **Interaction polish is not optional** — Every interactive element has explicit hover, active, focus, and disabled states. Animations use custom easing curves and respect motion tokens. Buttons give press feedback. Forms use structured layouts (FieldRow, FormGrid), never unstyled vertical stacks. See [interaction-polish.md](references/interaction-polish.md) for the full framework.
+
 ## Project Structure
 
 Feature-first layout:
@@ -173,6 +175,7 @@ For details, see [feature-modules.md](references/feature-modules.md).
 | Telemetry and observability | [telemetry.md](references/telemetry.md) |
 | Common frontend design decision trees | [design-decisions.md](references/design-decisions.md) |
 | UX review and audit workflow | [ux-review-workflow.md](references/ux-review-workflow.md) |
+| Interaction polish, animation, and UX drift prevention | [interaction-polish.md](references/interaction-polish.md) |
 
 ## Internationalization
 
