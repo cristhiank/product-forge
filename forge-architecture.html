@@ -1,0 +1,1508 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Forge — Agent Architecture Explorer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Outfit:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  :root {
+    --bg: #0a0a0f;
+    --bg-surface: #111118;
+    --bg-card: #16161f;
+    --bg-card-hover: #1c1c28;
+    --border: #2a2a3a;
+    --border-active: #4a4a6a;
+    --text: #e8e8f0;
+    --text-dim: #8888a0;
+    --text-muted: #555568;
+    --accent-cyan: #00d4ff;
+    --accent-cyan-dim: #00d4ff22;
+    --accent-orange: #ff8844;
+    --accent-orange-dim: #ff884422;
+    --accent-green: #44ff88;
+    --accent-green-dim: #44ff8822;
+    --accent-purple: #aa66ff;
+    --accent-purple-dim: #aa66ff22;
+    --accent-pink: #ff44aa;
+    --accent-pink-dim: #ff44aa22;
+    --accent-yellow: #ffcc00;
+    --accent-yellow-dim: #ffcc0022;
+    --accent-red: #ff4455;
+    --font-display: 'Outfit', sans-serif;
+    --font-mono: 'JetBrains Mono', monospace;
+    --radius: 12px;
+    --radius-sm: 8px;
+    --glow-cyan: 0 0 20px #00d4ff33, 0 0 40px #00d4ff11;
+    --glow-orange: 0 0 20px #ff884433, 0 0 40px #ff884411;
+  }
+  html { scroll-behavior: smooth; }
+  body {
+    font-family: var(--font-display);
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+    overflow-x: hidden;
+  }
+  /* NOISE OVERLAY */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 9999;
+  }
+  /* GRID BG */
+  .grid-bg {
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(0,212,255,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,212,255,0.03) 1px, transparent 1px);
+    background-size: 60px 60px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* NAV */
+  nav {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 100;
+    background: rgba(10,10,15,0.85);
+    backdrop-filter: blur(20px);
+    border-bottom: 1px solid var(--border);
+    padding: 0 2rem;
+    height: 56px;
+    display: flex;
+    align-items: center;
+    gap: 2rem;
+  }
+  nav .logo {
+    font-family: var(--font-mono);
+    font-weight: 700;
+    font-size: 1rem;
+    color: var(--accent-cyan);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+  nav .logo span { color: var(--text-dim); font-weight: 400; }
+  nav .nav-links {
+    display: flex;
+    gap: 0.25rem;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  nav .nav-links::-webkit-scrollbar { display: none; }
+  nav a {
+    color: var(--text-dim);
+    text-decoration: none;
+    font-size: 0.8rem;
+    font-weight: 500;
+    padding: 0.4rem 0.75rem;
+    border-radius: 6px;
+    transition: all 0.2s;
+    white-space: nowrap;
+    font-family: var(--font-mono);
+  }
+  nav a:hover, nav a.active { color: var(--text); background: var(--bg-card); }
+
+  /* SECTIONS */
+  main { position: relative; z-index: 1; padding-top: 56px; }
+  section {
+    padding: 4rem 2rem;
+    max-width: 1400px;
+    margin: 0 auto;
+  }
+  section + section { border-top: 1px solid var(--border); }
+  .section-label {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--accent-cyan);
+    margin-bottom: 0.5rem;
+  }
+  h2 {
+    font-size: 2.2rem;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    margin-bottom: 0.75rem;
+    line-height: 1.2;
+  }
+  .section-desc {
+    color: var(--text-dim);
+    font-size: 1rem;
+    max-width: 700px;
+    margin-bottom: 2.5rem;
+    line-height: 1.7;
+  }
+
+  /* HERO */
+  #hero {
+    padding: 8rem 2rem 5rem;
+    text-align: center;
+    position: relative;
+  }
+  #hero::before {
+    content: '';
+    position: absolute;
+    top: 56px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 800px;
+    height: 500px;
+    background: radial-gradient(ellipse, var(--accent-cyan-dim) 0%, transparent 70%);
+    pointer-events: none;
+  }
+  #hero h1 {
+    font-size: clamp(3rem, 7vw, 5rem);
+    font-weight: 900;
+    letter-spacing: -0.03em;
+    line-height: 1.05;
+    margin-bottom: 1.5rem;
+    position: relative;
+  }
+  #hero h1 .gradient {
+    background: linear-gradient(135deg, var(--accent-cyan), var(--accent-purple));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  #hero p {
+    color: var(--text-dim);
+    font-size: 1.15rem;
+    max-width: 640px;
+    margin: 0 auto 2.5rem;
+    line-height: 1.7;
+    position: relative;
+  }
+  .hero-stats {
+    display: flex;
+    justify-content: center;
+    gap: 3rem;
+    position: relative;
+  }
+  .hero-stat {
+    text-align: center;
+  }
+  .hero-stat .num {
+    font-family: var(--font-mono);
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--accent-cyan);
+  }
+  .hero-stat .label {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    font-family: var(--font-mono);
+  }
+
+  /* DUAL SYSTEM CARDS */
+  .dual-cards {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+  }
+  .system-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 2rem;
+    position: relative;
+    overflow: hidden;
+    transition: border-color 0.3s, transform 0.2s;
+  }
+  .system-card:hover {
+    border-color: var(--border-active);
+    transform: translateY(-2px);
+  }
+  .system-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+  }
+  .system-card.opus::before { background: linear-gradient(90deg, var(--accent-cyan), var(--accent-purple)); }
+  .system-card.gpt::before { background: linear-gradient(90deg, var(--accent-orange), var(--accent-yellow)); }
+  .system-card .card-badge {
+    font-family: var(--font-mono);
+    font-size: 0.65rem;
+    font-weight: 600;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    padding: 0.25rem 0.6rem;
+    border-radius: 4px;
+    display: inline-block;
+    margin-bottom: 1rem;
+  }
+  .system-card.opus .card-badge { color: var(--accent-cyan); background: var(--accent-cyan-dim); }
+  .system-card.gpt .card-badge { color: var(--accent-orange); background: var(--accent-orange-dim); }
+  .system-card h3 { font-size: 1.4rem; font-weight: 700; margin-bottom: 0.5rem; }
+  .system-card .desc { color: var(--text-dim); font-size: 0.9rem; margin-bottom: 1.25rem; }
+  .card-features {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  .card-feature {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.85rem;
+    color: var(--text-dim);
+    font-family: var(--font-mono);
+  }
+  .card-feature .dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .opus .card-feature .dot { background: var(--accent-cyan); }
+  .gpt .card-feature .dot { background: var(--accent-orange); }
+
+  /* LOOP VISUALIZATION */
+  .loop-container {
+    position: relative;
+    padding: 2rem 0;
+  }
+  .loop-track {
+    display: flex;
+    gap: 0;
+    position: relative;
+    overflow-x: auto;
+    padding: 1rem 0 2rem;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+  .loop-track::-webkit-scrollbar { height: 4px; }
+  .loop-track::-webkit-scrollbar-track { background: transparent; }
+  .loop-track::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+  .loop-step {
+    flex: 0 0 auto;
+    width: 180px;
+    position: relative;
+    cursor: pointer;
+    padding: 0 0.5rem;
+  }
+  .loop-step .connector {
+    position: absolute;
+    top: 28px;
+    left: calc(50% + 14px);
+    width: calc(100% - 28px);
+    height: 2px;
+    background: var(--border);
+    z-index: 0;
+  }
+  .loop-step:last-child .connector { display: none; }
+  .step-node {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    border: 2px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 0.75rem;
+    position: relative;
+    z-index: 1;
+    background: var(--bg-card);
+    transition: all 0.3s;
+    font-size: 1.4rem;
+  }
+  .loop-step:hover .step-node,
+  .loop-step.active .step-node {
+    border-color: var(--step-color, var(--accent-cyan));
+    box-shadow: 0 0 20px color-mix(in srgb, var(--step-color, var(--accent-cyan)) 30%, transparent);
+    transform: scale(1.1);
+  }
+  .loop-step.active .step-node { background: color-mix(in srgb, var(--step-color, var(--accent-cyan)) 15%, var(--bg-card)); }
+  .step-label {
+    text-align: center;
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-dim);
+    transition: color 0.3s;
+    margin-bottom: 0.25rem;
+  }
+  .loop-step:hover .step-label,
+  .loop-step.active .step-label { color: var(--text); }
+  .step-tier {
+    text-align: center;
+    font-family: var(--font-mono);
+    font-size: 0.6rem;
+    color: var(--text-muted);
+    letter-spacing: 0.05em;
+  }
+
+  /* STEP DETAIL PANEL */
+  .step-detail {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 2rem;
+    margin-top: 1.5rem;
+    display: none;
+    animation: slideUp 0.3s ease;
+  }
+  .step-detail.visible { display: block; }
+  @keyframes slideUp {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .step-detail-header {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+    flex-wrap: wrap;
+  }
+  .step-detail-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5rem;
+    flex-shrink: 0;
+  }
+  .step-detail h3 {
+    font-size: 1.5rem;
+    font-weight: 700;
+  }
+  .step-detail-body {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5rem;
+  }
+  .detail-block h4 {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 0.75rem;
+  }
+  .detail-block p, .detail-block li {
+    font-size: 0.88rem;
+    color: var(--text-dim);
+    line-height: 1.7;
+  }
+  .detail-block ul {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+  }
+  .detail-block li::before {
+    content: '→';
+    color: var(--accent-cyan);
+    margin-right: 0.5rem;
+    font-family: var(--font-mono);
+  }
+  .tag {
+    display: inline-block;
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+    font-weight: 500;
+    padding: 0.2rem 0.5rem;
+    border-radius: 4px;
+    margin: 0.15rem;
+  }
+  .tag-cyan { color: var(--accent-cyan); background: var(--accent-cyan-dim); }
+  .tag-orange { color: var(--accent-orange); background: var(--accent-orange-dim); }
+  .tag-green { color: var(--accent-green); background: var(--accent-green-dim); }
+  .tag-purple { color: var(--accent-purple); background: var(--accent-purple-dim); }
+  .tag-pink { color: var(--accent-pink); background: var(--accent-pink-dim); }
+  .tag-yellow { color: var(--accent-yellow); background: var(--accent-yellow-dim); }
+
+  /* SKILLS GRID */
+  .skills-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 1rem;
+  }
+  .skill-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 1.25rem;
+    transition: all 0.2s;
+    cursor: default;
+  }
+  .skill-card:hover {
+    border-color: var(--border-active);
+    background: var(--bg-card-hover);
+  }
+  .skill-card .skill-name {
+    font-family: var(--font-mono);
+    font-size: 0.85rem;
+    font-weight: 600;
+    margin-bottom: 0.35rem;
+  }
+  .skill-card .skill-desc {
+    font-size: 0.8rem;
+    color: var(--text-dim);
+    line-height: 1.6;
+  }
+  .skill-category-label {
+    font-family: var(--font-mono);
+    font-size: 0.65rem;
+    font-weight: 600;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    margin-bottom: 1rem;
+    margin-top: 2rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--border);
+  }
+  .skill-category-label:first-of-type { margin-top: 0; }
+
+  /* TIER TABLE */
+  .tier-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    font-size: 0.85rem;
+    border-radius: var(--radius);
+    overflow: hidden;
+    border: 1px solid var(--border);
+  }
+  .tier-table th {
+    background: var(--bg-card);
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    padding: 0.8rem 1rem;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+  }
+  .tier-table td {
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid var(--border);
+    color: var(--text-dim);
+    vertical-align: top;
+  }
+  .tier-table tr:last-child td { border-bottom: none; }
+  .tier-table tr:hover td { background: var(--bg-card-hover); }
+  .tier-table .tier-id {
+    font-family: var(--font-mono);
+    font-weight: 700;
+    color: var(--accent-cyan);
+  }
+
+  /* FLYWHEEL */
+  .flywheel-wrap {
+    display: flex;
+    justify-content: center;
+    padding: 2rem 0;
+  }
+  .flywheel {
+    position: relative;
+    width: 420px;
+    height: 420px;
+  }
+  .flywheel-center {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%,-50%);
+    width: 120px;
+    height: 120px;
+    border-radius: 50%;
+    background: var(--bg-card);
+    border: 2px solid var(--accent-cyan);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    text-align: center;
+    box-shadow: var(--glow-cyan);
+    z-index: 2;
+  }
+  .flywheel-center .fw-label {
+    font-family: var(--font-mono);
+    font-size: 0.65rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--accent-cyan);
+  }
+  .flywheel-center .fw-sub {
+    font-size: 0.6rem;
+    color: var(--text-muted);
+    margin-top: 0.15rem;
+  }
+  .fw-node {
+    position: absolute;
+    width: 100px;
+    height: 100px;
+    border-radius: 50%;
+    background: var(--bg-card);
+    border: 2px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    text-align: center;
+    transition: all 0.3s;
+    cursor: default;
+    z-index: 2;
+  }
+  .fw-node:hover {
+    border-color: var(--accent-purple);
+    box-shadow: 0 0 20px var(--accent-purple-dim);
+    transform: scale(1.08);
+  }
+  .fw-node .fw-icon { font-size: 1.2rem; margin-bottom: 0.2rem; }
+  .fw-node .fw-name {
+    font-family: var(--font-mono);
+    font-size: 0.55rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-dim);
+  }
+  .flywheel-ring {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 320px;
+    height: 320px;
+    transform: translate(-50%,-50%);
+    border: 1px dashed var(--border);
+    border-radius: 50%;
+    animation: spin 40s linear infinite;
+    z-index: 0;
+  }
+  @keyframes spin { to { transform: translate(-50%,-50%) rotate(360deg); } }
+  .flywheel svg.arrows {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+  }
+
+  /* BUILD ARCH */
+  .build-diagram {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 1.5rem;
+  }
+  .build-box {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1.5rem;
+    position: relative;
+  }
+  .build-box::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 3px;
+    border-radius: var(--radius) var(--radius) 0 0;
+  }
+  .build-box.shared::before { background: var(--accent-green); }
+  .build-box.forge-build::before { background: var(--accent-cyan); }
+  .build-box.gpt-build::before { background: var(--accent-orange); }
+  .build-box h4 {
+    font-family: var(--font-mono);
+    font-size: 0.85rem;
+    font-weight: 700;
+    margin-bottom: 0.15rem;
+  }
+  .build-box .build-sub {
+    font-family: var(--font-mono);
+    font-size: 0.65rem;
+    color: var(--text-muted);
+    margin-bottom: 1rem;
+  }
+  .build-list {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+  }
+  .build-list li {
+    font-size: 0.78rem;
+    color: var(--text-dim);
+    font-family: var(--font-mono);
+    display: flex;
+    align-items: baseline;
+    gap: 0.4rem;
+  }
+  .build-list li .bl-icon { flex-shrink: 0; font-size: 0.7rem; }
+
+  /* DISPATCH DECISION */
+  .dispatch-flow {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0;
+    padding: 1rem 0;
+  }
+  .dispatch-node {
+    background: var(--bg-card);
+    border: 2px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1rem 1.5rem;
+    text-align: center;
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    position: relative;
+    max-width: 320px;
+    width: 100%;
+    transition: all 0.2s;
+  }
+  .dispatch-node:hover { border-color: var(--border-active); }
+  .dispatch-node.decision {
+    border-radius: 0;
+    transform: rotate(0deg);
+    border-color: var(--accent-yellow);
+    background: var(--accent-yellow-dim);
+    clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%);
+    width: 200px;
+    height: 100px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .dispatch-arrow {
+    width: 2px;
+    height: 28px;
+    background: var(--border);
+    position: relative;
+  }
+  .dispatch-arrow::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    border-left: 5px solid transparent;
+    border-right: 5px solid transparent;
+    border-top: 6px solid var(--border);
+  }
+  .dispatch-branches {
+    display: flex;
+    gap: 2rem;
+    justify-content: center;
+    width: 100%;
+    max-width: 900px;
+  }
+  .dispatch-branch {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 1.25rem;
+    flex: 1;
+    text-align: center;
+    transition: all 0.2s;
+  }
+  .dispatch-branch:hover { border-color: var(--border-active); background: var(--bg-card-hover); }
+  .dispatch-branch h5 {
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    font-weight: 700;
+    margin-bottom: 0.5rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+  }
+  .dispatch-branch p {
+    font-size: 0.78rem;
+    color: var(--text-dim);
+    line-height: 1.6;
+  }
+
+  /* WHY-HOW */
+  .why-how {
+    display: grid;
+    grid-template-columns: 1fr 60px 1fr;
+    gap: 0;
+    align-items: center;
+    margin: 2rem 0;
+  }
+  .why-box, .how-box {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 2rem;
+  }
+  .why-box { border-color: var(--accent-purple); }
+  .how-box { border-color: var(--accent-green); }
+  .wh-divider {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--font-mono);
+    font-size: 1.5rem;
+    color: var(--text-muted);
+  }
+  .why-box h4, .how-box h4 {
+    font-size: 1rem;
+    font-weight: 700;
+    margin-bottom: 0.5rem;
+  }
+  .why-box .wh-accent { color: var(--accent-purple); }
+  .how-box .wh-accent { color: var(--accent-green); }
+
+  /* GUARD RAILS */
+  .guard-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 1rem;
+  }
+  .guard-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 1.25rem;
+  }
+  .guard-card h5 {
+    font-size: 0.9rem;
+    font-weight: 700;
+    margin-bottom: 0.4rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .guard-card p {
+    font-size: 0.82rem;
+    color: var(--text-dim);
+    line-height: 1.6;
+  }
+
+  /* RESPONSIVE */
+  @media (max-width: 900px) {
+    .dual-cards, .build-diagram, .step-detail-body, .why-how { grid-template-columns: 1fr; }
+    .why-how { grid-template-columns: 1fr; gap: 1rem; }
+    .wh-divider { transform: rotate(90deg); }
+    .dispatch-branches { flex-direction: column; }
+    h2 { font-size: 1.6rem; }
+    section { padding: 3rem 1rem; }
+  }
+
+  /* Scroll anim */
+  .fade-in {
+    opacity: 0;
+    transform: translateY(20px);
+    transition: opacity 0.6s ease, transform 0.6s ease;
+  }
+  .fade-in.visible { opacity: 1; transform: translateY(0); }
+
+  /* Tab system */
+  .tab-bar {
+    display: flex;
+    gap: 0.25rem;
+    margin-bottom: 1.5rem;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 0;
+  }
+  .tab-btn {
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: var(--text-muted);
+    background: none;
+    border: none;
+    padding: 0.6rem 1rem;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: all 0.2s;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+  .tab-btn:hover { color: var(--text-dim); }
+  .tab-btn.active { color: var(--accent-cyan); border-bottom-color: var(--accent-cyan); }
+  .tab-pane { display: none; }
+  .tab-pane.active { display: block; animation: slideUp 0.3s ease; }
+</style>
+</head>
+<body>
+<div class="grid-bg"></div>
+
+<nav>
+  <div class="logo">FORGE <span>/ architecture</span></div>
+  <div class="nav-links">
+    <a href="#hero">Overview</a>
+    <a href="#coordinators">Coordinators</a>
+    <a href="#loop">The Loop</a>
+    <a href="#dispatch">Dispatch</a>
+    <a href="#tiers">Tiers</a>
+    <a href="#flywheel">Flywheel</a>
+    <a href="#skills">Skills</a>
+    <a href="#build">Build</a>
+    <a href="#guards">Guards</a>
+  </div>
+</nav>
+
+<main>
+
+<!-- ═══════════════════════ HERO ═══════════════════════ -->
+<section id="hero">
+  <h1>The <span class="gradient">Forge</span> System</h1>
+  <p>A multi-phase, multi-model agentic development partner that separates <strong>coordination</strong> (why) from <strong>implementation</strong> (how), enforces quality gates at every phase, and systematically improves itself through retrospective analysis.</p>
+  <div class="hero-stats">
+    <div class="hero-stat"><div class="num">11</div><div class="label">Modes</div></div>
+    <div class="hero-stat"><div class="num">22</div><div class="label">Skills</div></div>
+    <div class="hero-stat"><div class="num">5</div><div class="label">Tiers</div></div>
+    <div class="hero-stat"><div class="num">2</div><div class="label">Coordinators</div></div>
+    <div class="hero-stat"><div class="num">3</div><div class="label">Plugins</div></div>
+  </div>
+</section>
+
+<!-- ═══════════════════════ CORE CONCEPT ═══════════════════════ -->
+<section id="concept" class="fade-in">
+  <div class="section-label">Core Concept</div>
+  <h2>The Why Loop / How Loop Boundary</h2>
+  <div class="section-desc">The fundamental architectural principle: the Coordinator controls <em>intent</em> (why), while Subagents handle <em>implementation</em> (how). The Coordinator never edits files, never runs builds, never writes tests.</div>
+
+  <div class="why-how">
+    <div class="why-box">
+      <h4><span class="wh-accent">⬡</span> The Why Loop <span class="tag tag-purple">Coordinator</span></h4>
+      <p style="color:var(--text-dim);font-size:0.88rem;line-height:1.7;margin-top:0.5rem">
+        <strong>Classify</strong> the user's intent → <strong>Route</strong> to the right mode → <strong>Dispatch</strong> via Mission Brief → <strong>Evaluate</strong> the result against the objective.<br><br>
+        The coordinator sees the full picture: what was asked, what tier it is, which phase comes next, and whether the output matches the intent. It orchestrates but never implements.
+      </p>
+    </div>
+    <div class="wh-divider">⇄</div>
+    <div class="how-box">
+      <h4><span class="wh-accent">⬢</span> The How Loop <span class="tag tag-green">Subagents</span></h4>
+      <p style="color:var(--text-dim);font-size:0.88rem;line-height:1.7;margin-top:0.5rem">
+        Each subagent receives a <strong>Mission Brief</strong> with objective, constraints, and DONE WHEN criteria. It operates within a single mode, uses only its permitted tools, and returns structured artifacts.<br><br>
+        Subagents are stateless and sandboxed — they can't see other phases, can't route themselves, and can't skip quality gates.
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════ COORDINATORS ═══════════════════════ -->
+<section id="coordinators" class="fade-in">
+  <div class="section-label">Dual-Coordinator Architecture</div>
+  <h2>Two Brains, Same Skeleton</h2>
+  <div class="section-desc">Forge ships two coordinator variants optimized for different model families. Both share 9 of 11 modes and all infrastructure skills — only <code>execute</code> and <code>verify</code> differ.</div>
+
+  <div class="dual-cards">
+    <div class="system-card opus">
+      <div class="card-badge">Claude Opus 4.6</div>
+      <h3>Forge</h3>
+      <div class="desc">Unrestricted coordinator for Anthropic models. Operates the Why Loop with full context window and nested dispatch capability.</div>
+      <div class="card-features">
+        <div class="card-feature"><span class="dot"></span>Can nest task() calls within subagents</div>
+        <div class="card-feature"><span class="dot"></span>Full tool access for coordinator</div>
+        <div class="card-feature"><span class="dot"></span>16 routing branches for intent classification</div>
+        <div class="card-feature"><span class="dot"></span>Behavioral rules via IMPORTANT/NEVER emphasis</div>
+        <div class="card-feature"><span class="dot"></span>Markdown + XML section delimiters</div>
+      </div>
+    </div>
+    <div class="system-card gpt">
+      <div class="card-badge">GPT-5.4</div>
+      <h3>Forge-GPT</h3>
+      <div class="desc">Lane-disciplined coordinator for OpenAI models. Contract-driven dispatch with strict lane boundaries and model selection.</div>
+      <div class="card-features">
+        <div class="card-feature"><span class="dot"></span>3 lanes: T1_ANSWER / DISPATCH / BLOCKED</div>
+        <div class="card-feature"><span class="dot"></span>Choose one lane, stay the entire turn</div>
+        <div class="card-feature"><span class="dot"></span>Design Guard enforced for T3+ tasks</div>
+        <div class="card-feature"><span class="dot"></span>XML constraint blocks for prompt format</div>
+        <div class="card-feature"><span class="dot"></span>Named role framing ("You are X")</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════ THE LOOP ═══════════════════════ -->
+<section id="loop" class="fade-in">
+  <div class="section-label">The Execution Loop</div>
+  <h2>Click Each Phase to Explore</h2>
+  <div class="section-desc">The standard pipeline for feature work. Phases are complexity-calibrated — simpler tasks skip middle stages. Click any step to see its full specification.</div>
+
+  <div class="loop-container">
+    <div class="loop-track" id="loopTrack"></div>
+    <div class="step-detail" id="stepDetail"></div>
+  </div>
+</section>
+
+<!-- ═══════════════════════ DISPATCH ═══════════════════════ -->
+<section id="dispatch" class="fade-in">
+  <div class="section-label">Dispatch Routing</div>
+  <h2>How Work Gets Delegated</h2>
+  <div class="section-desc">The coordinator never implements directly. It classifies the request and dispatches to the appropriate execution backend based on parallelism requirements.</div>
+
+  <div class="dispatch-flow">
+    <div class="dispatch-node" style="border-color:var(--accent-cyan)">
+      <strong style="color:var(--accent-cyan)">User Request</strong><br>
+      <span style="color:var(--text-muted);font-size:0.72rem">Coordinator classifies intent + complexity tier</span>
+    </div>
+    <div class="dispatch-arrow"></div>
+    <div style="font-family:var(--font-mono);font-size:0.75rem;color:var(--accent-yellow);padding:0.75rem;text-align:center;border:1px dashed var(--accent-yellow);border-radius:var(--radius-sm);background:var(--accent-yellow-dim);margin:0.25rem 0">
+      How many items? Do files overlap?
+    </div>
+    <div class="dispatch-arrow"></div>
+    <div class="dispatch-branches">
+      <div class="dispatch-branch" style="border-color:var(--accent-green)">
+        <h5 style="color:var(--accent-green)">🟢 0 Files</h5>
+        <p><strong>Answer Inline (T1)</strong><br>Pure knowledge answer. No tools needed. Coordinator responds directly without delegation.</p>
+      </div>
+      <div class="dispatch-branch" style="border-color:var(--accent-cyan)">
+        <h5 style="color:var(--accent-cyan)">🔵 1–2 Items</h5>
+        <p><strong>task() Subagent</strong><br>Single-shot dispatch with Mission Brief. Cannot nest further task() calls. Fresh context per turn. Best for focused work.</p>
+      </div>
+      <div class="dispatch-branch" style="border-color:var(--accent-purple)">
+        <h5 style="color:var(--accent-purple)">🟣 3+ Independent</h5>
+        <p><strong>copilot-cli-skill Workers</strong><br>Parallel Copilot instances in isolated git worktrees. Full tool access. Can nest task() calls. Workers register with agents-hub for coordination.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════ TIERS ═══════════════════════ -->
+<section id="tiers" class="fade-in">
+  <div class="section-label">Complexity Classification</div>
+  <h2>Five Tiers Shape Every Decision</h2>
+  <div class="section-desc">Each tier determines which phases are required, tool budgets, verification depth, and how many plan steps are generated. The coordinator assigns a tier in the EXPLORE phase.</div>
+
+  <table class="tier-table">
+    <thead>
+      <tr>
+        <th>Tier</th>
+        <th>Name</th>
+        <th>Description</th>
+        <th>Required Phases</th>
+        <th>Plan Steps</th>
+        <th>Verify Depth</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td class="tier-id">T1</td>
+        <td>Trivial</td>
+        <td style="color:var(--text)">Quick answer, no file changes. Pure knowledge response.</td>
+        <td><span class="tag tag-green">Answer inline</span></td>
+        <td>0</td>
+        <td>None</td>
+      </tr>
+      <tr>
+        <td class="tier-id">T2</td>
+        <td>Simple</td>
+        <td style="color:var(--text)">1-2 files, well-known pattern, low ambiguity. Typos, config tweaks, simple additions.</td>
+        <td><span class="tag tag-cyan">Explore</span> <span class="tag tag-green">Execute</span> <span class="tag tag-purple">Verify</span></td>
+        <td>1–3</td>
+        <td>Spot-check</td>
+      </tr>
+      <tr>
+        <td class="tier-id">T3</td>
+        <td>Moderate</td>
+        <td style="color:var(--text)">3-8 files, some design decisions needed, cross-module changes. Features with clear scope.</td>
+        <td><span class="tag tag-cyan">Explore</span> <span class="tag tag-orange">Assess ⚡</span> <span class="tag tag-pink">Design</span> <span class="tag tag-yellow">Plan</span> <span class="tag tag-green">Execute</span> <span class="tag tag-purple">Verify</span></td>
+        <td>3–8</td>
+        <td>Standard</td>
+      </tr>
+      <tr>
+        <td class="tier-id">T4</td>
+        <td>Complex</td>
+        <td style="color:var(--text)">8+ files, multiple modules, architectural decisions, risk of scope drift. New subsystems.</td>
+        <td><span class="tag tag-cyan">All phases</span> <span class="tag tag-orange">+ Ideate</span></td>
+        <td>5–15</td>
+        <td>Thorough</td>
+      </tr>
+      <tr>
+        <td class="tier-id">T5</td>
+        <td>Ambiguous</td>
+        <td style="color:var(--text)">Unclear scope, multiple valid interpretations, cross-team impact. System redesigns, migrations.</td>
+        <td><span class="tag tag-cyan">All phases</span> <span class="tag tag-pink">+ Experts Council</span></td>
+        <td>10–15+</td>
+        <td>Thorough + Council</td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ═══════════════════════ FLYWHEEL ═══════════════════════ -->
+<section id="flywheel" class="fade-in">
+  <div class="section-label">Self-Improvement</div>
+  <h2>The Agentic Flywheel</h2>
+  <div class="section-desc">Forge doesn't just execute — it learns. Every session feeds metrics into a feedback loop that improves the harness, mode files, and quality gates over time.</div>
+
+  <div class="flywheel-wrap">
+    <div class="flywheel">
+      <div class="flywheel-ring"></div>
+      <div class="flywheel-center">
+        <div class="fw-label">Harness</div>
+        <div class="fw-sub">forge-harness DB</div>
+      </div>
+      <!-- Nodes positioned in a circle -->
+      <div class="fw-node" style="top:10px;left:50%;transform:translateX(-50%)">
+        <div class="fw-icon">⚡</div>
+        <div class="fw-name">Execute</div>
+      </div>
+      <div class="fw-node" style="top:35%;right:0px">
+        <div class="fw-icon">📊</div>
+        <div class="fw-name">Metrics</div>
+      </div>
+      <div class="fw-node" style="bottom:35px;right:30px">
+        <div class="fw-icon">🔍</div>
+        <div class="fw-name">Retro</div>
+      </div>
+      <div class="fw-node" style="bottom:35px;left:30px">
+        <div class="fw-icon">🩹</div>
+        <div class="fw-name">Patches</div>
+      </div>
+      <div class="fw-node" style="top:35%;left:0px">
+        <div class="fw-icon">📈</div>
+        <div class="fw-name">Improve</div>
+      </div>
+      <!-- Arrow overlays -->
+      <svg class="arrows" viewBox="0 0 420 420" fill="none">
+        <defs>
+          <marker id="arrowhead" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill="#555568"/>
+          </marker>
+        </defs>
+        <path d="M250 55 Q340 100 340 170" stroke="#555568" stroke-width="1.5" marker-end="url(#arrowhead)" fill="none"/>
+        <path d="M355 240 Q340 310 300 350" stroke="#555568" stroke-width="1.5" marker-end="url(#arrowhead)" fill="none"/>
+        <path d="M225 385 Q160 390 120 355" stroke="#555568" stroke-width="1.5" marker-end="url(#arrowhead)" fill="none"/>
+        <path d="M68 300 Q30 240 50 185" stroke="#555568" stroke-width="1.5" marker-end="url(#arrowhead)" fill="none"/>
+        <path d="M95 145 Q130 80 190 55" stroke="#555568" stroke-width="1.5" marker-end="url(#arrowhead)" fill="none"/>
+      </svg>
+    </div>
+  </div>
+
+  <div class="guard-cards" style="max-width:800px;margin:0 auto">
+    <div class="guard-card">
+      <h5>🔄 Loop Mechanics</h5>
+      <p>Agents execute tasks → Harness collects verify results, retries, scope drift, user satisfaction → Retrospective analyzes patterns → Proposes patches to mode files, templates, and gates → Next sessions run improved harness.</p>
+    </div>
+    <div class="guard-card">
+      <h5>🧠 Memory Extraction</h5>
+      <p>The MEMORY mode extracts durable knowledge from session trails, scoring facts on a 0–1 scale (threshold: 0.5). Cross-session correlation identifies patterns that no single session could see. Memories are deduped and stored for future context.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════ SKILLS ═══════════════════════ -->
+<section id="skills" class="fade-in">
+  <div class="section-label">Skill Ecosystem</div>
+  <h2>22 Skills Across 5 Categories</h2>
+  <div class="section-desc">Skills provide specialized capabilities that modes can invoke. They range from inter-agent messaging to product management frameworks.</div>
+
+  <div class="tab-bar" id="skillTabs">
+    <button class="tab-btn active" data-tab="infra">Infrastructure</button>
+    <button class="tab-btn" data-tab="arch">Architecture</button>
+    <button class="tab-btn" data-tab="pm">Product Mgmt</button>
+    <button class="tab-btn" data-tab="modes">Mode Skills</button>
+    <button class="tab-btn" data-tab="util">Utilities</button>
+  </div>
+
+  <div class="tab-pane active" id="tab-infra">
+    <div class="skills-grid">
+      <div class="skill-card"><div class="skill-name" style="color:var(--accent-cyan)">agents-hub</div><div class="skill-desc">Lightweight messaging hub for multi-agent coordination. Channels, full-text search, request/response threading, deterministic worker health monitoring. SQLite in <code>.git/devpartner/hub.db</code>.</div></div>
+      <div class="skill-card"><div class="skill-name" style="color:var(--accent-cyan)">backlog</div><div class="skill-desc">CLI-driven Kanban work item management. Folder model (next/working/done/archive), multi-project discovery, dependency tracking, hygiene checks. Markdown with structured frontmatter.</div></div>
+      <div class="skill-card"><div class="skill-name" style="color:var(--accent-cyan)">copilot-cli-skill</div><div class="skill-desc">Spawn autonomous Copilot workers in isolated git worktrees. Parallel task execution with worker health monitoring. ~15-30s spawn overhead; best for 3+ independent items.</div></div>
+      <div class="skill-card"><div class="skill-name" style="color:var(--accent-cyan)">forge-harness</div><div class="skill-desc">Metrics collection and feedback loop. Tracks verify results, retries, scope drift, user satisfaction. Powers the agentic flywheel. Pure exec pattern: <code>$HARNESS exec --code '...'</code>.</div></div>
+      <div class="skill-card"><div class="skill-name" style="color:var(--accent-cyan)">experts-council</div><div class="skill-desc">2-stage multi-model deliberation. Spawns 3 parallel models (Gemini, Opus, GPT), anonymizes responses, synthesizes via chairman. Auto-invoked at &lt;70% confidence.</div></div>
+    </div>
+  </div>
+
+  <div class="tab-pane" id="tab-arch">
+    <div class="skills-grid">
+      <div class="skill-card"><div class="skill-name" style="color:var(--accent-green)">backend-architecture</div><div class="skill-desc">Modular monolith patterns, bounded contexts, explicit contracts, streaming as first-class. Principles: monolith first, bounded contexts over layers, external runtimes replaceable, single data owner.</div></div>
+      <div class="skill-card"><div class="skill-name" style="color:var(--accent-green)">frontend-architecture</div><div class="skill-desc">Feature-first component architecture with clear boundaries. Composition over cleverness, design system first. Wraps third-party libraries, progressive refinement with streaming.</div></div>
+    </div>
+  </div>
+
+  <div class="tab-pane" id="tab-pm">
+    <div class="skills-grid">
+      <div class="skill-card"><div class="skill-name" style="color:var(--accent-pink)">jobs-to-be-done</div><div class="skill-desc">Clayton Christensen's JTBD framework. Discovers customer progress in specific circumstances. Three dimensions: functional, emotional, social. Forces: Push, Pull, Anxiety, Habit.</div></div>
+      <div class="skill-card"><div class="skill-name" style="color:var(--accent-pink)">made-to-stick</div><div class="skill-desc">SUCCESs messaging framework (Simple, Unexpected, Concrete, Credible, Emotional, Stories). Evaluate and improve stickiness of any message or spec.</div></div>
+      <div class="skill-card"><div class="skill-name" style="color:var(--accent-pink)">copywriting</div><div class="skill-desc">Marketing copy patterns and frameworks. Natural transitions, headline formulas, persuasion techniques. Context-specific copy generation.</div></div>
+      <div class="skill-card"><div class="skill-name" style="color:var(--accent-pink)">lean-startup</div><div class="skill-desc">Eric Ries' Lean Startup methodology. MVP scoping, validated learning experiments, innovation accounting, pivot-or-persevere decisions.</div></div>
+      <div class="skill-card"><div class="skill-name" style="color:var(--accent-pink)">storybrand-messaging</div><div class="skill-desc">Donald Miller's StoryBrand framework. Position customer as hero, brand as guide. Seven-part narrative structure for consistent communication.</div></div>
+      <div class="skill-card"><div class="skill-name" style="color:var(--accent-pink)">cro-methodology</div><div class="skill-desc">Conversion rate optimization with funnel analysis and testing. Customer-centric approach based on Blanks & Jesson's "Making Websites Win".</div></div>
+      <div class="skill-card"><div class="skill-name" style="color:var(--accent-pink)">page-cro</div><div class="skill-desc">Page-level conversion optimization. Audit landing pages, identify friction, suggest bold A/B tests, find hidden persuasion assets.</div></div>
+    </div>
+  </div>
+
+  <div class="tab-pane" id="tab-modes">
+    <div class="skills-grid">
+      <div class="skill-card"><div class="skill-name" style="color:var(--accent-orange)">forge-explore</div><div class="skill-desc">Codebase investigation with fact confidence levels. Read-only tools (grep, glob, view, git). Budget allocation by complexity. Outputs tier classification.</div></div>
+      <div class="skill-card"><div class="skill-name" style="color:var(--accent-orange)">forge-ideate</div><div class="skill-desc">Generate 2-3 meaningfully different approaches. Must differ in 2+ dimensions. Always includes contrarian option. Web search only — no codebase tools.</div></div>
+      <div class="skill-card"><div class="skill-name" style="color:var(--accent-orange)">forge-assess</div><div class="skill-desc">CEO-level premise challenge. Validate problem framing, find existing leverage, identify NOT-in-scope boundaries. JTBD analysis for T4-T5.</div></div>
+      <div class="skill-card"><div class="skill-name" style="color:var(--accent-orange)">forge-design</div><div class="skill-desc">4-level progressive refinement: Capabilities → Components → Interactions → Contracts. Level-by-level checkpoint with user approval gates.</div></div>
+      <div class="skill-card"><div class="skill-name" style="color:var(--accent-orange)">forge-plan</div><div class="skill-desc">Atomic execution plan with dependencies and DONE WHEN criteria. Micro-plan (T3: 3-8 steps) or full-plan (T4-T5: 5-15 steps).</div></div>
+      <div class="skill-card"><div class="skill-name" style="color:var(--accent-orange)">forge-execute</div><div class="skill-desc">Code implementation with TDD protocol. Code Little → Test Little cycles. Contract-driven, pre-commit cleanup, backlog updates, trail logging.</div></div>
+      <div class="skill-card"><div class="skill-name" style="color:var(--accent-orange)">forge-verify</div><div class="skill-desc">Independent validation with checklists. 2-pass limit. Spot-check (T1-T2), standard (T3), thorough (T4-T5). Verdict: approved / revision_required / blocked.</div></div>
+      <div class="skill-card"><div class="skill-name" style="color:var(--accent-orange)">forge-retrospective</div><div class="skill-desc">Failure analysis and harness improvement. Single root cause classification. Max patches per tier (T2→2, T3→3, T4-T5→5). Never speculative.</div></div>
+      <div class="skill-card"><div class="skill-name" style="color:var(--accent-orange)">forge-gc</div><div class="skill-desc">Codebase health scanning. Deterministic + LLM analysis. Debt, dead code, stale docs, architectural entropy. 2-7 backlog items per scan.</div></div>
+      <div class="skill-card"><div class="skill-name" style="color:var(--accent-orange)">forge-memory</div><div class="skill-desc">Extract durable knowledge from trails. User-request only. Scoring 0.5+ threshold, &lt;200 chars per memory. Cross-session correlation.</div></div>
+      <div class="skill-card"><div class="skill-name" style="color:var(--accent-orange)">forge-product</div><div class="skill-desc">Manage .product/ repo: feature specs, discovery docs, experiments, lifecycle transitions. CLI-driven via product-hub. SUCCESs self-review.</div></div>
+    </div>
+  </div>
+
+  <div class="tab-pane" id="tab-util">
+    <div class="skills-grid">
+      <div class="skill-card"><div class="skill-name" style="color:var(--text-dim)">skill-creator</div><div class="skill-desc">Bootstrap new skills with proper SKILL.md structure, references directory, and script scaffolding.</div></div>
+      <div class="skill-card"><div class="skill-name" style="color:var(--text-dim)">mcp-builder</div><div class="skill-desc">Build MCP (Model Context Protocol) servers for tool integration. Python (FastMCP) or Node/TypeScript patterns.</div></div>
+      <div class="skill-card"><div class="skill-name" style="color:var(--text-dim)">code-indexer</div><div class="skill-desc">Index .NET/C# solutions, search symbols via full-text documentation search, generate structural overviews.</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════ BUILD ═══════════════════════ -->
+<section id="build" class="fade-in">
+  <div class="section-label">Plugin Architecture</div>
+  <h2>3-Plugin Distribution Model</h2>
+  <div class="section-desc">The build system produces three separate installable plugins. <code>forge-shared</code> is installed once and owns all MCP servers. Users choose either Forge (Opus) or Forge-GPT alongside it.</div>
+
+  <div class="build-diagram">
+    <div class="build-box shared">
+      <h4 style="color:var(--accent-green)">forge-shared</h4>
+      <div class="build-sub">dist-shared/ — MCP Owner</div>
+      <ul class="build-list">
+        <li><span class="bl-icon">📦</span> .mcp.json (sole MCP definition)</li>
+        <li><span class="bl-icon">🔧</span> 9 shared modes (explore → gc)</li>
+        <li><span class="bl-icon">🏗️</span> 5 infrastructure skills</li>
+        <li><span class="bl-icon">📐</span> 2 architecture skills</li>
+        <li><span class="bl-icon">📊</span> 7 product management skills</li>
+        <li><span class="bl-icon">📋</span> Shared preferences + schemas</li>
+        <li><span class="bl-icon">🎨</span> Visual vocabulary + templates</li>
+      </ul>
+    </div>
+    <div class="build-box forge-build">
+      <h4 style="color:var(--accent-cyan)">forge</h4>
+      <div class="build-sub">dist/ — Opus Coordinator</div>
+      <ul class="build-list">
+        <li><span class="bl-icon">🤖</span> Forge.agent.md (opus-4.6)</li>
+        <li><span class="bl-icon">🧠</span> Coordinator skill (SKILL.md)</li>
+        <li><span class="bl-icon">⚡</span> execute.md (Opus-specific)</li>
+        <li><span class="bl-icon">✅</span> verify.md (Opus-specific)</li>
+        <li><span class="bl-icon">🚫</span> No MCP servers</li>
+        <li><span class="bl-icon">🔗</span> Depends on forge-shared</li>
+      </ul>
+    </div>
+    <div class="build-box gpt-build">
+      <h4 style="color:var(--accent-orange)">forge-gpt</h4>
+      <div class="build-sub">dist-forge-gpt/ — GPT Coordinator</div>
+      <ul class="build-list">
+        <li><span class="bl-icon">🤖</span> Forge-GPT.agent.md (gpt-5.4)</li>
+        <li><span class="bl-icon">🧠</span> Coordinator skill (SKILL.md)</li>
+        <li><span class="bl-icon">⚡</span> execute-gpt.md (GPT-specific)</li>
+        <li><span class="bl-icon">✅</span> verify-gpt.md (GPT-specific)</li>
+        <li><span class="bl-icon">🚫</span> No MCP servers</li>
+        <li><span class="bl-icon">🔗</span> Depends on forge-shared</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════ QUALITY GUARDS ═══════════════════════ -->
+<section id="guards" class="fade-in">
+  <div class="section-label">Quality Gates & Constraints</div>
+  <h2>Guardrails at Every Phase</h2>
+  <div class="section-desc">The system enforces constraints that prevent common agentic failure modes: scope drift, hallucinated implementations, rubber-stamp verification, and speculative fixes.</div>
+
+  <div class="guard-cards">
+    <div class="guard-card">
+      <h5>🛡️ Design Guard</h5>
+      <p>For T3+ tasks, ASSESS and DESIGN are <strong>mandatory</strong> before PLAN/EXECUTE — even if the user says "just implement it". The coordinator enforces this automatically.</p>
+    </div>
+    <div class="guard-card">
+      <h5>🔒 Coordinator Sandbox</h5>
+      <p>The coordinator <strong>never</strong> edits files, runs builds, or writes tests. All mutations go through subagent dispatch. This prevents mixing intent classification with implementation.</p>
+    </div>
+    <div class="guard-card">
+      <h5>🔍 Verify 2-Pass Limit</h5>
+      <p>Verification gets at most 2 passes. After 2 revision_required verdicts, the system escalates to the user rather than looping. Prevents infinite correction cycles.</p>
+    </div>
+    <div class="guard-card">
+      <h5>📏 Scope Check</h5>
+      <p>PLAN phase begins by comparing plan scope against the approved design. If scope drifts beyond the design boundary, the plan is rejected before execution begins.</p>
+    </div>
+    <div class="guard-card">
+      <h5>🚫 No Rubber-Stamping</h5>
+      <p>VERIFY mode has explicit anti-patterns: no "LGTM" without evidence, no skipping checklist items, no approving code you haven't inspected. Every verdict needs specific file references.</p>
+    </div>
+    <div class="guard-card">
+      <h5>📊 Tier-Calibrated Budgets</h5>
+      <p>Each tier gets a different tool budget, plan step count, and verification depth. T1 gets zero tools; T5 gets full multi-model council review. No one-size-fits-all.</p>
+    </div>
+    <div class="guard-card">
+      <h5>🧪 Contract-Driven TDD</h5>
+      <p>EXECUTE follows "Code Little → Test Little" cycles. Write 10-15 lines, then verify. Contracts from DESIGN become test assertions. Tests are written <em>before</em> implementation.</p>
+    </div>
+    <div class="guard-card">
+      <h5>🔄 Retrospective Patches</h5>
+      <p>RETROSPECTIVE proposes harness improvements, not code fixes. Patches are scoped by tier (T2→max 2, T5→max 5) and require user approval before applying. Never speculative.</p>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<footer style="text-align:center;padding:3rem 2rem;border-top:1px solid var(--border);font-family:var(--font-mono);font-size:0.7rem;color:var(--text-muted)">
+  FORGE ARCHITECTURE EXPLORER — Built from source analysis of the forge multi-agent system
+</footer>
+
+<script>
+// ═══════════════════════ LOOP STEP DATA ═══════════════════════
+const steps = [
+  {
+    id: 'explore',
+    icon: '🔭',
+    label: 'Explore',
+    tiers: 'T2–T5',
+    color: '#00d4ff',
+    purpose: 'Investigate the codebase, gather evidence, and classify the task\'s complexity tier (T1–T5). Operates read-only with budget allocation per complexity level.',
+    tools: ['grep', 'glob', 'view', 'bash (git only)'],
+    outputs: ['Findings with confidence levels (high/med/low)', 'Tier classification', 'Existing solutions or patterns found', 'Churn detection & debt markers'],
+    rules: ['Strictly read-only — no modifications allowed', 'Budget allocation varies by complexity', 'Must provide fact confidence levels', 'Pre-investigation audit: check churn, debt markers'],
+    next: 'For T3+: routes to ASSESS. For T2: may skip directly to PLAN or EXECUTE.'
+  },
+  {
+    id: 'assess',
+    icon: '🎯',
+    label: 'Assess',
+    tiers: 'T3–T5',
+    color: '#ff8844',
+    purpose: 'Challenge premises before design. CEO-level quality gate that validates the problem framing, finds existing leverage, and selects a scope mode (Expand / Hold / Reduce).',
+    tools: ['grep', 'glob', 'backlog (analysis only)'],
+    outputs: ['Premise challenge', 'Existing leverage map', 'NOT-in-scope boundaries', 'Dream state delta', 'JTBD analysis (T4-T5)'],
+    rules: ['Light gate for T3 (3 outputs)', 'Deep gate for T4-T5 (7 outputs + JTBD skill)', 'CEO mindset: challenge, don\'t rubber-stamp', 'Interactive user feedback collected'],
+    next: 'Routes to IDEATE (T4-T5) or directly to DESIGN (T3).'
+  },
+  {
+    id: 'ideate',
+    icon: '💡',
+    label: 'Ideate',
+    tiers: 'T4–T5',
+    color: '#ffcc00',
+    purpose: 'Generate 2-3 meaningfully different approaches with tradeoffs. Each approach must differ in 2+ dimensions. Always includes a contrarian option.',
+    tools: ['web_search', 'web_fetch (no codebase tools)'],
+    outputs: ['2-3 named approaches', 'Tradeoff matrix', 'Differentiation check (2+ dimensions)', 'Design questions per approach', 'Recommendation with rationale'],
+    rules: ['Must differ in 2+ dimensions', 'Always include contrarian option', 'No codebase tools — external research only', 'Skipped for T1-T3'],
+    next: 'User selects approach → routes to DESIGN.'
+  },
+  {
+    id: 'design',
+    icon: '📐',
+    label: 'Design',
+    tiers: 'T3–T5',
+    color: '#aa66ff',
+    purpose: 'Four-level progressive refinement that takes the selected approach from high-level capabilities down to implementation contracts.',
+    tools: ['None (pure analysis)'],
+    outputs: ['L1: Capabilities — what the system can do', 'L2: Components — modules, boundaries, ownership', 'L3: Interactions — data flow, sequence diagrams', 'L4: Contracts — interfaces, types, error codes'],
+    rules: ['Must progress level-by-level (no skipping)', 'User approval checkpoint at each level', 'Architecture-compliant (uses backend/frontend skills)', 'Visual aids recommended at each level'],
+    next: 'After L4 approval → routes to PLAN.'
+  },
+  {
+    id: 'plan',
+    icon: '📋',
+    label: 'Plan',
+    tiers: 'T2–T5',
+    color: '#44ff88',
+    purpose: 'Convert the approved design into atomic, ordered execution steps with dependencies and testable DONE WHEN criteria for each step.',
+    tools: ['None (pure analysis)'],
+    outputs: ['Plan table with steps, files, dependencies', 'DONE WHEN criteria per step', 'Risks and mitigations', 'Test coverage map', 'Observability section'],
+    rules: ['Scope check first: compare plan vs approved design', 'Micro-plan for T3 (3-8 steps)', 'Full plan for T4-T5 (5-15 steps)', 'Auto-chains to VERIFY(plan) for T3+'],
+    next: 'Auto-routes to VERIFY(plan) for T3+, then to EXECUTE.'
+  },
+  {
+    id: 'verify-plan',
+    icon: '🔎',
+    label: 'Verify Plan',
+    tiers: 'T3–T5',
+    color: '#aa66ff',
+    purpose: 'Independent validation of the plan against checklists before execution begins. Checks file paths exist, DONE WHEN criteria are testable, and risks are mitigated.',
+    tools: ['view', 'grep', 'glob (read-only)'],
+    outputs: ['Verdict: approved / revision_required', 'Checklist results', 'Specific critiques with file references'],
+    rules: ['Read-only — no modifications', 'No rubber-stamping', 'Every verdict needs specific evidence', '2-pass limit then escalate'],
+    next: 'If approved → routes to EXECUTE. If revision_required → back to PLAN.'
+  },
+  {
+    id: 'execute',
+    icon: '⚡',
+    label: 'Execute',
+    tiers: 'T2–T5',
+    color: '#ff4455',
+    purpose: 'Implement code following the plan exactly. Uses contract-driven TDD with "Code Little → Test Little" cycles. Writes 10-15 lines per cycle, then verifies.',
+    tools: ['edit', 'create', 'bash', 'build', 'tests'],
+    outputs: ['Modified/created files per plan', 'Build and test results (all green)', 'Backlog updates', '1+ trails logged to harness'],
+    rules: ['Follow plan exactly — no scope drift', 'Contract-driven TDD: tests before implementation', 'Pre-commit cleanup (dead imports, formatting)', 'Trail logging for retrospective extraction'],
+    next: 'Auto-routes to VERIFY(result).'
+  },
+  {
+    id: 'verify-result',
+    icon: '✅',
+    label: 'Verify',
+    tiers: 'T2–T5',
+    color: '#44ff88',
+    purpose: 'Independent validation of the implementation. Checks all files were modified per plan, builds pass, tests are green, and no scope drift occurred.',
+    tools: ['view', 'grep', 'glob (read-only)'],
+    outputs: ['Verdict: approved / revision_required / blocked', 'Checklist results with severity', 'CRITICAL blockers vs INFORMATIONAL advisories'],
+    rules: ['Spot-check for T1-T2', 'Standard for T3', 'Thorough for T4-T5', '2-pass limit then escalate to user'],
+    next: 'If approved → DONE. If revision_required → back to EXECUTE. If blocked → escalate.'
+  },
+  {
+    id: 'retrospective',
+    icon: '🔄',
+    label: 'Retro',
+    tiers: 'On failure',
+    color: '#ff44aa',
+    purpose: 'Analyze failures after revision_required verdicts or user rejections. Classifies root cause and proposes harness improvements (not code fixes).',
+    tools: ['forge-harness metrics only'],
+    outputs: ['Root cause classification', 'Metrics context from harness', 'Proposed patches with risk assessment', 'Max patches: T2→2, T3→3, T4-T5→5'],
+    rules: ['Single root cause per analysis', 'Never speculative — evidence-based only', 'Patches improve harness, not artifacts', 'User approval required before applying'],
+    next: 'Patches applied → improved harness for future sessions.'
+  },
+  {
+    id: 'memory',
+    icon: '🧠',
+    label: 'Memory',
+    tiers: 'User-request',
+    color: '#aa66ff',
+    purpose: 'Extract durable knowledge from session trails. Scores facts on a 0-1 scale (threshold: 0.5). Cross-session correlation identifies patterns no single session could see.',
+    tools: ['store_memory only'],
+    outputs: ['Extracted memories (<200 chars each)', 'Deduplication against existing memories', 'Cross-session pattern identification', 'Harness evolution proposals'],
+    rules: ['User-request only (never autonomous)', 'Scoring threshold: 0.5', 'Must be <200 chars per memory', 'No secrets or sensitive data'],
+    next: 'Memories stored → available as context in future sessions.'
+  },
+  {
+    id: 'gc',
+    icon: '🧹',
+    label: 'GC',
+    tiers: 'Periodic',
+    color: '#555568',
+    purpose: 'Scan for technical debt, dead code, stale docs, and architectural entropy. Produces prioritized cleanup items for the backlog.',
+    tools: ['forge-harness', 'grep (read-only)'],
+    outputs: ['Health report with severity breakdown', 'Prioritized findings (Critical/Warning/Info)', '2-7 proposed backlog items', 'Dead export and unused code detection'],
+    rules: ['Deterministic + LLM analysis combined', 'Prioritize by impact', 'Read-only: proposes, never modifies', 'Integrates with backlog skill'],
+    next: 'Findings added to backlog → picked up in future sprints.'
+  },
+];
+
+// ═══════════════════════ RENDER LOOP STEPS ═══════════════════════
+const track = document.getElementById('loopTrack');
+const detailPanel = document.getElementById('stepDetail');
+let activeStep = null;
+
+steps.forEach((s, i) => {
+  const el = document.createElement('div');
+  el.className = 'loop-step';
+  el.style.setProperty('--step-color', s.color);
+  el.dataset.idx = i;
+  el.innerHTML = `
+    ${i < steps.length - 1 ? '<div class="connector"></div>' : ''}
+    <div class="step-node">${s.icon}</div>
+    <div class="step-label">${s.label}</div>
+    <div class="step-tier">${s.tiers}</div>
+  `;
+  el.addEventListener('click', () => showStep(i));
+  track.appendChild(el);
+});
+
+function showStep(idx) {
+  const s = steps[idx];
+  // Toggle active
+  document.querySelectorAll('.loop-step').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.loop-step')[idx].classList.add('active');
+
+  if (activeStep === idx) {
+    detailPanel.classList.remove('visible');
+    document.querySelectorAll('.loop-step')[idx].classList.remove('active');
+    activeStep = null;
+    return;
+  }
+  activeStep = idx;
+
+  const toolTags = s.tools.map(t => `<span class="tag tag-cyan">${t}</span>`).join(' ');
+  const outputList = s.outputs.map(o => `<li>${o}</li>`).join('');
+  const ruleList = s.rules.map(r => `<li>${r}</li>`).join('');
+
+  detailPanel.innerHTML = `
+    <div class="step-detail-header">
+      <div class="step-detail-icon" style="background:${s.color}22;border:1px solid ${s.color}44;color:${s.color}">${s.icon}</div>
+      <div>
+        <h3>${s.label}</h3>
+        <span style="font-family:var(--font-mono);font-size:0.7rem;color:var(--text-muted)">Active for tiers: ${s.tiers}</span>
+      </div>
+    </div>
+    <p style="color:var(--text-dim);font-size:0.9rem;margin-bottom:1.5rem;line-height:1.7">${s.purpose}</p>
+    <div class="step-detail-body">
+      <div class="detail-block">
+        <h4>Outputs</h4>
+        <ul>${outputList}</ul>
+      </div>
+      <div class="detail-block">
+        <h4>Rules & Constraints</h4>
+        <ul>${ruleList}</ul>
+      </div>
+      <div class="detail-block">
+        <h4>Permitted Tools</h4>
+        <div style="margin-top:0.25rem">${toolTags}</div>
+      </div>
+      <div class="detail-block">
+        <h4>Transitions</h4>
+        <p>${s.next}</p>
+      </div>
+    </div>
+  `;
+  detailPanel.classList.add('visible');
+  detailPanel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+// Auto-show first step
+showStep(0);
+
+// ═══════════════════════ TAB SYSTEM ═══════════════════════
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const tabId = btn.dataset.tab;
+    btn.closest('section').querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    btn.closest('section').querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+    document.getElementById('tab-' + tabId).classList.add('active');
+  });
+});
+
+// ═══════════════════════ SCROLL ANIMATIONS ═══════════════════════
+const observer = new IntersectionObserver((entries) => {
+  entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('visible'); });
+}, { threshold: 0.1 });
+document.querySelectorAll('.fade-in').forEach(el => observer.observe(el));
+
+// ═══════════════════════ NAV ACTIVE STATE ═══════════════════════
+const sections = document.querySelectorAll('section[id]');
+const navLinks = document.querySelectorAll('nav a');
+window.addEventListener('scroll', () => {
+  let current = '';
+  sections.forEach(s => {
+    if (window.scrollY >= s.offsetTop - 100) current = s.id;
+  });
+  navLinks.forEach(a => {
+    a.classList.remove('active');
+    if (a.getAttribute('href') === '#' + current) a.classList.add('active');
+  });
+});
+</script>
+</body>
+</html>

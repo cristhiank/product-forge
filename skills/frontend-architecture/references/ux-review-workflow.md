@@ -123,6 +123,69 @@ When the current look and feel needs rethinking:
 3. Build a visual showcase (HTML mockup or Playwright comparison) for stakeholder review
 4. Let the stakeholder choose before investing in implementation
 
+## Phase 5: Implement Redesign
+
+When the evaluation reveals structural problems that require a redesign (not just bug fixes), follow this phased workflow. Each phase has explicit entry criteria — do not skip ahead.
+
+### 5.1 Test Harness (unblocked, start immediately)
+
+Before changing any production code, ensure coverage exists for the flows you're about to rewrite:
+
+- **Backend integration tests** — Full CRUD happy path for every entity type the UI manages. Confirms the API contract is correct independently of the frontend.
+- **E2E tests (Playwright or equivalent)** — Cover the primary user flows: create, edit, delete, navigate between entities. These tests serve as regression safety nets during the rewrite.
+
+Both can run in parallel. They test the *current* behavior, not the target state.
+
+### 5.2 Fix Critical Bugs (blocked by 5.1)
+
+Fix bugs identified in the assessment that affect data integrity or block primary flows. Do NOT redesign layout yet — fix within the existing structure.
+
+**Why fix before redesign:**
+- Bugs in the current code may mask API contract issues that would silently break the new UI
+- Tests written in 5.1 should pass after bug fixes, confirming the API layer works
+- Reduces variables when debugging the new layout (if something breaks, it's the layout change, not a pre-existing bug)
+
+### 5.3 Layout Rewrite (blocked by 5.2)
+
+Replace the page structure with the target layout. This is the highest-risk phase — it touches the most files.
+
+**Approach:**
+1. Build the new layout shell (e.g., master-detail container, entity sidebar, detail panel placeholder)
+2. Migrate entity-specific content into the new shell, one entity type at a time
+3. Consolidate duplicated API clients and hooks during migration (see [feature-modules.md](references/feature-modules.md) § API/Hook Consolidation)
+4. Unify duplicated scope-specific views using a scope filter (see [design-decisions.md](references/design-decisions.md) § Scope/View Unification)
+
+**Consolidation targets during layout rewrite:**
+- Multiple API files per feature → single unified API client
+- Multiple hooks wrapping the same data → single hook with scope/type parameters
+- Duplicate components per scope (admin/user) → single component with scope prop
+
+### 5.4 Section-by-Section Polish (blocked by 5.3)
+
+With the new layout in place, polish each section independently:
+
+- Detail panels for each entity type (fields, validation, conditional UI)
+- Transport-conditional or type-conditional fields (show/hide based on entity subtype)
+- Empty states, loading skeletons, error handling per section
+- Interaction polish (hover, focus, press feedback per the interaction-polish spec)
+
+These can often be parallelized across entity types since each section is independent.
+
+### 5.5 Post-Implementation Review
+
+After implementation, perform a targeted review:
+
+- Run E2E tests against the new layout (update selectors if the UI structure changed)
+- Verify that consolidated APIs still handle all edge cases per scope
+- Check for business logic regressions (permissions, read-only states, scope boundaries)
+- Review interaction states (hover, focus, disabled) on all new components
+
+**Common post-redesign issues:**
+- E2E test selectors targeting removed/renamed UI elements
+- Read-only logic not accounting for all scope combinations
+- Selection state bugs when entity names collide across scopes
+- Optimistic UI that doesn't roll back on server failure
+
 ## Anti-Patterns to Avoid
 
 - **Reviewing without evidence**: Don't critique UX from code alone. Always inspect the running app.
@@ -130,3 +193,6 @@ When the current look and feel needs rethinking:
 - **Ignoring product spec**: The brand guidelines are constraints, not optional. Check alignment first.
 - **Generic advice**: "Improve accessibility" is not actionable. "Add aria-label to the 5 icon-only buttons in the sidebar" is.
 - **Skipping empty states**: Every data-driven page needs an explicit empty state. This is the most commonly missed pattern.
+- **Redesigning without tests**: Never rewrite a page that has no test coverage. Write tests for current behavior first (5.1), then rewrite.
+- **Fixing bugs during redesign**: Fix bugs in the existing structure first (5.2). Mixing bug fixes with layout changes makes regressions impossible to attribute.
+- **Patching instead of rewriting**: If the existing component doesn't match the target layout, rewrite it from the spec. Incremental patches on a structurally wrong component compound into unmaintainable drift.

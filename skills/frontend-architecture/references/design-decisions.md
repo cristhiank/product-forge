@@ -169,6 +169,58 @@ Use these when choosing between competing valid approaches. Each framework gives
 
 **Default for admin/settings:** Batch save with sticky footer. Per-field save is a UX anti-pattern for settings pages — multiple toasts for individual saves overwhelm the user.
 
+## Entity Management: Master-Detail vs Tabs vs Separate Pages
+
+**Master-detail (sidebar list + detail panel) when:**
+- Managing a collection of entities (agents, providers, skills, servers, users)
+- Entities share a common shape but differ in detail (different settings per type)
+- User frequently switches between entities while editing
+- Multiple entity types coexist in the same workspace (use sidebar sections or a type filter)
+- Desktop-primary professional tool where screen width supports two panels
+
+**Layout anatomy:**
+- **Entity sidebar** — Filterable, scrollable list of entities. Shows name + status badge. Grouped by type or category when multiple entity types coexist.
+- **Detail panel** — Fills remaining space. Shows entity metadata at top, tabbed or sectioned content below. Inline editing, no separate edit dialogs.
+- **Scope/context filter** — Optional top-level filter when entities exist in multiple scopes (admin/user, platform/tenant). One filter replaces duplicate sections.
+
+**When entities are inline-editable in the detail panel:**
+- Dirty state tracked at section level, not per-field
+- Sticky footer with Discard + Save appears on edit
+- Read-only entities (immutable sources) disable editing controls but still show detail panel
+
+**Tabs (within a page) when:**
+- Fewer than 4 entity types, each with substantially different UI
+- Sections are fully independent — editing one never affects another
+- Entity lists are short enough that a sidebar adds more chrome than value
+
+**Separate pages (route-per-entity-type) when:**
+- Entity types have completely different schemas, workflows, and APIs
+- No benefit to seeing multiple entity types simultaneously
+- Deep entity detail (sub-pages, nested routes) would complicate a master-detail layout
+
+**Warning sign**: Separate sections or tabs per scope (admin tab + user tab showing the same entity type) is a duplication smell. Unify with a scope filter.
+
+## Scope/View Unification
+
+When the same entity type exists in multiple scopes (e.g., platform agents vs tenant agents, admin users vs regular users), prefer **one view with a scope filter** over **separate sections or duplicate components**.
+
+**Unify when:**
+- Entity shape is identical or nearly identical across scopes
+- CRUD operations are the same (even if permissions differ)
+- Users need to see/compare entities across scopes
+- Maintaining separate components leads to divergent behavior
+
+**Keep separate when:**
+- Scopes have fundamentally different UI workflows (not just different permissions)
+- Entity schemas differ substantially between scopes
+- Cross-scope visibility is a security concern
+
+**Implementation pattern:**
+- Single entity list component receives `scope` as a parameter
+- API client accepts `scope` to route to the correct backend endpoints
+- `isReadOnly` and `canCreate` derived from scope + user permissions
+- Detail panel adapts fields based on scope (hide/show, not duplicate)
+
 ## Form Layout: FieldRow vs FormGrid
 
 **FieldRow (label LEFT, control RIGHT) when:**

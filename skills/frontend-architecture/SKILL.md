@@ -174,7 +174,7 @@ For details, see [feature-modules.md](references/feature-modules.md).
 | Testing strategy and E2E with real backend | [testing-strategy.md](references/testing-strategy.md) |
 | Telemetry and observability | [telemetry.md](references/telemetry.md) |
 | Common frontend design decision trees | [design-decisions.md](references/design-decisions.md) |
-| UX review and audit workflow | [ux-review-workflow.md](references/ux-review-workflow.md) |
+| UX review, audit, and redesign workflow | [ux-review-workflow.md](references/ux-review-workflow.md) |
 | Interaction polish, animation, and UX drift prevention | [interaction-polish.md](references/interaction-polish.md) |
 
 ## Internationalization
