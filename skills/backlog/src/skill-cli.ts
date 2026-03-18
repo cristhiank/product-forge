@@ -114,6 +114,11 @@ function formatSummary(result: unknown, command: string): string {
     const lines: string[] = [];
     lines.push(`Health: ${b.health} (${b.issues} issues)`);
     lines.push("");
+    if (b.incomplete_items?.length) {
+      lines.push(`⚠️  Incomplete items (${b.incomplete_items.length}) — need acceptance criteria:`);
+      for (const i of b.incomplete_items) lines.push(`  ${i.id} [${i.priority || "-"}] ${i.title} (${i.reason})`);
+      lines.push("");
+    }
     if (b.wip.length) {
       lines.push(`WIP (${b.wip.length}):`);
       for (const i of b.wip) lines.push(`  ${i.id} [${i.priority || "-"}] ${i.title}`);

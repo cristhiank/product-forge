@@ -40,6 +40,7 @@ export interface HygieneResult {
   stuck_in_working: HygieneItemInfo[];
   old_in_done: HygieneItemInfo[];
   status_folder_mismatches: Array<HygieneItemInfo & { status: string; expected_status: string }>;
+  incomplete_items: Array<HygieneItemInfo & { reason: string }>;
   total_items: number;
   health_score: "healthy" | "needs_attention" | "unhealthy";
   fixed?: number;
@@ -64,6 +65,7 @@ export interface BriefResult {
   health: HygieneResult["health_score"];
   issues: number;
   mismatches: HygieneResult["status_folder_mismatches"];
+  incomplete_items: HygieneResult["incomplete_items"];
   wip: Array<{ id: string; title: string; priority?: string }>;
   next_unblocked: Array<{ id: string; title: string; priority?: string }>;
   next_blocked: Array<{ id: string; title: string; priority?: string; blocked_by?: string[] }>;

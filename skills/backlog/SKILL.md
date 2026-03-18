@@ -15,14 +15,36 @@ description: >-
 
 Patterns and conventions for using the backlog CLI to manage work items, track progress, and maintain project health.
 
+## ⛔ CRITICAL: Item Quality Gate
+
+**Every backlog item MUST have real, substantive content — not placeholders.** The `create` command generates scaffolding with empty `## Acceptance Criteria` and `## Goal` placeholders. These are *starting points*, not finished items. You **MUST** populate them before moving on.
+
+**After EVERY `create` call:**
+1. Check the `warnings` array in the JSON response — it tells you what's missing
+2. Write the full item body with `update-body` — fill in Goal, Acceptance Criteria, Done When, and Scope
+3. Run `$BACKLOG validate <id>` — fix any warnings before creating the next item
+
+**An item without real acceptance criteria is useless.** When another agent picks it up later, they have no definition of done, no scope boundaries, and no way to verify completion. Empty `- [ ]` checkboxes are the #1 cause of low-quality implementation.
+
+**NEVER batch-create items without populating each one.** If creating an epic with 5 children, you must call `update-body` for each of the 6 items (epic + children) to write real content. Creating 16 items with empty criteria in a rush is explicitly forbidden — it creates technical debt that's worse than having no backlog at all.
+
+**Required sections for every item:**
+- `## Goal` — What this item achieves (not placeholder text)
+- `## Acceptance Criteria` or `## Done When` — Specific, testable checkboxes with real text
+- `## Scope` — What files/modules are in scope (for stories/tasks)
+- `## Not in Scope` — What this item explicitly does NOT cover (prevents scope creep)
+
+**The `hygiene` command now flags incomplete items.** Items with empty/placeholder acceptance criteria appear in the `incomplete_items` array and degrade the health score. The `brief` command surfaces them prominently.
+
 ## First Actions
 
 When this skill loads, do these immediately:
 
 1. **Fence stale state** — `$BACKLOG hygiene --fix` — auto-repair status/folder mismatches from prior sessions
-2. **Get a briefing** — `$BACKLOG brief --format summary` — see health, WIP, what's next
+2. **Get a briefing** — `$BACKLOG brief --format summary` — see health, WIP, what's next, and any incomplete items
 3. **Check working items** — `$BACKLOG list --folder working` — see what's in progress
 4. **Find unblocked work** — `$BACKLOG list --folder next --unblocked` — see what's ready to pick up
+5. **Fix incomplete items** — If `brief` reports incomplete items, populate them with `update-body` before picking up new work
 
 > ⚠️ **Always run hygiene --fix first.** Items completed in other sessions may still be in `next/` if the completing agent forgot to call `complete()`. The hygiene fence detects status/folder mismatches and auto-repairs them.
 
@@ -296,7 +318,7 @@ $BACKLOG archive <id>[,id2,...]
 echo "New content" | $BACKLOG update-body <id> [--message "edit note"]
 ```
 
-> **QUALITY GATE**: After `create`, the generated file includes `## Goal`, `## Done When`, and `## Acceptance Criteria` sections with placeholders. You **MUST** fill these in with real content — use `update-body` if needed. A one-line title with placeholder sections is useless when the item is later picked up for implementation. For epics, include the overall objective and success criteria. For stories, include scope boundaries, interface contracts, and exclusions.
+> **⚠️ QUALITY GATE — see "CRITICAL: Item Quality Gate" section at the top.** After `create`, you MUST call `update-body` to populate Goal, Acceptance Criteria, Done When, and Scope with real content. The `create` response includes a `warnings` array showing what's missing. Items with empty placeholders are flagged by `hygiene` and `brief`.
 
 ### Code Execution (multi-step queries)
 

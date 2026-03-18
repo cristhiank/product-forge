@@ -260,7 +260,7 @@ export function createBacklogAPI(store: MultiRootBacklogStore) {
       parent?: string;
       depends_on?: string[];
       related?: string[];
-    }): Promise<{ id: string; path: string; project: string }> => {
+    }): Promise<{ id: string; path: string; project: string; warnings: string[] }> => {
       const project = resolveProject(req.project);
       const projectStore = store.getStore(project);
       const newId = await allocateId(projectStore, req.parent);
@@ -278,10 +278,22 @@ export function createBacklogAPI(store: MultiRootBacklogStore) {
         related: req.related,
       });
       const created = await store.createFile(project, "next", filename, body);
+      const qualId = qualifyId(project, newId);
+
+      // Post-creation quality check — surface warnings immediately
+      const warnings: string[] = [];
+      if (!req.acceptance_criteria?.length) {
+        warnings.push("QUALITY: Acceptance criteria are empty placeholders. Use 'update-body' to add real criteria before this item is picked up.");
+      }
+      if (!req.description?.trim()) {
+        warnings.push("QUALITY: Goal section has placeholder text. Use 'update-body' to describe the goal.");
+      }
+
       return {
-        id: qualifyId(project, newId),
+        id: qualId,
         path: created.path,
         project,
+        warnings,
       };
     },
 
@@ -386,8 +398,9 @@ export function createBacklogAPI(store: MultiRootBacklogStore) {
 
       return {
         health: hygieneResult.health_score,
-        issues: hygieneResult.stale_in_next.length + hygieneResult.stuck_in_working.length + hygieneResult.old_in_done.length + hygieneResult.status_folder_mismatches.length,
+        issues: hygieneResult.stale_in_next.length + hygieneResult.stuck_in_working.length + hygieneResult.old_in_done.length + hygieneResult.status_folder_mismatches.length + hygieneResult.incomplete_items.length,
         mismatches: hygieneResult.status_folder_mismatches,
+        incomplete_items: hygieneResult.incomplete_items,
         wip: working.map(i => ({ id: i.id, title: i.title, priority: i.priority })),
         next_unblocked: unblocked.map(i => ({ id: i.id, title: i.title, priority: i.priority })),
         next_blocked: next.filter(i => !unblocked.includes(i) && !mismatchIds.has(i.id)).map(i => ({ id: i.id, title: i.title, priority: i.priority, blocked_by: i.depends_on })),
@@ -412,6 +425,7 @@ export function createBacklogAPI(store: MultiRootBacklogStore) {
       const stuck_in_working: HygieneResult["stuck_in_working"] = [];
       const old_in_done: HygieneResult["old_in_done"] = [];
       const status_folder_mismatches: HygieneResult["status_folder_mismatches"] = [];
+      const incomplete_items: HygieneResult["incomplete_items"] = [];
       
       for (const item of allItems) {
         const parsed = parseBacklogMarkdown(item.body);
@@ -457,10 +471,20 @@ export function createBacklogAPI(store: MultiRootBacklogStore) {
             await store.writeBody(qualifyId(item.project, item.id), body);
           }
         }
+
+        // Detect incomplete items (empty/placeholder acceptance criteria) in next/ and working/
+        if (item.folder === "next" || item.folder === "working") {
+          const ac = parsed.acceptance_criteria;
+          if (ac.total === 0) {
+            incomplete_items.push({ ...itemInfo, reason: "no acceptance criteria checkboxes" });
+          } else if (ac.with_content === 0) {
+            incomplete_items.push({ ...itemInfo, reason: "acceptance criteria are empty placeholders" });
+          }
+        }
       }
       
       const total_items = allItems.length;
-      const issue_count = stale_in_next.length + stuck_in_working.length + old_in_done.length + status_folder_mismatches.length;
+      const issue_count = stale_in_next.length + stuck_in_working.length + old_in_done.length + status_folder_mismatches.length + incomplete_items.length;
       const health_score: HygieneResult["health_score"] = 
         issue_count === 0 ? "healthy" :
         issue_count < total_items * 0.1 ? "needs_attention" : "unhealthy";
@@ -470,6 +494,7 @@ export function createBacklogAPI(store: MultiRootBacklogStore) {
         stuck_in_working,
         old_in_done,
         status_folder_mismatches,
+        incomplete_items,
         total_items,
         health_score,
         ...(opts?.fix ? { fixed: status_folder_mismatches.length } : {}),
