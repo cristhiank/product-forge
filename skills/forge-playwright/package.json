@@ -1,0 +1,39 @@
+{
+  "name": "@copilot-skills/forge-playwright",
+  "version": "1.0.0",
+  "description": "Forge Playwright Skill - CLI for managing Playwright MCP profiles, mock data, and project configs",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "forge-playwright": "./scripts/index.js"
+  },
+  "scripts": {
+    "build": "ncc build src/skill-cli.ts -o scripts --minify --no-source-map-register && node -e \"const fs=require('fs');const walk=(d)=>{for(const e of fs.readdirSync(d,{withFileTypes:true})){const p=d+'/'+e.name;if(e.isDirectory()){walk(p);if(fs.readdirSync(p).length===0)fs.rmdirSync(p);}else if(p.endsWith('.d.ts')||p.endsWith('.d.ts.map')){fs.rmSync(p,{force:true});}}};if(fs.existsSync('scripts'))walk('scripts');\"",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "clean": "node -e \"const fs=require('fs');for(const p of ['dist','scripts/index.js'])fs.rmSync(p,{recursive:true,force:true});\"",
+    "publish:skill": "node publish-skill.mjs"
+  },
+  "dependencies": {
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "@vercel/ncc": "^0.38.4",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "files": [
+    "dist",
+    "scripts",
+    "references",
+    "templates",
+    "SKILL.md",
+    "README.md"
+  ],
+  "license": "MIT"
+}
