@@ -223,7 +223,7 @@ copy_file \
 # --- Step 6: Infrastructure skills ---
 echo ""
 echo "🔧 Infrastructure skills..."
-INFRA_SKILLS=("experts-council" "backlog" "agents-hub" "copilot-cli-skill" "forge-harness")
+INFRA_SKILLS=("experts-council" "backlog" "agents-hub" "copilot-cli-skill" "forge-harness" "forge-playwright")
 for skill in "${INFRA_SKILLS[@]}"; do
   src_dir="$SCRIPT_DIR/skills/$skill"
   dst_dir="$DIST/skills/$skill"

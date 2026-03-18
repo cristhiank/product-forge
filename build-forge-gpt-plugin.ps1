@@ -264,7 +264,7 @@ Copy-PluginFile `
 # --- Step 10: Infrastructure skills ---
 Write-Host ""
 Write-Host "🔧 Infrastructure skills..."
-$infraSkills = @('experts-council', 'backlog', 'agents-hub', 'copilot-cli-skill', 'forge-harness')
+$infraSkills = @('experts-council', 'backlog', 'agents-hub', 'copilot-cli-skill', 'forge-harness', 'forge-playwright')
 foreach ($skill in $infraSkills) {
     $srcDir = "$ScriptDir\skills\$skill"
     $dstDir = "$Dist\skills\$skill"

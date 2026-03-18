@@ -210,7 +210,7 @@ if (Test-Path $tmplPath) {
 }
 
 Write-Host "🔧 Infrastructure skills..."
-foreach ($skill in @('experts-council','backlog','agents-hub','copilot-cli-skill','forge-harness')) {
+foreach ($skill in @('experts-council','backlog','agents-hub','copilot-cli-skill','forge-harness','forge-playwright')) {
     $srcDir = "$ScriptDir\skills\$skill"
     $dstDir = "$DistShared\skills\$skill"
     if (-not (Test-Path $srcDir -PathType Container)) {
