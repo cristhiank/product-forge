@@ -275,7 +275,7 @@ done
 # --- Step 12: Product management skills ---
 echo ""
 echo "📋 Product management skills..."
-PM_SKILLS=("jobs-to-be-done" "made-to-stick" "copywriting" "lean-startup" "storybrand-messaging" "cro-methodology" "page-cro")
+PM_SKILLS=("jobs-to-be-done" "made-to-stick" "copywriting" "lean-startup" "storybrand-messaging" "cro-methodology" "page-cro" "forge-doc-writer")
 for skill in "${PM_SKILLS[@]}"; do
   src_dir="$SCRIPT_DIR/skills/$skill"
   dst_dir="$DIST/skills/$skill"

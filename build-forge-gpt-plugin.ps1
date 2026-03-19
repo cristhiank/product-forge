@@ -306,7 +306,7 @@ foreach ($skill in $archSkills) {
 # --- Step 12: Product management skills ---
 Write-Host ""
 Write-Host "📋 Product management skills..."
-$pmSkills = @('jobs-to-be-done', 'made-to-stick', 'copywriting', 'lean-startup', 'storybrand-messaging', 'cro-methodology', 'page-cro')
+$pmSkills = @('jobs-to-be-done', 'made-to-stick', 'copywriting', 'lean-startup', 'storybrand-messaging', 'cro-methodology', 'page-cro', 'forge-doc-writer')
 foreach ($skill in $pmSkills) {
     $srcDir = "$ScriptDir\skills\$skill"
     $dstDir = "$Dist\skills\$skill"

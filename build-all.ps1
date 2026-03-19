@@ -240,7 +240,7 @@ foreach ($skill in @('backend-architecture','frontend-architecture')) {
 }
 
 Write-Host "📋 PM skills..."
-foreach ($skill in @('jobs-to-be-done','made-to-stick','copywriting','lean-startup','storybrand-messaging','cro-methodology','page-cro')) {
+foreach ($skill in @('jobs-to-be-done','made-to-stick','copywriting','lean-startup','storybrand-messaging','cro-methodology','page-cro','forge-doc-writer')) {
     $srcDir = "$ScriptDir\skills\$skill"
     $dstDir = "$DistShared\skills\$skill"
     if (-not (Test-Path $srcDir -PathType Container)) {
