@@ -4,6 +4,8 @@ description: >-
   Use when creating, modifying, or reviewing any frontend code — components,
   pages, routes, layouts, forms, API clients, hooks, state management, styling,
   design tokens, loading states, error boundaries, modals, streaming UI, or tests.
+  Also covers visual design composition: hero rules, brand hierarchy, landing
+  page patterns, card philosophy, imagery, copy strategy, and page motion.
   Provides architecture patterns and structural rules for feature modules,
   composition root, design system layers, third-party wrapping, validation policy,
   internationalization, and frontend telemetry. Applies to any framework,
@@ -13,6 +15,8 @@ description: >-
 # Frontend Architecture
 
 Architectural principles, patterns, and structural rules for building frontend applications. Technology-agnostic and domain-agnostic. Assumes a component-based SPA architecture.
+
+Also covers visual design composition for landing pages, marketing sites, and visually-led surfaces — hero rules, brand hierarchy, imagery, copy, and page motion.
 
 When in doubt, follow this skill instead of improvising a new pattern.
 
@@ -28,6 +32,7 @@ When in doubt, follow this skill instead of improvising a new pattern.
    - Shared component inventory (existing reusable components to use, not reinvent)
    - Brand constraints from product spec (voice, colors, key rules)
    - i18n approach (key format, namespace strategy, locale detection method)
+   - For visually-led tasks: attach visual references, specify whether marketing or product UI copy applies
 
 ## Design Decision Artifacts
 
@@ -168,6 +173,8 @@ For details, see [feature-modules.md](references/feature-modules.md).
 | Feature modules and API clients | [feature-modules.md](references/feature-modules.md) |
 | State management and data flow | [state-management.md](references/state-management.md) |
 | Design system, UI layers, styling | [design-system.md](references/design-system.md) |
+| Visual design, hero, brand, imagery, landing pages | [visual-design-composition.md](references/visual-design-composition.md) |
+| Page motion, scroll effects, Framer Motion | [page-motion.md](references/page-motion.md) |
 | Third-party library wrapping | [third-party-wrapping.md](references/third-party-wrapping.md) |
 | Validation and safety policy | [validation-policy.md](references/validation-policy.md) |
 | Streaming and progressive UX | [streaming-ux.md](references/streaming-ux.md) |
@@ -196,6 +203,64 @@ Each logical section gets an error boundary at the route level. Error boundaries
 - Skeleton components for table, card, panel loading
 - Inline spinners only for localized, in-place feedback
 - Stage-based skeletons matching the streaming stage model for progressive content
+
+## Visual Design & Composition
+
+When building landing pages, marketing sites, or visually-led surfaces, apply these principles in addition to the architectural rules above.
+
+### Pre-Build Working Model
+
+Before building any visually-led page, write three things:
+
+1. **Visual thesis** — one sentence describing mood, material, and energy.
+2. **Content plan** — hero → support → detail → final CTA (what goes in each section, one line each).
+3. **Interaction thesis** — 2–3 motion ideas that change the feel of the page.
+
+Each section gets one job, one dominant visual idea, and one primary takeaway or action.
+
+### Core Visual Rules
+
+- Treat the first viewport as a **poster**, not a document. One composition, one dominant image, one headline, one CTA group.
+- Brand or product name must be a hero-level signal, not just nav text.
+- Default to cardless layouts. Cards are appropriate only when the card itself is the interaction target. See [design-system.md](references/design-system.md) § Card Philosophy.
+- On branded landing pages, the hero runs edge-to-edge (full bleed). Constrain only the inner text column.
+- Use expressive, purposeful fonts for branded/marketing work. Two typefaces max. One accent color.
+- Imagery must do narrative work — show the product, place, atmosphere, or context. Decorative gradients alone do not qualify as visual anchors.
+
+### Litmus Checks
+
+After building a visually-led page, verify:
+- Is the brand unmistakable in the first screen?
+- Is there one strong visual anchor?
+- Can the page be understood by scanning headlines only?
+- Does each section have exactly one job?
+- Are cards actually necessary?
+- Does motion improve hierarchy or atmosphere?
+
+For the full composition framework, see [visual-design-composition.md](references/visual-design-composition.md).
+For scroll-linked and marketing motion, see [page-motion.md](references/page-motion.md).
+
+## Copy & Content Strategy
+
+### Utility Copy (Product UI)
+
+Dashboards, admin tools, and operational surfaces use utility copy — not marketing language:
+
+- Prioritize orientation, status, and action over promise, mood, or brand voice.
+- Start with the working surface: KPIs, charts, filters, tables, status. No hero section unless explicitly requested.
+- Section headings say what the area is or what the user can do. Good: "Selected KPIs", "Plan status", "Search metrics". Avoid aspirational language.
+- Supporting text explains scope, behavior, freshness, or decision value in one sentence.
+- Test: if a sentence could appear in a homepage hero or ad, rewrite it until it sounds like product UI.
+- Test: if an operator scans only headings, labels, and numbers, can they understand the page immediately?
+
+### Marketing Copy (Landing Pages)
+
+When building marketing or branded surfaces:
+
+- Write in product language, not design commentary.
+- Let the headline carry the meaning. Supporting copy: one short sentence.
+- Give every section one responsibility: explain, prove, deepen, or convert.
+- Cut repetition between sections. If deleting 30% of the copy improves the page, keep deleting.
 
 ## Evolution
 

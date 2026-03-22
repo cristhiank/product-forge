@@ -45,7 +45,10 @@ For each page or flow, assess against these dimensions:
 | **Responsive behavior** | Does it degrade gracefully or break? Is mobile an afterthought? |
 | **Loading / error / empty** | Skeleton? Error boundary with recovery action? Empty state with CTA? |
 | **Accessibility** | Keyboard navigable? Screen reader friendly? Touch targets adequate? |
+| **Visual composition** | Brand presence in first viewport? One strong visual anchor? Section jobs clear? Cards necessary? See [visual-design-composition.md](references/visual-design-composition.md) litmus checks. |
+| **Copy quality** | Product language, not design commentary? Headlines carry meaning? Supporting copy is one short sentence? No filler? |
 | **Information density** | Appropriate for the user persona (professional dense vs consumer spacious)? |
+| **Page motion** | For visually-led pages: hero entrance, scroll-linked effect, hover/reveal present? See [page-motion.md](references/page-motion.md). |
 | **Progressive disclosure** | Complex forms/settings broken into digestible sections? |
 | **Interaction polish** | Button press feedback? Proper easing? No `transition: all`? Hover gated for touch? |
 | **Form patterns** | FieldRow for settings? FormGrid for data entry? No unstyled vertical stacks? |

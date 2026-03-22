@@ -42,6 +42,26 @@ These apply regardless of visual identity:
 
 ## Panel and Layout Patterns
 
+### Card Philosophy
+
+Default to cardless layouts — use sections, columns, dividers, lists, and media blocks instead. Cards are appropriate only when the card itself is the interaction (clickable tile, selectable option, draggable item).
+
+**When to use cards:**
+
+| Context | Card appropriate? | Reason |
+|---------|:-:|--------|
+| Clickable navigation tile | Yes | Card is the interaction target |
+| Selectable option in a grid | Yes | Card is the interaction target |
+| Draggable kanban item | Yes | Card is the interaction target |
+| Content section on a landing page | No | Use layout (sections, columns) |
+| Feature showcase | No | Use media blocks or columns |
+| Stats display | No | Use inline text or data rows |
+| Hero content | No | Hero is a composition, not a container |
+
+Test: if removing a border, shadow, background, or radius does not hurt interaction or understanding, it should not be a card.
+
+For full visual composition guidance including hero rules and landing page patterns, see [visual-design-composition.md](visual-design-composition.md).
+
 For multi-panel layouts:
 - Subtle, IDE-style splitters rather than thick dividers or nested card-in-card patterns
 - Splitters become more visible on hover to indicate interactivity
